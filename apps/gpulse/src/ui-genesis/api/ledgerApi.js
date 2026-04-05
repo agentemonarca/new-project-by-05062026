@@ -1,0 +1,285 @@
+/**
+ * Ledger activity API — mock dataset today; swap body for `GET /api/ledger/events`.
+ *
+ * @typedef {import('../ledger/ledgerModel.js').LedgerEvent} LedgerEvent
+ */
+
+const MOCK_CHAIN = 56;
+
+/** @returns {Array<Record<string, unknown>>} */
+function seedRows() {
+  const now = Date.now();
+  const h = (n) => now - n * 3600_000;
+
+  return [
+    {
+      id: 'ev-001',
+      ts: h(2),
+      category: 'mining',
+      kind: 'claim',
+      title: 'Mining buffer claimed',
+      summary: 'Core mining-1 · rewards sent to ledger',
+      amountUsdt: 4.22,
+      txHash: '0x8a1f2c3d4e5f6789012345678901234567890123456789012345678901234',
+      chainId: MOCK_CHAIN,
+      meta: {
+        product: 'Core Mining · Tier A',
+        miningTrack: 'core',
+        username: 'you',
+        dailyAccrualUsdt: 0.14,
+        volumeGenerated: 520,
+      },
+    },
+    {
+      id: 'ev-002',
+      ts: h(5),
+      category: 'booster',
+      kind: 'accrual',
+      title: 'Booster acceleration tick',
+      summary: 'Multiplier lane active on protocol engines',
+      amountAig: 12.4,
+      meta: {
+        product: 'AiG Booster',
+        boosterDynamicPct: 15.25,
+        dynamicPct: 15.25,
+        miningTrack: 'booster',
+        volumeGenerated: 0,
+      },
+    },
+    {
+      id: 'ev-003',
+      ts: h(8),
+      category: 'staking',
+      kind: 'lock',
+      title: 'Staking participation',
+      summary: 'Program Alpha · flexible lock',
+      amountAig: 500,
+    },
+    {
+      id: 'ev-004',
+      ts: h(12),
+      category: 'network',
+      kind: 'volume',
+      title: 'Binary volume sync',
+      summary: 'Left / right legs reconciled',
+      meta: { left: 420, right: 380 },
+    },
+    {
+      id: 'ev-005',
+      ts: h(18),
+      category: 'transaction',
+      kind: 'deposit',
+      title: 'USDT deposit',
+      summary: 'Credited to protocol ledger',
+      amountUsdt: 250,
+      txHash: '0xb2c3d4e5f67890123456789012345678901234567890123456789012345678',
+      chainId: MOCK_CHAIN,
+    },
+    {
+      id: 'ev-006',
+      ts: h(26),
+      category: 'marketplace',
+      kind: 'order',
+      title: 'Marketplace listing viewed',
+      summary: 'Partial AIG settlement path reserved',
+    },
+    {
+      id: 'ev-007',
+      ts: h(30),
+      category: 'mining',
+      kind: 'generation',
+      title: 'Engine tick',
+      summary: 'Mining core accrual — daily slice (~8% APR / 30)',
+      amountUsdt: 0.031,
+      meta: {
+        product: 'Core Mining',
+        miningTrack: 'core',
+        dailyAccrualUsdt: 0.031,
+        volumeGenerated: 10000,
+      },
+    },
+    {
+      id: 'ev-008',
+      ts: h(40),
+      category: 'transaction',
+      kind: 'withdrawal',
+      title: 'Withdrawal requested',
+      summary: 'Queued for settlement',
+      amountUsdt: 120,
+      pending: true,
+    },
+    {
+      id: 'ev-016',
+      ts: h(1),
+      category: 'transaction',
+      kind: 'transfer',
+      title: 'Transfer broadcast',
+      summary: 'Awaiting confirmations',
+      amountUsdt: 50,
+      txHash: '0xf678901234567890123456789012345678901234567890123456789012345678',
+      chainId: MOCK_CHAIN,
+      txStatus: 'pending',
+    },
+    {
+      id: 'ev-009',
+      ts: h(52),
+      category: 'staking',
+      kind: 'reward',
+      title: 'Staking yield accrual',
+      summary: 'Passive stack updated',
+      amountAig: 8.2,
+    },
+    {
+      id: 'ev-010',
+      ts: h(60),
+      category: 'network',
+      kind: 'bonus',
+      title: 'Binary bonus window',
+      summary: 'Equilibrium factor applied',
+      amountUsdt: 42.5,
+      meta: {
+        product: 'Binary cycle',
+        matchedVolume: 850,
+        commissionEarned: 42.5,
+        volumeGenerated: 850,
+      },
+    },
+    {
+      id: 'ev-017',
+      ts: h(3),
+      category: 'transaction',
+      kind: 'conversion',
+      title: 'USDT → AIG conversion',
+      summary: 'Protocol conversion executed',
+      amountUsdt: 48,
+      amountAig: 1200,
+      txHash: '0xa1b2c3d4e5f678901234567890123456789012345678901234567890123456',
+      chainId: MOCK_CHAIN,
+      meta: {
+        conversion: true,
+        conversionUsdtIn: 48,
+        conversionAigOut: 1200,
+        priceUsdtPerAig: 0.04,
+        conversionPrice: 0.04,
+        product: 'AIG mint',
+      },
+    },
+    {
+      id: 'ev-018',
+      ts: h(6),
+      category: 'network',
+      kind: 'team_volume',
+      title: 'Team binary contribution',
+      summary: 'Indirect leg — commission to upline',
+      amountUsdt: 18.6,
+      meta: {
+        bonusSource: 'binary',
+        product: 'Network · Binary',
+        teamUsername: 'node_runner_01',
+        teamLevel: 'indirect',
+        volumeGenerated: 3720,
+        commissionEarned: 18.6,
+        wallet: '0x71c3e8a2f9b01d4e5c67890123456789012345678',
+      },
+    },
+    {
+      id: 'ev-020',
+      ts: h(9),
+      category: 'network',
+      kind: 'direct_bonus',
+      title: 'Direct referral bonus',
+      summary: 'First line activation',
+      amountUsdt: 12,
+      meta: {
+        bonusSource: 'direct',
+        product: 'Direct bonus',
+        teamUsername: 'sponsor_alpha',
+        teamLevel: 'direct',
+        username: 'sponsor_alpha',
+        wallet: '0x9fe1d2c3a4567890123456789012345678901234',
+        volumeGenerated: 400,
+        commissionEarned: 12,
+      },
+    },
+    {
+      id: 'ev-021',
+      ts: h(11),
+      category: 'mining',
+      kind: 'generation',
+      title: 'Dormant core tick',
+      summary: 'Product flagged inactive — accrual may be zero on-chain',
+      amountUsdt: 0,
+      meta: {
+        product: 'Core Mining · Legacy pack',
+        miningTrack: 'core',
+        productActive: false,
+        dailyAccrualUsdt: 0,
+      },
+    },
+    {
+      id: 'ev-011',
+      ts: h(72),
+      category: 'booster',
+      kind: 'claim',
+      title: 'Booster lane claim',
+      summary: 'Acceleration rewards',
+      amountUsdt: 1.8,
+      txHash: '0xc3d4e5f6789012345678901234567890123456789012345678901234567890',
+      chainId: MOCK_CHAIN,
+    },
+    {
+      id: 'ev-012',
+      ts: h(90),
+      category: 'mining',
+      kind: 'inject',
+      title: 'Liquidity inject',
+      summary: 'New mining headroom',
+      amountUsdt: 500,
+      txHash: '0xd4e5f6789012345678901234567890123456789012345678901234567890123',
+      chainId: MOCK_CHAIN,
+      meta: {
+        product: 'Core Mining · Expand',
+        miningTrack: 'core',
+        highValue: true,
+        volumeGenerated: 500,
+      },
+    },
+    {
+      id: 'ev-013',
+      ts: h(110),
+      category: 'marketplace',
+      kind: 'quote',
+      title: 'Checkout simulated',
+      summary: 'AIG + USDT split recorded (demo)',
+    },
+    {
+      id: 'ev-014',
+      ts: h(140),
+      category: 'overview',
+      kind: 'sync',
+      title: 'Session sync',
+      summary: 'Wallet + API alignment',
+    },
+    {
+      id: 'ev-015',
+      ts: h(200),
+      category: 'transaction',
+      kind: 'approve',
+      title: 'Token approval',
+      summary: 'Spender authorized',
+      txHash: '0xe5f6789012345678901234567890123456789012345678901234567890123456',
+      chainId: MOCK_CHAIN,
+    },
+  ];
+}
+
+/**
+ * @param {{ signal?: AbortSignal }} [opts]
+ * @returns {Promise<Array<Record<string, unknown>>>}
+ */
+export async function fetchLedgerEventsRaw(opts = {}) {
+  if (opts.signal?.aborted) return [];
+  await new Promise((r) => setTimeout(r, 220));
+  if (opts.signal?.aborted) return [];
+  return seedRows();
+}

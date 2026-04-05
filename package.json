@@ -1,0 +1,26 @@
+{
+  "name": "ai-genesis-monorepo",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "echo 'Run dev:backoffice, dev:gpulse, dev:core-api in separate terminals — see README.md'",
+    "dev:backoffice": "pnpm --filter @ai-genesis/backoffice dev",
+    "dev:gpulse": "pnpm --filter @ai-genesis/gpulse dev",
+    "dev:core-api": "pnpm --filter @ai-genesis/core-api dev",
+    "dev:api-gateway": "pnpm --filter @ai-genesis/api-gateway dev",
+    "dev:gpulse-api": "pnpm --filter @ai-genesis/gpulse-api dev",
+    "build": "pnpm run -r --if-present build",
+    "build:backoffice": "pnpm --filter @ai-genesis/backoffice build",
+    "build:gpulse": "pnpm --filter @ai-genesis/gpulse build",
+    "lint": "pnpm run -r --if-present lint",
+    "typecheck": "pnpm run -r --if-present typecheck"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

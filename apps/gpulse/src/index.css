@@ -1,0 +1,389 @@
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@100;200;300;400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Pipeline-only fixes: App.jsx injects theme tokens + .glass via GlobalStyles.
+  These rules complement that (vendor prefixes, #root, extras not in GlobalStyles).
+*/
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    position: relative;
+    isolation: isolate;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
+/*
+  Layer hierarchy: background z-0, thinking z-5, portal z-10, main grid z-20,
+  header chrome z-30 (above grid so wallet dropdown z-40 is visible), signal z-30
+  inside center column, tactical preflight column z-40, wallet overlay/panel z-50,
+  session modal z-60.
+*/
+
+/* --- Z-index visual debug (toggle: window.toggleDebug()) --- */
+body.debug [data-layer] {
+  outline: 2px solid;
+  outline-offset: -1px;
+}
+
+body.debug [data-layer='bg'] {
+  outline-color: #64748b;
+}
+body.debug [data-layer='effects'] {
+  outline-color: #a855f7;
+}
+body.debug [data-layer='portal'] {
+  outline-color: #22d3ee;
+}
+body.debug [data-layer='ui'] {
+  outline-color: #3b82f6;
+}
+body.debug [data-layer='signal'] {
+  outline-color: #eab308;
+}
+body.debug [data-layer='overlay'] {
+  outline-color: #22c55e;
+}
+body.debug [data-layer='modal'] {
+  outline-color: #f472b6;
+}
+
+body.debug [data-layer]:not([data-debug-anchor]) {
+  position: relative;
+}
+
+body.debug [data-layer]::after {
+  content: attr(data-layer) ' · z-' attr(data-z);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 2147483646;
+  font-size: 9px;
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  line-height: 1.2;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #f8fafc;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: min(100%, 180px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.debug [data-debug-anchor]::after {
+  position: absolute;
+}
+
+/* Glass: webkit backdrop (GlobalStyles sets backdrop-filter on .glass) */
+.glass {
+  -webkit-backdrop-filter: blur(25px);
+}
+
+.btn-glass-armani {
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Referenced in App.jsx but not defined in GlobalStyles <style> */
+@keyframes gold-wave-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.04);
+  }
+}
+
+.panel-gold-synergy {
+  box-shadow:
+    0 0 40px rgba(191, 149, 63, 0.25),
+    inset 0 0 60px rgba(191, 149, 63, 0.06);
+  border-color: rgba(191, 149, 63, 0.35) !important;
+}
+
+.btn-gold-fusion {
+  background: linear-gradient(135deg, #bf953f 0%, #fcf6ba 50%, #b38728 100%);
+  border-color: rgba(191, 149, 63, 0.6) !important;
+  color: #0f172a !important;
+  box-shadow: 0 0 20px rgba(191, 149, 63, 0.45);
+}
+
+.gopulse-glow {
+  box-shadow: 0 0 18px rgba(0, 237, 255, 0.35);
+  border-color: rgba(0, 237, 255, 0.45) !important;
+}
+
+.balance-glow {
+  text-shadow: 0 0 12px rgba(0, 237, 255, 0.25);
+}
+
+.blockchain-line::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(0, 237, 255, 0.35), transparent);
+  pointer-events: none;
+}
+
+.scanline-stream {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.02) 2px,
+    rgba(255, 255, 255, 0.02) 4px
+  );
+  opacity: 0.35;
+  animation: scanline-drift 8s linear infinite;
+}
+
+@keyframes scanline-drift {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(12px);
+  }
+}
+
+.aurora-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+@keyframes ignite-deny-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  18% {
+    transform: translateX(-7px);
+  }
+  36% {
+    transform: translateX(7px);
+  }
+  54% {
+    transform: translateX(-4px);
+  }
+  72% {
+    transform: translateX(4px);
+  }
+}
+
+.ignite-deny-shake {
+  animation: ignite-deny-shake 0.45s ease-in-out;
+}
+
+.ignite-deny-glow {
+  box-shadow:
+    0 0 20px rgba(239, 68, 68, 0.5),
+    0 0 36px rgba(239, 68, 68, 0.22);
+}
+
+.preflight-panel-transition {
+  transition:
+    max-height 0.35s ease-out,
+    opacity 0.3s ease-out,
+    margin 0.3s ease-out,
+    transform 0.3s ease-out;
+}
+
+@keyframes sync-soft-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 1;
+  }
+}
+
+.sync-smartglow-risk {
+  animation: sync-soft-pulse 1.8s ease-in-out infinite;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.22), 0 0 28px rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.sync-smartglow-opportunity {
+  animation: sync-soft-pulse 2.1s ease-in-out infinite;
+  box-shadow: 0 0 18px rgba(34, 197, 94, 0.16), 0 0 20px rgba(0, 237, 255, 0.14);
+  border-color: rgba(0, 237, 255, 0.28) !important;
+}
+
+.sync-smartglow-balance {
+  animation: sync-soft-pulse 2.0s ease-in-out infinite;
+  box-shadow: 0 0 18px rgba(255, 27, 141, 0.16), 0 0 24px rgba(255, 27, 141, 0.1);
+  border-color: rgba(255, 27, 141, 0.28) !important;
+}
+
+@keyframes sync-breath {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.015);
+  }
+}
+
+.sync-portal-breath {
+  animation: sync-breath 3.8s ease-in-out infinite;
+}
+
+@keyframes sync-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.18;
+  }
+  50% {
+    transform: translateY(-10px);
+    opacity: 0.28;
+  }
+}
+
+.sync-particle {
+  animation: sync-float 6.5s ease-in-out infinite;
+}
+
+/* G_Pulse membership — premium pulse + CTA glow */
+@keyframes gp-access-featured-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 24px rgba(192, 38, 211, 0.35),
+      0 0 48px rgba(244, 63, 94, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  50% {
+    box-shadow:
+      0 0 36px rgba(192, 38, 211, 0.55),
+      0 0 64px rgba(244, 63, 94, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+@keyframes gp-access-cta-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 16px rgba(236, 72, 153, 0.45),
+      0 0 32px rgba(168, 85, 247, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 26px rgba(236, 72, 153, 0.75),
+      0 0 44px rgba(236, 72, 153, 0.4);
+  }
+}
+
+@keyframes gp-access-ambient-shift {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1) translate(0, 0);
+  }
+  33% {
+    opacity: 0.6;
+    transform: scale(1.05) translate(2%, -1%);
+  }
+  66% {
+    opacity: 0.5;
+    transform: scale(0.98) translate(-1%, 2%);
+  }
+}
+
+.gp-access-featured-ring {
+  animation: gp-access-featured-pulse 3s ease-in-out infinite;
+}
+
+.gp-access-cta-pulse {
+  animation: gp-access-cta-glow 2.2s ease-in-out infinite;
+}
+
+/* G_Pulse Access — CTA Upgrade (violeta → cyan, pulso lento) */
+@keyframes gp-upgrade-cta-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 22px rgba(139, 92, 246, 0.42),
+      0 0 44px rgba(34, 211, 238, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  50% {
+    box-shadow:
+      0 0 36px rgba(34, 211, 238, 0.4),
+      0 0 58px rgba(167, 139, 250, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+}
+
+.gp-upgrade-cta-pulse {
+  animation: gp-upgrade-cta-glow 3.2s ease-in-out infinite;
+}
+
+.gp-upgrade-cta-pulse:hover {
+  animation: none;
+  box-shadow:
+    0 0 48px rgba(34, 211, 238, 0.52),
+    0 0 72px rgba(139, 92, 246, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.gp-access-ambient-blob {
+  animation: gp-access-ambient-shift 12s ease-in-out infinite;
+}
+
+/* Cristal: animación suave para la capa de reflexión */
+@keyframes spin {
+  0% {
+    /* Arranca alineado con el tilt visual de la capa (`rotate-12`). */
+    transform: rotate(12deg);
+  }
+  100% {
+    transform: rotate(372deg);
+  }
+}
+.genesis-hologram {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 180px;
+  z-index: 999999;
+  pointer-events: none;
+}
+
+.hologram-video {
+  width: 100%;
+  mix-blend-mode: screen;
+  filter:
+    brightness(1.2)
+    drop-shadow(0 0 10px #00f0ff)
+    drop-shadow(0 0 25px #7b2cff);
+  opacity: 0.9;
+}

@@ -1,0 +1,7 @@
+node_modules
+dist
+.DS_Store
+# Local env & secrets (e.g. PRIVATE_KEY without VITE_ — still never commit)
+.env
+.env.local
+.env.*.local
