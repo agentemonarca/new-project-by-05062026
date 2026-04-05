@@ -2,6 +2,7 @@
  * Hybrid checkout math: AIG-denominated transaction value, cashback, debt/retention constants.
  */
 
+import { getAigPriceUsd, totalAigVolumeUnits } from '../payment/dualTokenPayment.js';
 import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
 
 /** Cashback rate on amounts paid in each rail (1.5%). */
@@ -19,15 +20,13 @@ export const RETENTION_PROCESSING_MS = 48 * 60 * 60 * 1000;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Total transaction size in AIG units: paid AIG + USDT leg converted at display rate.
- * Binary volume is based on this value (not USDT-equiv alone).
+ * Total transaction size in AIG units: paid AIG + USDT leg / AIG-price-USD (contract oracle).
  * @param {number} usd
  * @param {number} aig
+ * @param {number} [aigPriceUsd]
  */
-export function totalTransactionAigValue(usd, aig) {
-  const u = Math.max(0, Number(usd) || 0);
-  const a = Math.max(0, Number(aig) || 0);
-  return a + u * USDT_TO_AIG_DISPLAY;
+export function totalTransactionAigValue(usd, aig, aigPriceUsd = getAigPriceUsd()) {
+  return totalAigVolumeUnits(usd, aig, aigPriceUsd);
 }
 
 /**

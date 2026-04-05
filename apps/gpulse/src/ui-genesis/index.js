@@ -56,7 +56,27 @@ export { DisclaimerModal } from './modals/DisclaimerModal.jsx';
 export { MiningWarningModal } from './modals/MiningWarningModal.jsx';
 export { PurchaseModal } from './modals/PurchaseModal.jsx';
 export { PaymentFlowModal } from './modals/PaymentFlowModal.jsx';
-export { PAYMENT_FLOW_PRODUCTS, computeTokenBreakdown } from './payment/paymentFlowProducts.js';
+export {
+  PAYMENT_FLOW_PRODUCTS,
+  computeTokenBreakdown,
+  computeActivationPaymentPlan,
+} from './payment/paymentFlowProducts.js';
+export {
+  getAigPriceUsd,
+  usdEquivalentFromDualLegs,
+  totalAigVolumeUnits,
+  aigUnitsForFullUsdPayment,
+  usdValueOfAig,
+  assertDualPlanCoversPrice,
+} from './payment/dualTokenPayment.js';
+export {
+  PAYMENT_MODULE_RULES,
+  normalizePaymentModule,
+  catalogCategoryToModule,
+  validateUsdEquivalence,
+  getPaymentSplit,
+} from './payment/paymentRuleEngine.js';
+export { executeDualTokenPayment } from '../utils/dualTokenExecution.js';
 export { usePaymentLedgerStore } from './stores/paymentLedgerStore.js';
 export { useMerchantDebtStore } from './stores/merchantDebtStore.js';
 export { useHybridRetentionStore, selectRetentionProcessing } from './stores/hybridRetentionStore.js';

@@ -56,6 +56,16 @@ export async function requestSwitchChain() {
   return;
 }
 
+/**
+ * Prefer single treasury `payDual`; currently falls back to USDT-only transfer when the USDT leg is nonzero.
+ * @param {import('ethers').Signer} signer
+ * @param {{ aigAmountRaw: bigint, usdtAmountRaw: bigint }} legs
+ */
+export async function payDual(signer, legs) {
+  const { executeDualTokenPayment } = await import('../../utils/dualTokenExecution.js');
+  return executeDualTokenPayment(signer, legs);
+}
+
 export async function sendUsdt(signer, amountRaw) {
   if (isWeb3MockMode()) {
     console.log('💸 MOCK TRANSFER (STOP EXECUTION)');
@@ -88,6 +98,7 @@ export const web3Core = {
   connectWallet,
   refreshInjectedWalletSession,
   requestSwitchChain,
+  payDual,
   sendUsdt,
   async sendTransaction(opts) {
     const { signer, amount } = opts;

@@ -19,6 +19,7 @@ import { GenesisErrorBoundary } from './ui-genesis/components/GenesisErrorBounda
 const GenesisDesignPreview = lazy(() => import('./ui-genesis/GenesisDesignPreview.jsx'));
 const MarketplacePage = lazy(() => import('./ui-genesis/pages/MarketplacePage.jsx'));
 const LocalMarketplacePage = lazy(() => import('./ui-genesis/pages/LocalMarketplacePage.jsx'));
+const MerchantDashboardPage = lazy(() => import('./ui-genesis/pages/MerchantDashboardPage.jsx'));
 const AdminCoreApp = lazy(() =>
   import('./ui-genesis/AdminCoreApp.jsx').then((m) => ({ default: m.AdminCoreApp })),
 );
@@ -115,6 +116,25 @@ function LocalMarketplaceShell() {
   );
 }
 
+function MerchantOnboardingShell() {
+  return (
+    <GenesisErrorBoundary>
+      <WalletProvider>
+        <Suspense
+          fallback={
+            <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 font-display text-cyan-200">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-400" />
+              <p className="text-sm">Loading merchant hub…</p>
+            </div>
+          }
+        >
+          <MerchantDashboardPage />
+        </Suspense>
+      </WalletProvider>
+    </GenesisErrorBoundary>
+  );
+}
+
 function AdminCoreShell() {
   return (
     <GenesisErrorBoundary>
@@ -144,6 +164,7 @@ function Root() {
     if (path === '/marketplace') return <GenesisMarketplaceShell />;
     /** Geolocation merchants — map + list (demo data; API later) */
     if (path === '/marketplace/local') return <LocalMarketplaceShell />;
+    if (path === '/marketplace/merchant') return <MerchantOnboardingShell />;
     /** Admin Core — separate from user Genesis shell */
     if (isAdminCorePath(path)) return <AdminCoreShell />;
   }

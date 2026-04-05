@@ -119,7 +119,10 @@
 }
 
 .reactor-visual--particle {
-  animation: reactor-particle-drift 2.4s ease-out infinite;
+  animation-name: reactor-particle-drift;
+  animation-duration: 2.4s;
+  animation-timing-function: ease-out;
+  animation-iteration-count: infinite;
 }
 
 .reactor-visual--burst {

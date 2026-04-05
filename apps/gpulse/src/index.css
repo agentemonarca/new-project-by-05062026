@@ -268,7 +268,10 @@ body.debug [data-debug-anchor]::after {
 }
 
 .sync-particle {
-  animation: sync-float 6.5s ease-in-out infinite;
+  animation-name: sync-float;
+  animation-duration: 6.5s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
 }
 
 /* G_Pulse membership — premium pulse + CTA glow */
@@ -356,7 +359,10 @@ body.debug [data-debug-anchor]::after {
 }
 
 .gp-access-ambient-blob {
-  animation: gp-access-ambient-shift 12s ease-in-out infinite;
+  animation-name: gp-access-ambient-shift;
+  animation-duration: 12s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
 }
 
 /* Cristal: animación suave para la capa de reflexión */

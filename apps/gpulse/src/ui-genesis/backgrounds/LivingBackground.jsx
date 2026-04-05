@@ -7,7 +7,8 @@ import { motion } from 'framer-motion';
 export function LivingBackground({ className = '' }) {
   return (
     <div
-      className={`pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#030712] ${className}`}
+      className={`pointer-events-none overflow-hidden bg-[#030712] ${className}`}
+      style={{ position: 'fixed', inset: 0, zIndex: 0 }}
       aria-hidden
     >
       <div

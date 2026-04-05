@@ -10,7 +10,7 @@ import {
   getPaymentSplit,
   getProductCtaLabel,
 } from '../marketplace/impactEngine.js';
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { getAigPriceUsd } from '../payment/dualTokenPayment.js';
 
 function AnimatedSplitBars({ aigPercent, reduceMotion }) {
   const aig = Math.min(100, Math.max(0, aigPercent));
@@ -59,9 +59,19 @@ export function MarketplaceQuickBuyModal({ open, product, onClose, onConfirm }) 
   const ctx = useOptionalCore();
   const core = ctx ?? STANDALONE_CORE_SNAPSHOT;
 
-  const split = useMemo(() => (product ? getPaymentSplit(product) : null), [product]);
+  const internalAig = Number(core?.aigBalance ?? STANDALONE_CORE_SNAPSHOT.aigBalance ?? 0);
+  const ledgerUsdt = Number(core?.claimUi?.ledgerNetUsdt);
+  const internalUsdt = Number.isFinite(ledgerUsdt) && ledgerUsdt > 0 ? ledgerUsdt : undefined;
+  const split = useMemo(
+    () =>
+      product
+        ? getPaymentSplit(product, { internalAigBalance: internalAig, internalUsdtBalance: internalUsdt })
+        : null,
+    [product, internalAig, internalUsdt],
+  );
   const impact = useMemo(() => (product ? calculateProductImpact(product, core) : null), [product, core]);
   const beforeAfter = useMemo(() => (product ? compareBeforeAfter(core, product) : null), [product, core]);
+  const aigOracle = getAigPriceUsd();
 
   useEffect(() => {
     if (!open) return;
@@ -77,6 +87,7 @@ export function MarketplaceQuickBuyModal({ open, product, onClose, onConfirm }) 
   const cta = getProductCtaLabel(product);
   const roiOk = impact.paybackTime < 9000 && impact.paybackTime > 0;
   const categoryVerb = MARKETPLACE_CATEGORY_VERB[product.category] ?? 'Earn';
+  const priceUSD = Number(product.priceUsdt ?? 0);
 
   return (
     <AnimatePresence>
@@ -109,6 +120,10 @@ export function MarketplaceQuickBuyModal({ open, product, onClose, onConfirm }) 
                 <h2 id="quick-buy-title" className="font-display text-lg font-semibold text-white">
                   {product.title}
                 </h2>
+                <p className="mt-1 font-mono text-xs text-slate-500">
+                  ${priceUSD.toFixed(2)} USD · {split.points.toFixed(2)} pts · oracle {aigOracle.toFixed(4)} USD/AIG
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400">{split.plan.ruleLabel}</p>
               </div>
               <button
                 type="button"
@@ -120,6 +135,12 @@ export function MarketplaceQuickBuyModal({ open, product, onClose, onConfirm }) 
             </div>
 
             <div className="space-y-5 px-5 py-5">
+              {!split.plan.valid && split.plan.validationError ? (
+                <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
+                  {split.plan.validationError}
+                </p>
+              ) : null}
+
               <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]">
                 <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-200/85">
                   Projected earn boost
@@ -156,16 +177,21 @@ export function MarketplaceQuickBuyModal({ open, product, onClose, onConfirm }) 
                 <AnimatedSplitBars aigPercent={split.aigPercent} reduceMotion={reduceMotion} />
                 <div className="mt-3 grid gap-2 font-mono text-xs text-slate-300">
                   <div className="flex justify-between border-b border-white/5 pb-1">
-                    <span className="text-slate-500">Earn with AIG</span>
-                    <span className="text-cyan-200">{split.aigAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} AIG</span>
+                    <span className="text-slate-500">AIG (checkout)</span>
+                    <span className="text-cyan-200">
+                      {split.aigAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} AIG
+                    </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Boost with USDT</span>
-                    <span className="text-violet-200">${split.usdtAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  <div className="flex justify-between border-b border-white/5 pb-1">
+                    <span className="text-slate-500">USDT (checkout)</span>
+                    <span className="text-violet-200">
+                      {split.usdtAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDT
+                    </span>
                   </div>
-                  <p className="pt-1 text-[10px] text-slate-600">
-                    Display rate: 1 USDT ≈ {USDT_TO_AIG_DISPLAY} AIG (UI)
-                  </p>
+                  <div className="flex justify-between text-slate-400">
+                    <span className="text-slate-500">USD → AIG equiv.</span>
+                    <span>{(priceUSD / aigOracle).toFixed(2)} AIG (full price)</span>
+                  </div>
                 </div>
               </div>
 

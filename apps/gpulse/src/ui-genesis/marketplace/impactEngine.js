@@ -1,4 +1,8 @@
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { getAigPriceUsd } from '../payment/dualTokenPayment.js';
+import {
+  catalogCategoryToModule,
+  getPaymentSplit as paymentEngineSplit,
+} from '../payment/paymentRuleEngine.js';
 import { getLegacyProtocolNextAction } from '../core/nextActionEngine.js';
 
 /**
@@ -177,18 +181,36 @@ export function productAlignsWithNextAction(product, core) {
 }
 
 /**
- * Checkout amounts for quick-buy UI (display only until on-chain checkout exists).
+ * Checkout amounts for marketplace catalog — uses **paymentRuleEngine** (no hardcoded ratios here).
  * @param {NormalizedMarketplaceProduct} product
+ * @param {{
+ *   module?: import('../payment/paymentRuleEngine.js').PaymentModule,
+ *   internalAigBalance?: number,
+ *   internalUsdtBalance?: number,
+ *   aigPriceUsd?: number,
+ * }} [options]
  */
-export function getPaymentSplit(product) {
-  const price = Number(product.priceUsdt ?? 0);
-  const ap = Math.min(100, Math.max(0, Number(product.aigPercent ?? 0)));
-  const usdtAmount = price * ((100 - ap) / 100);
-  const aigAmount =
-    product.aigEquivalent != null && Number.isFinite(Number(product.aigEquivalent))
-      ? Number(product.aigEquivalent)
-      : (price * (ap / 100)) * USDT_TO_AIG_DISPLAY;
-  return { usdtAmount, aigAmount, aigPercent: ap, listUsdt: price };
+export function getPaymentSplit(product, options = {}) {
+  const priceUSD = Number(product.priceUsdt ?? 0);
+  const module = options.module ?? catalogCategoryToModule(product.category);
+  const internalAigBalance =
+    options.internalAigBalance ?? Number(STANDALONE_CORE_SNAPSHOT.aigBalance ?? 0);
+  const internalUsdtBalance = options.internalUsdtBalance;
+  const aigPriceUsd = options.aigPriceUsd ?? getAigPriceUsd();
+  const plan = paymentEngineSplit(module, priceUSD, aigPriceUsd, {
+    internalAigBalance,
+    internalUsdtBalance,
+  });
+  const aigPercent = priceUSD > 0 ? Math.round(plan.aigShareOfPrice * 100) : 0;
+  return {
+    usdtAmount: plan.usdtAmount,
+    aigAmount: plan.aigAmount,
+    aigPercent,
+    listUsdt: priceUSD,
+    points: plan.points,
+    module: plan.module,
+    plan,
+  };
 }
 
 /** High-conversion primary button label by listing category. */

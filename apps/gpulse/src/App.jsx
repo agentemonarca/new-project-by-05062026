@@ -585,7 +585,13 @@ const GlobalStyles = ({ isLight }) => (
       100% { transform: scale(1.03); filter: brightness(1.2); }
     }
 
-    .blockchain-entry { animation: ledger-slide 0.6s var(--armani-curve) forwards; position: relative; }
+    .blockchain-entry {
+      animation-name: ledger-slide;
+      animation-duration: 0.6s;
+      animation-timing-function: var(--armani-curve);
+      animation-fill-mode: forwards;
+      position: relative;
+    }
     @keyframes ledger-slide { 0% { transform: translateX(-20px) scale(0.95); opacity: 0; filter: blur(4px); } 100% { transform: translateX(0) scale(1); opacity: 1; filter: blur(0); } }
     .vortex-spin { animation: vortex 30s infinite linear; }
     @keyframes vortex { to { transform: rotate(360deg); } }
@@ -3209,6 +3215,35 @@ export default function App() {
   /** Solo el toggle del usuario; no acoplar a modo de juego. */
   const isSyncRequired = syncMode === true;
 
+  /** Ejecución pausada por sync insuficiente; se libera cuando syncPercent >= syncTarget (vínculo con SYNC_BLOCK). */
+  const [isBlocked, setIsBlocked] = useState(false);
+
+  useEffect(() => {
+    if (!isSyncRequired) {
+      setIsBlocked(false);
+      return;
+    }
+    if (syncPercent < syncTarget) {
+      setIsBlocked(true);
+      return;
+    }
+    setIsBlocked((b) => (b && syncPercent >= syncTarget ? false : b));
+  }, [isSyncRequired, syncPercent, syncTarget]);
+
+  /** Latest sync-guard inputs for scheduled runAction callbacks (avoids stale scheduler closure). */
+  const triggerSequenceGuardInputsRef = useRef({
+    isSyncRequired: true,
+    isBlocked: false,
+    syncPercent: 0,
+    syncTarget: 5,
+  });
+  triggerSequenceGuardInputsRef.current = {
+    isSyncRequired,
+    isBlocked,
+    syncPercent,
+    syncTarget,
+  };
+
   useEffect(() => {
     if (selectedMode === MODOS.IA_REAL && !syncModeManuallyChanged) {
       setSyncMode(true);
@@ -3397,6 +3432,8 @@ export default function App() {
   const isSequenceTriggered = useRef(false);
   /** Patrón guardado si executeSequence difiere por sync bajo (reintento al subir sync o SYNC OFF). */
   const syncBlockedPatternRef = useRef(null);
+  /** True desde SYNC_BLOCK hasta que syncPercent >= syncTarget y executeSequence continúa (evita bucle scheduler). */
+  const executionBlockedBySyncRef = useRef(false);
   /** Patrón guardado si G_Pulse bloquea en IA_REAL (reintento cuando la señal sea válida). */
   const gpulseBlockedPatternRef = useRef(null);
   const isGoldModeRef = useRef(false);
@@ -4098,6 +4135,8 @@ export default function App() {
     stepQueueRef.current = [];
     isSequenceTriggered.current = false;
     syncBlockedPatternRef.current = null;
+    executionBlockedBySyncRef.current = false;
+    setIsBlocked(false);
     gpulseBlockedPatternRef.current = null;
     setIsEnginePaused(false);
     setIsEngineStepMode(false);
@@ -5064,6 +5103,8 @@ export default function App() {
       setCoreVisual('BLOCKED_SYNC');
       setSystemMessage('Esperando sincronización óptima...');
       syncBlockedPatternRef.current = Array.isArray(pat) ? pat : null;
+      executionBlockedBySyncRef.current = true;
+      setIsBlocked(true);
       isSequenceTriggered.current = false;
       setPattern([]);
       logExecutionInterrupted({ reason: 'SYNC_BLOCK', step: null });
@@ -5074,6 +5115,10 @@ export default function App() {
     }
 
     syncBlockedPatternRef.current = null;
+    executionBlockedBySyncRef.current = false;
+    if (isSyncRequired && syncPercent >= syncTarget) {
+      setIsBlocked(false);
+    }
 
     if (isSyncRequired && syncPercent >= 60 && syncPercent < 85) {
       setAiSpeech({
@@ -5421,6 +5466,7 @@ export default function App() {
     setAiSpeech,
     isSyncRequired,
     syncPercent,
+    syncTarget,
     syncMode,
   ]);
 
@@ -5428,18 +5474,17 @@ export default function App() {
     executeSequenceRef.current = executeSequence;
   }, [executeSequence]);
 
-  /** Reintenta la secuencia cuando el sync mejora o el usuario desactiva SYNC, sin tocar el scheduler. */
+  /** Reintenta la secuencia cuando syncPercent >= syncTarget (mismo umbral que SYNC_BLOCK), sin re-disparar el scheduler. */
   useEffect(() => {
     if (!isRunning || fase !== FASES.SEÑAL) return;
     const pat = syncBlockedPatternRef.current;
     if (!pat || !Array.isArray(pat) || pat.length === 0) return;
     if (isSequenceTriggered.current || isProcessingSequence) return;
-    if (isSyncRequired && syncPercent < 60) return;
-    syncBlockedPatternRef.current = null;
+    if (isSyncRequired && syncPercent < syncTarget) return;
     isSequenceTriggered.current = true;
     setPattern(pat);
     queueMicrotask(() => executeSequenceRef.current?.(pat));
-  }, [syncPercent, fase, isRunning, isSyncRequired, isProcessingSequence, syncMode]);
+  }, [syncPercent, syncTarget, fase, isRunning, isSyncRequired, isProcessingSequence, syncMode]);
 
   /** Reintenta la secuencia cuando G_Pulse vuelve a ser válido (IA_REAL), sin tocar scheduler ni sync. */
   useEffect(() => {
@@ -5477,6 +5522,8 @@ export default function App() {
     setCoreVisual('IDLE');
     isSequenceTriggered.current = false;
     syncBlockedPatternRef.current = null;
+    executionBlockedBySyncRef.current = false;
+    setIsBlocked(false);
     gpulseBlockedPatternRef.current = null;
     if (cycleTimeout.current) clearTimeout(cycleTimeout.current);
     if (scoreInterval.current) clearInterval(scoreInterval.current);
@@ -5651,6 +5698,13 @@ export default function App() {
       speak,
       executeSequence: (p) => executeSequenceRef.current?.(p),
       shouldTriggerSequence,
+      guardTriggerSequence: () => {
+        const g = triggerSequenceGuardInputsRef.current;
+        if (!g.isSyncRequired) return true;
+        if (syncBlockedPatternRef.current != null) return false;
+        if (g.isBlocked && g.syncPercent < g.syncTarget) return false;
+        return true;
+      },
 
       // setters
       setEnginesReady,

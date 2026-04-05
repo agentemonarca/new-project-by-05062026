@@ -19,11 +19,11 @@ import { HybridFintechPanel } from '../components/HybridFintechPanel.jsx';
 import { applyHybridPurchaseSideEffects, tickHybridFintechState } from '../marketplace/hybridPaymentIntegration.js';
 import { useOptionalWallet } from '../../context/WalletContext.jsx';
 import {
-  MOCK_LOCAL_MERCHANTS,
   MERCHANT_CATEGORIES,
   applyLocalMerchantFilters,
   formatDistanceKm,
   isMerchantOpenNow,
+  useMergedLocalMerchants,
 } from '../local-marketplace/index.js';
 import {
   buildMarketplaceRevenueLedgerRaws,
@@ -35,6 +35,9 @@ import { executeMarketplaceGrowthPayout } from '../marketplace/marketplaceGrowth
 import { useOptionalCore } from '../core/CoreContext.jsx';
 import { useLocalMarketplaceUserStore } from '../stores/localMarketplaceUserStore.js';
 import { usePaymentLedgerStore } from '../stores/paymentLedgerStore.js';
+import { MerchantOnboarding } from '../components/merchant/MerchantOnboarding.jsx';
+import { getAigPriceUsd } from '../payment/dualTokenPayment.js';
+import { getPaymentSplit } from '../payment/paymentRuleEngine.js';
 
 const DISTANCE_OPTIONS = [
   { label: 'Any distance', value: null },
@@ -79,6 +82,11 @@ export default function LocalMarketplacePage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [mobilePanel, setMobilePanel] = useState(/** @type {'map' | 'list'} */ ('list'));
   const [toast, setToast] = useState(/** @type {string | null} */ (null));
+  const [registerBusinessOpen, setRegisterBusinessOpen] = useState(false);
+  /** Mobile map tab — when true, merchant detail + register modals must stay closed (single-layer UX). */
+  const isMapOpen = useMemo(() => mobilePanel === 'map', [mobilePanel]);
+
+  const allMerchants = useMergedLocalMerchants();
 
   useEffect(() => {
     setWalletSnapshot(wallet?.address ?? null);
@@ -97,13 +105,13 @@ export default function LocalMarketplacePage() {
   );
 
   const filtered = useMemo(
-    () => applyLocalMerchantFilters(MOCK_LOCAL_MERCHANTS, filters, userLatLng),
-    [filters, userLatLng],
+    () => applyLocalMerchantFilters(allMerchants, filters, userLatLng),
+    [allMerchants, filters, userLatLng],
   );
 
   const selectedMerchant = useMemo(
-    () => (selectedId ? filtered.find((m) => m.id === selectedId) ?? MOCK_LOCAL_MERCHANTS.find((m) => m.id === selectedId) : null),
-    [selectedId, filtered],
+    () => (selectedId ? filtered.find((m) => m.id === selectedId) ?? allMerchants.find((m) => m.id === selectedId) : null),
+    [selectedId, filtered, allMerchants],
   );
 
   const mapCenter = useMemo(/** @returns {[number, number]} */ () => {
@@ -113,7 +121,30 @@ export default function LocalMarketplacePage() {
 
   const mapZoom = selectedMerchant ? 14 : 11;
 
-  const openDetail = useCallback((id) => {
+  const closeRegisterBusinessModal = useCallback(() => {
+    setRegisterBusinessOpen(false);
+  }, []);
+
+  /** Opens map panel and clears any stacked modals (detail + onboarding). */
+  const openMapPanel = useCallback(() => {
+    setDetailOpen(false);
+    setRegisterBusinessOpen(false);
+    setMobilePanel('map');
+  }, []);
+
+  const openListPanel = useCallback(() => {
+    setMobilePanel('list');
+  }, []);
+
+  /** Register-business modal excludes merchant detail; never both `true`. */
+  const openRegisterBusinessModal = useCallback(() => {
+    setDetailOpen(false);
+    setRegisterBusinessOpen(true);
+  }, []);
+
+  /** Merchant detail excludes register modal; never both `true`. */
+  const openMerchantDetail = useCallback((id) => {
+    setRegisterBusinessOpen(false);
     setSelectedId(id);
     setDetailOpen(true);
   }, []);
@@ -145,22 +176,33 @@ export default function LocalMarketplacePage() {
   const onBuyProduct = useCallback(
     (product) => {
       if (!selectedMerchant) return;
-      const grossBinaryPts = defaultBinaryVolumePtsFromGross(product.priceUSD, product.priceAIG);
+      const aigPriceUsd = getAigPriceUsd();
+      const plan = getPaymentSplit('gmarket', product.priceUSD, aigPriceUsd, {
+        internalAigBalance: balanceAIG,
+        internalUsdtBalance: balanceUSD,
+      });
+      if (!plan.valid) {
+        setToast(plan.validationError || 'No se puede completar el checkout (revisa saldos).');
+        window.setTimeout(() => setToast(null), 3800);
+        return;
+      }
+      const grossBinaryPts = defaultBinaryVolumePtsFromGross(plan.usdtAmount, plan.aigAmount, aigPriceUsd);
       const entry = recordPurchase({
         merchantId: selectedMerchant.id,
         merchantName: selectedMerchant.name,
         productId: product.id,
         productName: product.name,
-        usd: product.priceUSD,
-        aig: product.priceAIG,
+        usd: plan.usdtAmount,
+        aig: plan.aigAmount,
         binaryPts: grossBinaryPts,
       });
 
       const eligibilitySnap = buildRevenueEligibilitySnapshotFromCore(core);
       const distribution = calculateMarketplaceRevenueDistribution({
-        grossUsd: product.priceUSD,
-        grossAig: product.priceAIG,
+        grossUsd: plan.usdtAmount,
+        grossAig: plan.aigAmount,
         grossBinaryPts,
+        aigPriceUsd,
         merchantReferrerSnapshot: eligibilitySnap,
         buyerReferrerSnapshot: eligibilitySnap,
       });
@@ -185,20 +227,21 @@ export default function LocalMarketplacePage() {
       const growth = executeMarketplaceGrowthPayout({
         purchaseId: entry.id,
         productLabel: product.name,
-        grossUsd: product.priceUSD,
-        grossAig: product.priceAIG,
+        grossUsd: plan.usdtAmount,
+        grossAig: plan.aigAmount,
         isStakingVolumeRule: product.volumeRule === 'staking',
         core: core ?? undefined,
         txHash,
         ts,
+        aigPriceUsd,
       });
 
       applyHybridPurchaseSideEffects({
         purchaseId: entry.id,
         merchantId: selectedMerchant.id,
         merchantName: selectedMerchant.name,
-        usd: product.priceUSD,
-        aig: product.priceAIG,
+        usd: plan.usdtAmount,
+        aig: plan.aigAmount,
       });
       tickHybridFintechState();
 
@@ -221,6 +264,8 @@ export default function LocalMarketplacePage() {
       wallet?.address,
       buyerReferrerWallet,
       appendLedgerEvents,
+      balanceAIG,
+      balanceUSD,
     ],
   );
 
@@ -229,17 +274,46 @@ export default function LocalMarketplacePage() {
   const favoriteLabels = useMemo(
     () =>
       favorites
-        .map((id) => MOCK_LOCAL_MERCHANTS.find((m) => m.id === id)?.name)
+        .map((id) => allMerchants.find((m) => m.id === id)?.name)
         .filter(Boolean),
-    [favorites],
+    [favorites, allMerchants],
   );
 
   return (
     <div className="relative min-h-screen font-display text-slate-200">
       <LivingBackground />
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-6 md:px-8">
+        <MerchantOnboarding
+          mode="modal"
+          open={registerBusinessOpen && !detailOpen}
+          onClose={closeRegisterBusinessModal}
+          defaultLat={userLat}
+          defaultLng={userLng}
+          onRegistered={(id) => {
+            setSelectedId(id);
+            setDetailOpen(false);
+            setMobilePanel('map');
+            setToast('Your business is on the map. Scroll to see the new pin.');
+            window.setTimeout(() => setToast(null), 3800);
+          }}
+        />
+
         <div className="mb-6 flex flex-col gap-4 border-b border-white/10 pb-6 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={openRegisterBusinessModal}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-xs font-bold uppercase tracking-wide text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.15)] hover:border-emerald-400/60"
+            >
+              Register your business
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.assign('/marketplace/merchant')}
+              className="inline-flex items-center gap-2 rounded-xl border border-violet-500/35 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-100 hover:border-violet-400/50"
+            >
+              Full merchant hub
+            </button>
             <button
               type="button"
               onClick={() => window.location.assign('/marketplace')}
@@ -295,6 +369,22 @@ export default function LocalMarketplacePage() {
                     Use device location
                   </button>
                 </span>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={openRegisterBusinessModal}
+                  className="rounded-2xl border border-emerald-400/40 bg-emerald-500/15 px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-emerald-100 transition hover:border-emerald-300/55 hover:bg-emerald-500/25"
+                >
+                  Register your business
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.location.assign('/marketplace/merchant')}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white"
+                >
+                  Open full hub
+                </button>
               </div>
             </div>
           </motion.div>
@@ -422,9 +512,9 @@ export default function LocalMarketplacePage() {
         <div className="mb-4 flex gap-2 lg:hidden">
           <button
             type="button"
-            onClick={() => setMobilePanel('map')}
+            onClick={openMapPanel}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold ${
-              mobilePanel === 'map'
+              isMapOpen
                 ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
                 : 'border-white/10 bg-white/5 text-slate-400'
             }`}
@@ -434,7 +524,7 @@ export default function LocalMarketplacePage() {
           </button>
           <button
             type="button"
-            onClick={() => setMobilePanel('list')}
+            onClick={openListPanel}
             className={`flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold ${
               mobilePanel === 'list'
                 ? 'border-cyan-400/50 bg-cyan-500/15 text-cyan-100'
@@ -447,13 +537,13 @@ export default function LocalMarketplacePage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-          <div className={(mobilePanel === 'map' ? 'block' : 'hidden') + ' lg:block'}>
+          <div className={(isMapOpen ? 'block' : 'hidden') + ' lg:block'}>
             <LocalMerchantMap
               merchants={filtered}
               mapCenter={mapCenter}
               zoom={mapZoom}
               selectedId={selectedId}
-              onSelect={(id) => openDetail(id)}
+              onSelect={(id) => openMerchantDetail(id)}
             />
             <button
               type="button"
@@ -480,7 +570,7 @@ export default function LocalMarketplacePage() {
                     <motion.button
                       type="button"
                       layout
-                      onClick={() => openDetail(m.id)}
+                      onClick={() => openMerchantDetail(m.id)}
                       className="group w-full rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-left shadow-lg transition hover:border-cyan-500/35 hover:shadow-[0_12px_40px_-12px_rgba(34,211,238,0.2)]"
                       whileHover={{ y: -3 }}
                     >
@@ -533,7 +623,7 @@ export default function LocalMarketplacePage() {
         </div>
 
         <LocalMerchantDetailModal
-          open={detailOpen}
+          open={detailOpen && !registerBusinessOpen}
           merchant={selectedMerchant}
           isFavorite={selectedMerchant ? favorites.includes(selectedMerchant.id) : false}
           onClose={closeDetail}

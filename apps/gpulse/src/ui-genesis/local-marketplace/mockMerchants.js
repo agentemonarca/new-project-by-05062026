@@ -10,7 +10,7 @@ export const DEFAULT_MAP_CENTER = Object.freeze({ lat: 25.2048, lng: 55.2708 });
  */
 
 /**
- * @typedef {{ id: string, name: string, priceUSD: number, priceAIG: number, image?: string, volumeRule?: 'full' | 'staking' }} LocalProduct
+ * @typedef {{ id: string, name: string, priceUSD: number, priceAIG: number, image?: string, description?: string, volumeRule?: 'full' | 'staking' }} LocalProduct
  */
 
 /**
@@ -44,6 +44,7 @@ export const DEFAULT_MAP_CENTER = Object.freeze({ lat: 25.2048, lng: 55.2708 });
  *   activityLevel: ActivityLevel,
  *   products: LocalProduct[],
  *   referrerWallet?: string,
+ *   ownerWallet?: string,
  * }} LocalMerchant
  */
 
@@ -60,8 +61,25 @@ const w = /** @type {const} */ ([
   { d: 0, open: '10:00', close: '22:00' },
 ]);
 
+/** Default weekly hours (Dubai) — reuse for onboarding-created stores. */
+export function getDefaultMerchantSchedule() {
+  return /** @type {const} */ ({
+    tz: 'Asia/Dubai',
+    slots: [
+      { d: 1, open: '09:00', close: '23:00' },
+      { d: 2, open: '09:00', close: '23:00' },
+      { d: 3, open: '09:00', close: '23:00' },
+      { d: 4, open: '09:00', close: '23:00' },
+      { d: 5, open: '09:00', close: '23:59' },
+      { d: 6, open: '10:00', close: '23:00' },
+      { d: 0, open: '10:00', close: '22:00' },
+    ],
+  });
+}
+
+/** Canonical seed data for the near-me map (bundled demo merchants). */
 /** @type {LocalMerchant[]} */
-export const MOCK_LOCAL_MERCHANTS = [
+export const SEED_LOCAL_MERCHANTS = [
   {
     id: 'loc-em-1',
     kind: 'store',
@@ -273,3 +291,8 @@ export const MOCK_LOCAL_MERCHANTS = [
     ],
   },
 ];
+
+/**
+ * @deprecated Prefer `SEED_LOCAL_MERCHANTS` plus `useMergedLocalMerchants()` for directory + user stores.
+ */
+export const MOCK_LOCAL_MERCHANTS = SEED_LOCAL_MERCHANTS;

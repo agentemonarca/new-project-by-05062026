@@ -12,6 +12,8 @@ import {
   X,
 } from 'lucide-react';
 import { formatDistanceKm, isMerchantOpenNow } from '../local-marketplace/geo.js';
+import { getAigPriceUsd } from '../payment/dualTokenPayment.js';
+import { getPaymentSplit, PAYMENT_MODULE_RULES } from '../payment/paymentRuleEngine.js';
 
 /**
  * @param {{
@@ -41,6 +43,7 @@ export function LocalMerchantDetailModal({
 
   const openNow = isMerchantOpenNow(merchant.schedule);
   const kindLabel = merchant.kind === 'store' ? 'Store · multi-product' : 'Offer · single product';
+  const aigPx = getAigPriceUsd();
 
   return (
     <AnimatePresence>
@@ -181,11 +184,22 @@ export function LocalMerchantDetailModal({
                   <Store className="h-3.5 w-3.5" />
                   {merchant.kind === 'store' ? 'Products' : 'Offer'}
                 </h3>
+                <div className="mb-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-200/80">gmarket (motor global)</p>
+                  <p className="mt-1 text-[10px] text-slate-400">{PAYMENT_MODULE_RULES.gmarket.label}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    USD fijo = puntos · oracle {aigPx.toFixed(4)} USD/AIG — reglas centralizadas, no editables en UI.
+                  </p>
+                </div>
                 <ul className="space-y-3">
                   {merchant.products.map((p) => {
-                    const canAig = merchant.acceptsAIG && p.priceAIG > 0;
-                    const shortCash = p.priceUSD > balanceUSD;
-                    const shortAig = canAig && p.priceAIG > balanceAIG;
+                    const fullAigForPrice = p.priceUSD / aigPx;
+                    const preview = getPaymentSplit('gmarket', p.priceUSD, aigPx, {
+                      internalAigBalance: balanceAIG,
+                      internalUsdtBalance: balanceUSD,
+                    });
+                    const shortCash = preview.usdtAmount > balanceUSD + 1e-6;
+                    const shortAig = preview.aigAmount > balanceAIG + 1e-6;
                     return (
                       <li
                         key={p.id}
@@ -201,18 +215,21 @@ export function LocalMerchantDetailModal({
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-white">{p.name}</p>
                           <p className="mt-0.5 font-mono text-xs text-slate-400">
-                            {p.priceAIG > 0 ? (
-                              <span className="text-cyan-200/90">{p.priceAIG} AIG</span>
-                            ) : (
-                              <span className="text-slate-500">AIG N/A</span>
-                            )}
+                            <span className="text-violet-200/90">${p.priceUSD} USD</span>
                             <span className="text-slate-600"> · </span>
-                            <span className="text-violet-200/90">${p.priceUSD}</span>
+                            <span className="text-cyan-200/90">≈ {fullAigForPrice.toFixed(1)} AIG</span>
+                            {p.priceAIG > 0 ? (
+                              <span className="text-slate-600"> (cat. {p.priceAIG} AIG)</span>
+                            ) : null}
                           </p>
+                          {p.description ? (
+                            <p className="mt-1 text-xs leading-snug text-slate-500">{p.description}</p>
+                          ) : null}
                           {(shortCash || shortAig) && (
                             <p className="mt-1 text-[10px] text-amber-200/90">
-                              Demo balance low for {shortCash ? 'USD' : ''}{shortCash && shortAig ? ' / ' : ''}
-                              {shortAig ? 'AIG' : ''} — still simulates checkout.
+                              Demo balance low for {shortCash ? 'USD' : ''}
+                              {shortCash && shortAig ? ' / ' : ''}
+                              {shortAig ? 'AIG' : ''} — mixto/USDT puede requerir saldo adicional.
                             </p>
                           )}
                           <button

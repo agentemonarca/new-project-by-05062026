@@ -33,6 +33,7 @@ const PATH_TO_NAV = {
   '/gpulse': 'gpulse',
   '/marketplace': 'marketplace',
   '/marketplace/local': 'marketplace',
+  '/marketplace/merchant': 'marketplace',
   '/network': 'network',
   '/comunidad': 'network',
   '/wallet': 'wallet',

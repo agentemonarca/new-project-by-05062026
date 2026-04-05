@@ -26,6 +26,9 @@ export const actionRegistry = {
   },
 
   TRIGGER_SEQUENCE: (action, ctx) => {
+    if (typeof ctx.guardTriggerSequence === 'function' && ctx.guardTriggerSequence() === false) {
+      return;
+    }
     if (!ctx.shouldTriggerSequence(ctx.isSequenceTriggeredRef.current)) return;
     const pattern = Array.isArray(action?.payload?.pattern) ? action.payload.pattern : null;
     if (!pattern) return;

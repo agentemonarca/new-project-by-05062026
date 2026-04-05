@@ -14,6 +14,7 @@ import {
   validateTransfer,
 } from '../utils/web3Payment.js';
 import { isWeb3MockMode } from '../utils/web3Mode.js';
+import { aigUnitsForFullUsdPayment, getAigPriceUsd } from '../ui-genesis/payment/dualTokenPayment.js';
 
 function truncateAddress(addr) {
   if (!addr || addr.length < 12) return addr || '';
@@ -61,6 +62,22 @@ export default function GpulseActivationOptions({ activePlan, onTrustFlowChange 
   const paymentLockRef = useRef(false);
 
   const cfg = useMemo(() => getWeb3Config(), []);
+
+  const planPriceUsd = useMemo(() => {
+    try {
+      const raw = activePlan?.price;
+      const n = parseFloat(String(raw ?? '').replace(/[^\d.]/g, ''));
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }, [activePlan?.price]);
+
+  const aigOracleUsd = useMemo(() => getAigPriceUsd(), []);
+  const fullAigForPlan = useMemo(
+    () => (planPriceUsd > 0 ? aigUnitsForFullUsdPayment(planPriceUsd, aigOracleUsd) : 0),
+    [planPriceUsd, aigOracleUsd],
+  );
 
   useEffect(() => {
     onTrustFlowChange?.({ open: pkgFlowOpen, state: pkgFlowState });
@@ -269,6 +286,17 @@ export default function GpulseActivationOptions({ activePlan, onTrustFlowChange 
 
   return (
     <div className="space-y-4">
+      {planPriceUsd > 0 ? (
+        <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Dual-token (precio fijo)</p>
+          <p className="mt-1 font-mono text-[11px] text-slate-300">
+            ${planPriceUsd.toFixed(2)} USD · ≈ {fullAigForPlan.toFixed(2)} AIG @ {aigOracleUsd.toFixed(4)} USD/AIG
+          </p>
+          <p className="mt-1 text-[10px] text-slate-500">
+            Este flujo usa 100% USDT on-chain; en Genesis Dashboard puedes elegir AIG / mixto.
+          </p>
+        </div>
+      ) : null}
       <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] px-4 py-5">
         <p className="text-center text-[12px] font-medium leading-relaxed text-white/75">{statusMessage}</p>
         {subMessage ? (

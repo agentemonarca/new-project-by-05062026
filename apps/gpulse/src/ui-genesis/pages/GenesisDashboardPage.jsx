@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LivingBackground } from '../backgrounds/LivingBackground.jsx';
+import { HologramBackground } from '../backgrounds/HologramBackground.jsx';
 import { ChatWidgetPlaceholder } from '../widgets/ChatWidgetPlaceholder.jsx';
 import { CoreProvider } from '../core/CoreContext.jsx';
 import { LedgerProvider } from '../ledger/LedgerContext.jsx';
 import { useMiningCores } from '../hooks/useMiningCores.js';
+import { HologramEntity } from '../components/HologramEntity.jsx';
 import { GenesisToast } from '../components/GenesisToast.jsx';
 import { SuccessModal } from '../modals/SuccessModal.jsx';
 import { ErrorModal } from '../modals/ErrorModal.jsx';
@@ -457,8 +459,11 @@ export function GenesisDashboardPage({
   );
 
   return (
-    <div className="relative min-h-screen font-display text-slate-200">
+    <div className="relative isolate min-h-screen min-h-[100dvh] overflow-x-hidden font-display text-slate-200">
+      <HologramBackground />
       <LivingBackground />
+      <HologramEntity />
+      <div className="relative z-[2] min-h-screen min-h-[100dvh]">
       {needsTermsAcceptance ? <TermsAcceptanceModal /> : null}
       <CoreProvider
         mining={mining}
@@ -563,6 +568,7 @@ export function GenesisDashboardPage({
         explorerUrl={successMeta.explorerUrl}
       />
       <ErrorModal open={errorOpen} onClose={() => setErrorOpen(false)} message={errorMessage} />
+      </div>
     </div>
   );
 }

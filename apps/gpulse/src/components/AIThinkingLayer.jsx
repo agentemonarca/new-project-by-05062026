@@ -335,7 +335,10 @@ export default function AIThinkingLayer({ phase, isLight = false }) {
                 marginTop: -(p.size * 0.85) / 2,
                 background: p.hue === 'c' ? cyanDim : purpleDim,
                 opacity: p.op * (0.42 + 0.58 * p.depth) * 0.65,
-                animation: `atl-orbit-22 ${p.dur * 1.65}s linear infinite`,
+                animationName: 'atl-orbit-22',
+                animationDuration: `${p.dur * 1.65}s`,
+                animationTimingFunction: 'linear',
+                animationIterationCount: 'infinite',
                 animationDelay: `${p.delay}s`,
                 willChange: 'transform',
               }}
@@ -392,9 +395,16 @@ export default function AIThinkingLayer({ phase, isLight = false }) {
             }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            style={{
-              animation: isConverge || partitionedSignal ? 'none' : 'atl-matter 10s ease-in-out infinite',
-            }}
+            style={
+              isConverge || partitionedSignal
+                ? { animationName: 'none' }
+                : {
+                    animationName: 'atl-matter',
+                    animationDuration: '10s',
+                    animationTimingFunction: 'ease-in-out',
+                    animationIterationCount: 'infinite',
+                  }
+            }
           >
             {partitionedSignal && splitForSignal.memory.length > 0 && (
               <div className="absolute inset-0 z-[1] flex items-center justify-center overflow-visible">
@@ -453,8 +463,15 @@ export default function AIThinkingLayer({ phase, isLight = false }) {
                       (isConverge
                         ? Math.min(0.72, p.op * (0.55 + 0.45 * p.depth) * 2.4)
                         : p.op * (0.45 + 0.55 * p.depth)),
-                    animation: isConverge || isSignalMemory ? 'none' : `atl-orbit-32 ${p.dur}s linear infinite`,
-                    animationDelay: `${p.delay}s`,
+                    ...(isConverge || isSignalMemory
+                      ? { animationName: 'none' }
+                      : {
+                          animationName: 'atl-orbit-32',
+                          animationDuration: `${p.dur}s`,
+                          animationTimingFunction: 'linear',
+                          animationIterationCount: 'infinite',
+                          animationDelay: `${p.delay}s`,
+                        }),
                     transform: isConverge ? 'scale(1.15)' : undefined,
                     transition: 'opacity 0.45s ease, transform 0.75s cubic-bezier(0.22,1,0.36,1)',
                     willChange: 'transform',
@@ -466,7 +483,12 @@ export default function AIThinkingLayer({ phase, isLight = false }) {
             {!isConverge && !partitionedSignal && (
               <svg
                 className="absolute inset-0 z-[3] h-full w-full overflow-visible"
-                style={{ animation: 'atl-line-pulse-strong 4.5s ease-in-out infinite' }}
+                style={{
+                  animationName: 'atl-line-pulse-strong',
+                  animationDuration: '4.5s',
+                  animationTimingFunction: 'ease-in-out',
+                  animationIterationCount: 'infinite',
+                }}
               >
                 {lineIndices.map(([ia, ib], idx) => {
                   const sa = symActive[ia];

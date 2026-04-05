@@ -26,6 +26,18 @@ export default {
           '0%, 100%': { opacity: '0.45', transform: 'scale(1)' },
           '50%': { opacity: '0.75', transform: 'scale(1.02)' },
         },
+        hologramBreathe: {
+          '0%, 100%': { opacity: '0.5' },
+          '50%': { opacity: '0.65' },
+        },
+        hologramEntityPresence: {
+          '0%, 100%': { opacity: '0.43', transform: 'scale(1.21)' },
+          '50%': { opacity: '0.48', transform: 'scale(1.24)' },
+        },
+        hologramEntityCorePulse: {
+          '0%, 100%': { opacity: '0.62', filter: 'brightness(1)' },
+          '50%': { opacity: '0.8', filter: 'brightness(1.12)' },
+        },
         spinSlow: {
           from: { transform: 'rotate(12deg)' },
           to: { transform: 'rotate(372deg)' },
@@ -39,6 +51,9 @@ export default {
         gradientShift: 'gradientShift 6s ease infinite',
         floatBlob: 'floatBlob 14s ease-in-out infinite',
         breathe: 'breathe 4.5s ease-in-out infinite',
+        hologramBreathe: 'hologramBreathe 8s ease-in-out infinite',
+        hologramEntityPresence: 'hologramEntityPresence 10s ease-in-out infinite',
+        hologramEntityCorePulse: 'hologramEntityCorePulse 7s ease-in-out infinite',
         spinSlow: 'spinSlow 12s linear infinite',
         loaderPulse: 'loaderPulse 1.8s ease-in-out infinite',
       },

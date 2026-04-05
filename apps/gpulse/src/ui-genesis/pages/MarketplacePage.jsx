@@ -86,8 +86,11 @@ export default function MarketplacePage() {
 
   const confirmProtocolPurchase = useCallback(
     (product) => {
+      const internalAig = Number(core?.aigBalance ?? STANDALONE_CORE_SNAPSHOT.aigBalance);
+      const ledgerUsdt = Number(core?.claimUi?.ledgerNetUsdt);
+      const internalUsdt = Number.isFinite(ledgerUsdt) && ledgerUsdt > 0 ? ledgerUsdt : undefined;
       const purchaseId = `prot-${product.id}-${Date.now()}`;
-      const split = getPaymentSplit(product);
+      const split = getPaymentSplit(product, { internalAigBalance: internalAig, internalUsdtBalance: internalUsdt });
       executeMarketplaceGrowthPayout({
         purchaseId,
         productLabel: product.title,
@@ -97,6 +100,7 @@ export default function MarketplacePage() {
         core: ctx ?? undefined,
         txHash: `sim-${purchaseId}`,
         recordMarketplacePurchaseLedger: true,
+        aigPriceUsd: split.plan.aigPriceUsd,
       });
       applyHybridPurchaseSideEffects({
         purchaseId,
@@ -108,7 +112,7 @@ export default function MarketplacePage() {
       tickHybridFintechState();
       closeModal();
     },
-    [ctx, closeModal],
+    [core, closeModal],
   );
 
   const goHome = () => {
@@ -176,6 +180,13 @@ export default function MarketplacePage() {
                   >
                     <MapPin className="mr-2 inline h-4 w-4" strokeWidth={2} />
                     Near me (map)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.location.assign('/marketplace/merchant')}
+                    className="rounded-2xl border border-violet-400/35 bg-violet-500/10 px-6 py-3 text-sm font-bold uppercase tracking-wide text-violet-100 transition hover:border-violet-300/50 hover:bg-violet-500/15"
+                  >
+                    Sell on local map
                   </button>
                 </div>
                 <HeroMomentumBar value={heroMomentumPct} reduceMotion={reduceMotion} />

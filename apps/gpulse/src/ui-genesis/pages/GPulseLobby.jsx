@@ -25,7 +25,6 @@ export function GPulseLobby({ onBackToDashboard, onActivateMembership }) {
             style={{
               width: `${38 + i * 18}%`,
               height: `${38 + i * 18}%`,
-              animationDelay: ringDelays[i],
             }}
             initial={{ scale: 0.92, opacity: 0.35 }}
             animate={{
@@ -36,7 +35,7 @@ export function GPulseLobby({ onBackToDashboard, onActivateMembership }) {
               duration: 5.5 + i * 0.6,
               repeat: Infinity,
               ease: 'easeInOut',
-              delay: i * 0.35,
+              delay: parseFloat(ringDelays[i]) || 0,
             }}
           />
         ))}

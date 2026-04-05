@@ -74,8 +74,8 @@ export function HybridFintechPanel({ claimCreditsDemoWallet = false }) {
           Hybrid cashback · retention
         </div>
         <p className="mb-3 text-[11px] text-slate-500">
-          1.5% per rail → <span className="text-slate-400">processing</span> → claimable after settlement delay (demo
-          48h).
+          Checkout global: precio USD fijo, rail AIG / USDT / mixto (AIG máx. + resto USDT). Cashback 1.5% por rail →
+          processing → reclamo tras retención (demo 48h). Distribución interna en AIG.
         </p>
         <div className="space-y-2 font-mono text-xs">
           <div className="flex justify-between text-slate-400">

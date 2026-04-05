@@ -15,6 +15,8 @@ const MAX = 200;
  *   ts: number,
  *   binaryVolumePts: number,
  *   directBonusUsdt: number,
+ *   paymentModule?: string,
+ *   points?: number,
  * }} PaymentActivationDetail
  */
 
@@ -28,9 +30,11 @@ export const usePaymentLedgerStore = create(
       /** @type {import('../ledger/ledgerModel.js').LedgerEvent[]} */
       events: [],
 
-      /** @param {PaymentActivationDetail} d */
+      /** @param {PaymentActivationDetail & { aigPriceUsd?: number, requiresChainConfirmation?: boolean }} d */
       appendActivation(d) {
         const ts = d.ts ?? Date.now();
+        const mod = d.paymentModule != null ? String(d.paymentModule) : null;
+        const pts = d.points != null ? Number(d.points) : d.totalUsdtEquivalent;
         const base = {
           id: `pay-act-${ts}-${Math.random().toString(36).slice(2, 9)}`,
           ts,
@@ -51,7 +55,7 @@ export const usePaymentLedgerStore = create(
                 : d.product === 'staking'
                   ? 'Activación · Staking'
                   : 'Activación · GPulse Membership',
-          summary: `USDT ${d.usdt.toFixed(4)} · AIG ${d.aig.toFixed(4)} · Equiv. ${d.totalUsdtEquivalent.toFixed(2)} USDT`,
+          summary: `USDT ${d.usdt.toFixed(4)} · AIG ${d.aig.toFixed(4)} · ${d.totalUsdtEquivalent.toFixed(2)} USD · ${pts.toFixed(2)} pts · ${mod ?? 'module'}`,
           amountUsdt: d.totalUsdtEquivalent,
           amountAig: d.aig,
           txHash: d.txHash,
@@ -61,6 +65,10 @@ export const usePaymentLedgerStore = create(
             breakdown: { usdt: d.usdt, aig: d.aig },
             binaryVolumePts: d.binaryVolumePts,
             directBonusUsdt: d.directBonusUsdt,
+            paymentModule: d.paymentModule,
+            points: pts,
+            aigPriceUsd: d.aigPriceUsd,
+            requiresChainConfirmation: d.requiresChainConfirmation,
           },
         };
         const main = normalizeLedgerEvent(base);

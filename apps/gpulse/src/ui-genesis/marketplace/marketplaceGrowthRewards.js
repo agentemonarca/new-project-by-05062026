@@ -5,7 +5,7 @@
 
 import { useBinaryEngineStore } from '../binary/binaryEngineStore.js';
 import { usePaymentLedgerStore } from '../stores/paymentLedgerStore.js';
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { getAigPriceUsd, usdEquivalentFromDualLegs } from '../payment/dualTokenPayment.js';
 import { totalTransactionAigValue } from './hybridPaymentEngine.js';
 import {
   buildRevenueEligibilitySnapshotFromCore,
@@ -27,13 +27,12 @@ export const MARKETPLACE_BINARY_VOLUME_STAKING_SKU_RATE = 0.11;
  */
 
 /**
- * @param {number} usd
- * @param {number} aig
+ * @param {number} usd USDT leg
+ * @param {number} aig AIG leg
+ * @param {number} [aigPriceUsd] USD per 1 AIG (contract)
  */
-export function marketplacePurchaseUsdtEquivalent(usd, aig) {
-  const u = Math.max(0, Number(usd) || 0);
-  const a = Math.max(0, Number(aig) || 0);
-  return u + a * USDT_TO_AIG_DISPLAY;
+export function marketplacePurchaseUsdtEquivalent(usd, aig, aigPriceUsd = getAigPriceUsd()) {
+  return usdEquivalentFromDualLegs(usd, aig, aigPriceUsd);
 }
 
 /**
@@ -199,6 +198,7 @@ export function buildGrowthEngineMarketplacePurchaseLedgerRaw(p) {
  *   txHash?: string,
  *   ts?: number,
  *   recordMarketplacePurchaseLedger?: boolean,
+ *   aigPriceUsd?: number,
  * }} opts
  */
 export function executeMarketplaceGrowthPayout(opts) {
@@ -206,8 +206,9 @@ export function executeMarketplaceGrowthPayout(opts) {
   const txHash = opts.txHash ?? `sim-mkt-${opts.purchaseId}`;
   const snap = buildMarketplaceGrowthEligibilityFromCore(opts.core);
   const { eligible, reasons } = evaluateMarketplaceGrowthEligibility(snap);
-  const equiv = marketplacePurchaseUsdtEquivalent(opts.grossUsd, opts.grossAig);
-  const totalAig = totalTransactionAigValue(opts.grossUsd, opts.grossAig);
+  const px = opts.aigPriceUsd ?? getAigPriceUsd();
+  const equiv = marketplacePurchaseUsdtEquivalent(opts.grossUsd, opts.grossAig, px);
+  const totalAig = totalTransactionAigValue(opts.grossUsd, opts.grossAig, px);
   const rewards = computeMarketplaceGrowthRewards(equiv, totalAig, opts.isStakingVolumeRule, eligible);
 
   if (rewards.binaryVolumeUsdtEquivalent > 0) {

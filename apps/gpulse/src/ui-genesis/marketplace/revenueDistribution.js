@@ -1,3 +1,4 @@
+import { getAigPriceUsd, usdEquivalentFromDualLegs } from '../payment/dualTokenPayment.js';
 import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
 
 /**
@@ -94,12 +95,14 @@ export function evaluateRevenueShareEligibility(snap) {
 
 /**
  * Optional binary volume points from notional checkout (UI / demo).
+ * Uses AIG oracle USD price for the AIG leg.
  * @param {number} usd
  * @param {number} aig
+ * @param {number} [aigPriceUsd]
  * @returns {number}
  */
-export function defaultBinaryVolumePtsFromGross(usd, aig) {
-  const notion = usd + aig * USDT_TO_AIG_DISPLAY;
+export function defaultBinaryVolumePtsFromGross(usd, aig, aigPriceUsd = getAigPriceUsd()) {
+  const notion = usdEquivalentFromDualLegs(usd, aig, aigPriceUsd);
   return Math.round(Math.max(0, notion) * 0.012);
 }
 
@@ -127,6 +130,7 @@ function splitLeg(gross, mRefBps, bRefBps, platBps) {
  *   grossUsd: number,
  *   grossAig: number,
  *   grossBinaryPts?: number,
+ *   aigPriceUsd?: number,
  *   merchantReferrerSnapshot: RevenueEligibilitySnapshot,
  *   buyerReferrerSnapshot: RevenueEligibilitySnapshot,
  *   bps?: Partial<typeof DEFAULT_REVENUE_BPS>,
@@ -138,7 +142,9 @@ export function calculateMarketplaceRevenueDistribution(input) {
   const grossAig = Math.max(0, Number(input.grossAig) || 0);
   const grossBinaryPts = Math.max(
     0,
-    input.grossBinaryPts != null ? Number(input.grossBinaryPts) : defaultBinaryVolumePtsFromGross(grossUsd, grossAig),
+    input.grossBinaryPts != null
+      ? Number(input.grossBinaryPts)
+      : defaultBinaryVolumePtsFromGross(grossUsd, grossAig, input.aigPriceUsd),
   );
 
   const base = { ...DEFAULT_REVENUE_BPS, ...input.bps };

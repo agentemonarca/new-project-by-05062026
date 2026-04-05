@@ -1,49 +1,74 @@
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+/**
+ * Genesis activation SKUs: fixed USD + **payment module** (see PAYMENT_MODULE_RULES).
+ */
+
+import { getAigPriceUsd } from './dualTokenPayment.js';
+import { getPaymentSplit as engineGetPaymentSplit } from './paymentRuleEngine.js';
 
 /** @typedef {'booster' | 'mining' | 'gpulse' | 'staking'} PaymentFlowProductId */
 
-/** @type {Record<PaymentFlowProductId, { id: PaymentFlowProductId, label: string, shortLabel: string, usdtShare: number, aigShare: number }>} */
+/** @type {Record<PaymentFlowProductId, { id: PaymentFlowProductId, label: string, shortLabel: string, priceUSD: number, module: import('./paymentRuleEngine.js').PaymentModule }>} */
 export const PAYMENT_FLOW_PRODUCTS = {
   booster: {
     id: 'booster',
     label: 'AiG Booster',
     shortLabel: 'Booster',
-    usdtShare: 0.8,
-    aigShare: 0.2,
+    priceUSD: 299,
+    module: 'booster',
   },
   mining: {
     id: 'mining',
     label: 'Mining Core',
     shortLabel: 'Mining',
-    usdtShare: 0,
-    aigShare: 1,
+    priceUSD: 500,
+    module: 'mining',
   },
   gpulse: {
     id: 'gpulse',
     label: 'GPulse Membership',
     shortLabel: 'GPulse',
-    usdtShare: 0.5,
-    aigShare: 0.5,
+    priceUSD: 99,
+    module: 'gpulse',
   },
   staking: {
     id: 'staking',
     label: 'Staking',
     shortLabel: 'Staking',
-    usdtShare: 0.5,
-    aigShare: 0.5,
+    priceUSD: 250,
+    module: 'staking',
   },
 };
 
 /**
  * @param {PaymentFlowProductId} productId
- * @param {number} totalUsdtNotional — one input: economic size in USDT for all products
- * @returns {{ usdt: number, aig: number, totalUsdtEquivalent: number }}
+ * @param {number} [internalAigBalance]
+ * @param {number} [internalUsdtBalance]
+ * @param {number} [aigPriceUsd]
  */
-export function computeTokenBreakdown(productId, totalUsdtNotional) {
-  const p = PAYMENT_FLOW_PRODUCTS[productId];
-  const t = Math.max(0, Number(totalUsdtNotional) || 0);
-  const usdt = t * p.usdtShare;
-  const aigLeg = t * p.aigShare;
-  const aig = p.aigShare > 0 ? aigLeg / USDT_TO_AIG_DISPLAY : 0;
-  return { usdt, aig, totalUsdtEquivalent: t };
+export function computeActivationPaymentPlan(
+  productId,
+  internalAigBalance = 0,
+  internalUsdtBalance = 0,
+  aigPriceUsd,
+) {
+  const p = PAYMENT_FLOW_PRODUCTS[productId] ?? PAYMENT_FLOW_PRODUCTS.booster;
+  return engineGetPaymentSplit(p.module, p.priceUSD, aigPriceUsd ?? getAigPriceUsd(), {
+    internalAigBalance,
+    internalUsdtBalance,
+  });
 }
+
+/**
+ * @deprecated Use computeActivationPaymentPlan — signature kept for imports.
+ */
+export function computeTokenBreakdown(productId, _totalUsdtNotional, _rail, internalAigBalance = 0) {
+  const plan = computeActivationPaymentPlan(productId, internalAigBalance);
+  return {
+    usdt: plan.usdtAmount,
+    aig: plan.aigAmount,
+    totalUsdtEquivalent: plan.priceUSD,
+    points: plan.points,
+  };
+}
+
+export { getAigPriceUsd };
