@@ -26,6 +26,9 @@ const AdminCoreApp = lazy(() =>
 );
 const OnboardingRegisterPreviewPage = lazy(() => import('./ui-genesis/pages/OnboardingRegisterPreviewPage.jsx'));
 const OnboardingInvitePage = lazy(() => import('./ui-genesis/onboarding/OnboardingInvitePage.jsx'));
+const GenesisDashboardPage = lazy(() =>
+  import('./ui-genesis/pages/GenesisDashboardPage.jsx').then((m) => ({ default: m.GenesisDashboardPage })),
+);
 
 /** Health check route (see `AppRoutes`). */
 function PingRoute() {
@@ -192,6 +195,28 @@ function OnboardingInviteShell() {
   );
 }
 
+function GenesisDashboardShell() {
+  return (
+    <GenesisErrorBoundary>
+      <WalletProvider>
+        <Suspense
+          fallback={
+            <div
+              className="flex min-h-screen flex-col items-center justify-center gap-3 font-display text-cyan-200/90"
+              style={{ backgroundColor: '#0b0f1a' }}
+            >
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
+              <p className="text-sm tracking-wide">AiGenesis · Dashboard…</p>
+            </div>
+          }
+        >
+          <GenesisDashboardPage />
+        </Suspense>
+      </WalletProvider>
+    </GenesisErrorBoundary>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -204,6 +229,7 @@ function AppRoutes() {
       <Route path="/admin-core/*" element={<AdminCoreShell />} />
       <Route path="/register" element={<RegisterPreviewShell />} />
       <Route path="/onboarding" element={<OnboardingInviteShell />} />
+      <Route path="/dashboard" element={<GenesisDashboardShell />} />
       <Route path="*" element={<MainShell />} />
     </Routes>
   );

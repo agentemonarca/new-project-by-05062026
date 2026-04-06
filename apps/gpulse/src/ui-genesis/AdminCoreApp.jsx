@@ -5,15 +5,15 @@ import { useGenesisDashboardStore } from './stores/genesisDashboardStore.js';
 import { getDevMockBearer } from './api/genesisConfig.js';
 import { useBinaryEngineStore } from './binary/binaryEngineStore.js';
 import { navToPath } from './navigation/genesisPaths.js';
-import { AdminCoreLayout } from './layout/AdminCoreLayout.jsx';
-import { AdminCorePanelPage } from './pages/AdminCorePanelPage.jsx';
+import { AdminProvider } from '../modules/admin/context/AdminContext.jsx';
+import { AdminLayout } from '../modules/admin/AdminLayout.jsx';
+import { AdminPanelRouter } from '../modules/admin/AdminPanelRouter.jsx';
 
 /** User-app entry path when leaving the isolated admin shell. */
 export const ADMIN_APP_RETURN_PATH = '/genesis-lobby';
 
 /**
- * Root-level admin interface: no GenesisDashboardLayout, user nav, or lobby.
- * Ledger + binary sync mirror the user app only where needed for admin metrics.
+ * Root-level admin interface: Command Center con contexto operativo mock + layout premium.
  */
 export function AdminCoreApp() {
   const navigate = useNavigate();
@@ -46,18 +46,13 @@ export function AdminCoreApp() {
     navigate(ADMIN_APP_RETURN_PATH);
   }, [navigate]);
 
-  const onNavigateUserApp = useCallback(
-    (navId) => {
-      navigate(navToPath(navId));
-    },
-    [navigate],
-  );
-
   return (
     <LedgerProvider hasSession={hasSession}>
-      <AdminCoreLayout onBackToApp={onBackToApp}>
-        <AdminCorePanelPage onNavigate={onNavigateUserApp} />
-      </AdminCoreLayout>
+      <AdminProvider>
+        <AdminLayout onBackToApp={onBackToApp}>
+          <AdminPanelRouter onNavigate={(navId) => navigate(navToPath(navId))} />
+        </AdminLayout>
+      </AdminProvider>
     </LedgerProvider>
   );
 }

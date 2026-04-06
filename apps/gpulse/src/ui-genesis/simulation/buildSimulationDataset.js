@@ -1,5 +1,6 @@
 import { normalizeLedgerEvents } from '../ledger/normalize.js';
 import { getAigPrice } from '../../utils/pricing.js';
+import { ROLE_PRESETS } from '../lib/userPermissions.js';
 
 /** Base spec — binary volumes (points). */
 const BINARY_LEFT = 10000;
@@ -50,6 +51,9 @@ export function buildFullSimulationDataset(amplitude = 0.035) {
     ledgerNetUsdt: ledgerNet,
     sourceOfTruth: 'simulation',
     byCategory: {},
+    /** Permisos demo en modo simulación (viewer: sin P2P ni acciones). */
+    role: 'viewer',
+    permissions: { ...ROLE_PRESETS.viewer },
   };
 
   const network = {

@@ -5,17 +5,18 @@ import { useAigPrice } from '../hooks/useAigPrice.js';
 import { useP2PValidation } from '../hooks/useP2PValidation.js';
 
 /**
- * @typedef {import('../store/p2pOrdersStore.js').P2PSide} P2PSide
+ * @typedef {import('../p2pTypes.js').P2PSide} P2PSide
  */
 
 /**
  * @param {{
  *   side: P2PSide,
- *   onSubmit: (payload: { side: P2PSide, priceUsd: number, amountAig: number }) => void,
+ *   onSubmit: (payload: { side: P2PSide, priceUsd: number, amountAig: number }) => void | Promise<void>,
  *   disabled?: boolean,
+ *   submitting?: boolean,
  * }} props
  */
-function P2POrderFormInner({ side, onSubmit, disabled = false }) {
+function P2POrderFormInner({ side, onSubmit, disabled = false, submitting = false }) {
   const { base, min, max, suggested } = useAigPrice();
   const { validatePrice, validateAmount, validateUser, validateLimits } = useP2PValidation();
 
@@ -52,17 +53,19 @@ function P2POrderFormInner({ side, onSubmit, disabled = false }) {
   }, [base]);
 
   const handleSubmit = useCallback(
-    (e) => {
+    async (e) => {
       e.preventDefault();
+      if (submitting) return;
       setTouched(true);
       const p = Number(price);
       const a = Number(amount);
       const checks = [validateUser(side), validatePrice(p), validateAmount(a), validateLimits(side, a)];
       if (checks.some((c) => !c.ok)) return;
-      onSubmit({ side, priceUsd: p, amountAig: a });
+      const result = await Promise.resolve(onSubmit({ side, priceUsd: p, amountAig: a }));
+      if (result && typeof result === 'object' && 'ok' in result && result.ok === false) return;
       setAmount('');
     },
-    [amount, onSubmit, price, side, validateAmount, validateLimits, validatePrice, validateUser],
+    [amount, onSubmit, price, side, submitting, validateAmount, validateLimits, validatePrice, validateUser],
   );
 
   const blockMsg = userErr || limitsErr;
@@ -135,10 +138,10 @@ function P2POrderFormInner({ side, onSubmit, disabled = false }) {
         {blockMsg ? <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/95">{blockMsg}</p> : null}
         <GradientButton
           type="submit"
-          disabled={disabled || Boolean(userErr)}
+          disabled={disabled || Boolean(userErr) || submitting}
           className="!w-full !justify-center !py-2.5 !text-sm !font-semibold disabled:opacity-40"
         >
-          Publicar orden {side === 'buy' ? 'de compra' : 'de venta'}
+          {submitting ? 'Publicando…' : `Publicar orden ${side === 'buy' ? 'de compra' : 'de venta'}`}
         </GradientButton>
       </form>
     </GlassCard>

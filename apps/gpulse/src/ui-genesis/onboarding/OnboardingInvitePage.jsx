@@ -1,18 +1,20 @@
-import React, { useEffect, useMemo } from 'react';
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import OnboardingPremium from './OnboardingPremium.jsx';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  formatInviteDisplayName,
-  getStoredInviteRef,
-  setStoredInviteRef,
-} from './inviteRefStorage.js';
+  AccessDenied,
+  OnboardingElite,
+  formatAigRefDisplay,
+  getAigRef,
+  setAigRef,
+} from '../../modules/onboarding/index.js';
 
 /**
- * `/onboarding` — requires a referral handle (URL `ref` or persisted invite).
+ * `/onboarding` — referral required via `?ref=` → persisted as `localStorage.aig_ref`.
  */
 export default function OnboardingInvitePage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [hydrated, setHydrated] = useState(false);
 
   const refFromUrl = useMemo(() => {
     const q = searchParams.get('ref');
@@ -20,22 +22,37 @@ export default function OnboardingInvitePage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (refFromUrl) setStoredInviteRef(refFromUrl);
+    if (refFromUrl) {
+      setAigRef(refFromUrl);
+    }
+    setHydrated(true);
   }, [refFromUrl]);
 
-  const rawRef = refFromUrl || getStoredInviteRef();
-
-  if (!rawRef) {
-    return <Navigate to="/register" replace />;
+  if (!hydrated) {
+    return (
+      <div
+        className="flex min-h-[100dvh] items-center justify-center font-display"
+        style={{ backgroundColor: '#0b0f1a' }}
+        aria-busy="true"
+        aria-label="Cargando"
+      >
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-cyan-400/25 border-t-[#00f0ff]" />
+      </div>
+    );
   }
 
-  const refUser = formatInviteDisplayName(rawRef);
+  const savedRef = getAigRef();
+  if (!savedRef) {
+    return <AccessDenied />;
+  }
+
+  const refUser = formatAigRefDisplay(savedRef) || 'un miembro de la red';
 
   return (
-    <OnboardingPremium
-      refUser={refUser || 'Un miembro'}
-      onContinue={() => {
-        navigate(`/register?ref=${encodeURIComponent(rawRef)}`, { replace: false });
+    <OnboardingElite
+      refUser={refUser}
+      onEnter={() => {
+        navigate('/register');
       }}
     />
   );

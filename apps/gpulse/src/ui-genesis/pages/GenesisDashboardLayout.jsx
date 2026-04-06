@@ -32,6 +32,7 @@ import { UiModeToggle } from '../components/UiModeToggle.jsx';
 import { SimulationModeToggle } from '../components/SimulationModeToggle.jsx';
 import { useWallet } from '../../context/WalletContext.jsx';
 import { useGenesisDashboardStore } from '../stores/genesisDashboardStore.js';
+import { DEFAULT_PERMISSIONS } from '../lib/userPermissions.js';
 
 /**
  * Dashboard shell layout — module-scoped so React does not remount the tree on every parent render.
@@ -84,6 +85,8 @@ export function GenesisDashboardLayout({
   walletLoaded,
   stakingEconomy,
   centralRewardBalanceAig = 0,
+  /** Permisos granular (sesión); sin sesión se asume acceso completo en navegación. */
+  uiPermissions = DEFAULT_PERMISSIONS,
 }) {
   const ctx = useCore();
   const navigate = useNavigate();
@@ -133,6 +136,8 @@ export function GenesisDashboardLayout({
         <DashboardSidebar
           compact={isSidebarCollapsed}
           activeId={nav}
+          hasSession={hasSession}
+          permissions={uiPermissions}
           onSelect={(id) => {
             if (id === 'marketplace') {
               navigate('/marketplace');
@@ -292,12 +297,15 @@ export function GenesisDashboardLayout({
                   referralActive={referralActive}
                   userEconomicallyActive={userEconomicallyActive}
                   onGoToWallet={onGoToWallet}
+                  canViewEarnings={Boolean(uiPermissions?.canViewEarnings)}
                 />
               ) : null}
 
               {nav === 'mining' ? (
                 <MiningCoreSystem
-                  hideNonWalletFinancialActions
+                  hideNonWalletFinancialActions={
+                    Boolean(hasSession && uiPermissions && !uiPermissions.canExecuteActions)
+                  }
                   onGoToWallet={onGoToWallet}
                   onActivatePurchase={openPaymentFlow ? () => openPaymentFlow('mining') : undefined}
                   onOpenMiningWarning={onOpenMiningWarning}
@@ -307,7 +315,9 @@ export function GenesisDashboardLayout({
               {nav === 'booster' ? (
                 <BoosterPage
                   onInject={openPaymentFlow ? () => openPaymentFlow('booster') : openPurchase}
-                  hideNonWalletFinancialActions
+                  hideNonWalletFinancialActions={
+                    Boolean(hasSession && uiPermissions && !uiPermissions.canExecuteActions)
+                  }
                   onGoToWallet={onGoToWallet}
                 />
               ) : null}
@@ -316,7 +326,9 @@ export function GenesisDashboardLayout({
                 <StakingPage
                   onStake={openPaymentFlow ? () => openPaymentFlow('staking') : openPurchase}
                   onWithdraw={onGoToWallet}
-                  hideNonWalletFinancialActions
+                  hideNonWalletFinancialActions={
+                    Boolean(hasSession && uiPermissions && !uiPermissions.canExecuteActions)
+                  }
                   onGoToWallet={onGoToWallet}
                   economy={stakingEconomy}
                 />
@@ -337,7 +349,8 @@ export function GenesisDashboardLayout({
                     !hasSession ||
                     !userEconomicallyActive ||
                     ledgerNet < minProtocolHoldingUsdt ||
-                    accountFrozen
+                    accountFrozen ||
+                    Boolean(uiPermissions && !uiPermissions.canExecuteActions)
                   }
                   accountFrozen={accountFrozen}
                   userEconomicallyActive={userEconomicallyActive}
@@ -349,9 +362,17 @@ export function GenesisDashboardLayout({
 
               {nav === 'history' ? <LedgerPage /> : null}
 
-              {nav === 'network' ? <CommunityPage /> : null}
+              {nav === 'network' ? (
+                <CommunityPage canViewFullNetwork={uiPermissions?.canViewFullNetwork !== false} />
+              ) : null}
 
-              {nav === 'profile' ? <GenesisProfilePage walletAddress={walletAddress} hasSession={hasSession} /> : null}
+              {nav === 'profile' ? (
+                <GenesisProfilePage
+                  walletAddress={walletAddress}
+                  hasSession={hasSession}
+                  canEditProfile={Boolean(uiPermissions?.canEditProfile)}
+                />
+              ) : null}
 
               {nav === 'support' ? <GenesisSupportPage hasSession={hasSession} /> : null}
 

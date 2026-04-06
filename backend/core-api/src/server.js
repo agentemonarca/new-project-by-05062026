@@ -279,11 +279,18 @@ async function main() {
     const { compensationHttpRoutes } = await import('./routes/compensationHttpRoutes.js');
     app.use('/api', compensationHttpRoutes({ authService }));
   } else {
-    const { localGenesisMockRoutes } = await import('./routes/localGenesisMockRoutes.js');
-    app.use('/api', localGenesisMockRoutes());
-    logger.info('local_genesis_mock_api', {
-      reason: compensationOn ? 'compensation_kernel_unavailable' : 'compensation_disabled',
-    });
+    const useEmptyMock = String(process.env.GENESIS_USE_EMPTY_MOCK || '').trim() === '1';
+    if (useEmptyMock) {
+      const { localGenesisMockRoutes } = await import('./routes/localGenesisMockRoutes.js');
+      app.use('/api', localGenesisMockRoutes());
+      logger.info('local_genesis_mock_api', { reason: 'GENESIS_USE_EMPTY_MOCK' });
+    } else {
+      const { createGenesisPlatformRouter } = await import('./genesis-platform/http/genesisPlatformRoutes.js');
+      app.use('/api', createGenesisPlatformRouter({ authService, logger }));
+      logger.info('genesis_platform_api', {
+        reason: compensationOn ? 'compensation_kernel_unavailable' : 'compensation_disabled',
+      });
+    }
   }
 
   const PORT = Number(process.env.PORT || 5050);

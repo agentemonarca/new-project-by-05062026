@@ -110,3 +110,60 @@ export async function postClaim(token, type, extra = {}) {
     body: JSON.stringify({ type, ...extra }),
   });
 }
+
+/** @param {Record<string, string | number | boolean | undefined>} [query] */
+export async function fetchP2POrderbook(token, query = {}) {
+  const q = new URLSearchParams();
+  if (query.projectId != null) q.set('projectId', String(query.projectId));
+  if (query.side != null) q.set('side', String(query.side));
+  const suffix = q.toString() ? `?${q}` : '';
+  return requestJson('GET', `/api/p2p/orderbook${suffix}`, { token });
+}
+
+export async function fetchP2PMyOrders(token, projectId = 'genesis') {
+  const q = new URLSearchParams({ mine: '1', projectId });
+  return requestJson('GET', `/api/p2p/orders?${q}`, { token });
+}
+
+/**
+ * @param {{ projectId?: string, side: 'buy'|'sell', amount: number, price: number, meta?: object }} body
+ */
+export async function createP2POrder(token, body) {
+  return requestJson('POST', '/api/p2p/orders', { token, body: JSON.stringify(body) });
+}
+
+export async function cancelP2POrder(token, orderId) {
+  return requestJson('POST', `/api/p2p/orders/${encodeURIComponent(orderId)}/cancel`, { token });
+}
+
+/** @param {{ qty?: number }} [body] */
+export async function takeP2POrder(token, orderId, body = {}) {
+  return requestJson('POST', `/api/p2p/orders/${encodeURIComponent(orderId)}/take`, {
+    token,
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * @param {'usd'|'usdt'|'aig'} currency
+ */
+export async function postWalletTransfer(token, { toAddress, currency, amount }) {
+  return requestJson('POST', '/api/wallet/transfer', {
+    token,
+    body: JSON.stringify({ toAddress, currency, amount }),
+  });
+}
+
+/**
+ * @param {'usd'|'usdt'|'aig'} currency
+ */
+export async function postWalletWithdraw(token, { currency, amount, destination }) {
+  return requestJson('POST', '/api/wallet/withdraw', {
+    token,
+    body: JSON.stringify({ currency, amount, destination }),
+  });
+}
+
+export async function fetchLedger(token, limit = 200) {
+  return requestJson('GET', `/api/ledger?limit=${limit}`, { token });
+}

@@ -73,7 +73,7 @@ function P2PSettingsInner() {
         <div>
           <h2 className="font-display text-lg font-bold text-white md:text-xl">P2P · reglas del libro</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Single source of truth en store persistido. El marketplace P2P reacciona en vivo.
+            Ajustes de validación UI y reglas mostradas al usuario. Órdenes y límites operativos viven en core-api.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -225,11 +225,11 @@ function P2PSettingsInner() {
           Exigir minería activa para publicar ventas (`requireMiningToSell`)
         </label>
         <p className="mt-2 text-xs text-slate-500">
-          Perfil obligatorio para operar: `requireProfile` permanece activo en validación (mock checkboxes en P2P).
+          La verificación de perfil y permisos (p. ej. minería para vender) se aplica vía sesión Genesis y backend.
         </p>
         <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
           <Save className="h-3.5 w-3.5" />
-          Los cambios se guardan automáticamente en localStorage (`aigenesis-p2p-config-v1`).
+          Los valores de esta pantalla se mantienen en memoria en la sesión del navegador (sin localStorage).
         </div>
       </GlassCard>
     </motion.section>

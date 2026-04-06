@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import { deepMerge } from '../utils/deepMerge.js';
 
@@ -37,33 +36,25 @@ function cloneDefaultConfig() {
 }
 
 /**
- * Central P2P configuration (persisted). Prefer narrow selectors to avoid re-renders.
+ * Configuración P2P solo en memoria (sin localStorage). La verdad operativa está en el backend.
  */
-export const useP2PConfigStore = create(
-  persist(
-    (set, get) => ({
-      /** @type {P2PConfig} */
-      config: cloneDefaultConfig(),
+export const useP2PConfigStore = create((set, get) => ({
+  /** @type {P2PConfig} */
+  config: cloneDefaultConfig(),
 
-      /** @returns {P2PConfig} */
-      getConfig: () => get().config,
+  /** @returns {P2PConfig} */
+  getConfig: () => get().config,
 
-      /** @param {Partial<P2PConfig> | Record<string, unknown>} partial */
-      updateConfig: (partial) =>
-        set((state) => ({
-          config: /** @type {P2PConfig} */ (
-            deepMerge(/** @type {Record<string, unknown>} */ (state.config), /** @type {Record<string, unknown>} */ (partial))
-          ),
-        })),
+  /** @param {Partial<P2PConfig> | Record<string, unknown>} partial */
+  updateConfig: (partial) =>
+    set((state) => ({
+      config: /** @type {P2PConfig} */ (
+        deepMerge(/** @type {Record<string, unknown>} */ (state.config), /** @type {Record<string, unknown>} */ (partial))
+      ),
+    })),
 
-      resetConfig: () => set({ config: cloneDefaultConfig() }),
-    }),
-    {
-      name: 'aigenesis-p2p-config-v1',
-      partialize: (s) => ({ config: s.config }),
-    },
-  ),
-);
+  resetConfig: () => set({ config: cloneDefaultConfig() }),
+}));
 
 /**
  * @template T

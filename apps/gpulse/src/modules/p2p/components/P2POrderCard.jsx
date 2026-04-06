@@ -1,25 +1,43 @@
 import React, { memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRightLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowRightLeft, CheckCircle2, XCircle } from 'lucide-react';
 import { GradientButton } from '@/ui-genesis/components/GradientButton.jsx';
 
 /**
- * @typedef {import('../store/p2pOrdersStore.js').P2POrderRow} P2POrderRow
- * @typedef {import('../store/p2pOrdersStore.js').P2PSide} P2PSide
+ * @typedef {import('../p2pTypes.js').P2POrderRow} P2POrderRow
  */
 
 /**
  * @param {{
  *   order: P2POrderRow,
- *   onExecute?: (id: string) => void,
+ *   onExecute?: (id: string) => void | Promise<void>,
  *   executeLabel?: string,
  *   showExecute?: boolean,
+ *   isExecuting?: boolean,
+ *   onCancel?: (id: string) => void | Promise<void>,
+ *   showCancel?: boolean,
+ *   isCancelling?: boolean,
  * }} props
  */
-function P2POrderCardInner({ order, onExecute, executeLabel = 'Tomar orden', showExecute = true }) {
-  const onClick = useCallback(() => {
-    if (onExecute) onExecute(order.id);
-  }, [onExecute, order.id]);
+function P2POrderCardInner({
+  order,
+  onExecute,
+  executeLabel = 'Tomar orden',
+  showExecute = true,
+  isExecuting = false,
+  onCancel,
+  showCancel = false,
+  isCancelling = false,
+}) {
+  const onClickExec = useCallback(() => {
+    if (isExecuting) return;
+    if (onExecute) void Promise.resolve(onExecute(order.id));
+  }, [isExecuting, onExecute, order.id]);
+
+  const onClickCancel = useCallback(() => {
+    if (isCancelling) return;
+    if (onCancel) void Promise.resolve(onCancel(order.id));
+  }, [isCancelling, onCancel, order.id]);
 
   const sideLabel = order.side === 'buy' ? 'Compra' : 'Venta';
   const sideClass =
@@ -34,13 +52,18 @@ function P2POrderCardInner({ order, onExecute, executeLabel = 'Tomar orden', sho
       initial={false}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sideClass}`}>
             {sideLabel}
           </span>
           {order.owned ? (
             <span className="rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
               Tú
+            </span>
+          ) : null}
+          {order.status === 'partial' ? (
+            <span className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+              Parcial
             </span>
           ) : null}
         </div>
@@ -65,12 +88,26 @@ function P2POrderCardInner({ order, onExecute, executeLabel = 'Tomar orden', sho
         <div className="mt-4">
           <GradientButton
             type="button"
-            className="!w-full !justify-center !py-2 !text-xs !font-semibold"
-            onClick={onClick}
+            disabled={isExecuting}
+            className="!w-full !justify-center !py-2 !text-xs !font-semibold disabled:opacity-45"
+            onClick={onClickExec}
           >
             <CheckCircle2 className="mr-2 h-4 w-4" strokeWidth={2} />
-            {executeLabel}
+            {isExecuting ? 'Procesando…' : executeLabel}
           </GradientButton>
+        </div>
+      ) : null}
+      {showCancel && onCancel && order.owned ? (
+        <div className="mt-3">
+          <button
+            type="button"
+            disabled={isCancelling}
+            onClick={onClickCancel}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-rose-500/35 bg-rose-500/10 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/15 disabled:opacity-45"
+          >
+            <XCircle className="h-4 w-4" strokeWidth={2} />
+            {isCancelling ? 'Cancelando…' : 'Cancelar mi orden'}
+          </button>
         </div>
       ) : null}
     </motion.article>
@@ -86,7 +123,11 @@ function orderCardPropsEqual(prev, next) {
     prev.order.side === next.order.side &&
     prev.showExecute === next.showExecute &&
     prev.executeLabel === next.executeLabel &&
-    prev.onExecute === next.onExecute
+    prev.onExecute === next.onExecute &&
+    prev.isExecuting === next.isExecuting &&
+    prev.showCancel === next.showCancel &&
+    prev.onCancel === next.onCancel &&
+    prev.isCancelling === next.isCancelling
   );
 }
 

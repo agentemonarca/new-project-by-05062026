@@ -1,0 +1,37 @@
+# Stack local/VPC: Prometheus + Grafana (sin el API; el API corre en ECS/EC2).
+#
+# docker compose -f docker-compose.observability.yml up -d
+#
+# Crear deploy/aws/prometheus/secrets/genesis_bearer_token (una línea, sin salto final si falla el scrape).
+# Mapear en prometheus service:
+#   volumes:
+#     - ./prometheus/secrets:/etc/prometheus/secrets:ro
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/secrets:/etc/prometheus/secrets:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=change_me
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana_data: {}

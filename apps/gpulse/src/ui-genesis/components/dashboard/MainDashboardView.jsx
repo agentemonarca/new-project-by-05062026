@@ -53,6 +53,7 @@ const HOVER_LIFT_Y2 = { y: -2 };
  *   referralActive: boolean,
  *   userEconomicallyActive: boolean,
  *   onGoToWallet: () => void,
+ *   canViewEarnings?: boolean,
  * }} props
  */
 export const MainDashboardView = memo(function MainDashboardView({
@@ -66,6 +67,7 @@ export const MainDashboardView = memo(function MainDashboardView({
   referralActive,
   userEconomicallyActive,
   onGoToWallet,
+  canViewEarnings = true,
 }) {
   const reduceMotion = useReducedMotion();
   const uiMode = useUiModeStore((s) => s.uiMode);
@@ -213,7 +215,17 @@ export const MainDashboardView = memo(function MainDashboardView({
         ) : null}
       </motion.section>
 
+      {!canViewEarnings && hasSession ? (
+        <motion.section
+          variants={fadeUpBlur}
+          className="rounded-xl border border-slate-500/25 bg-slate-900/40 px-4 py-3 text-center text-xs text-slate-400"
+        >
+          Vista de rendimiento restringida para tu rol. Sigues viendo el resumen de balance arriba.
+        </motion.section>
+      ) : null}
+
       {/* 3. Siguiente paso (+ asesor IA en Pro) */}
+      {canViewEarnings ? (
       <motion.section
         variants={fadeUpBlur}
         className="relative z-20 flex min-w-0 flex-col gap-6 overflow-x-hidden lg:flex-row lg:items-start lg:gap-8"
@@ -234,9 +246,10 @@ export const MainDashboardView = memo(function MainDashboardView({
           />
         ) : null}
       </motion.section>
+      ) : null}
 
       {/* 4. Estado minería — Pro */}
-      {!isLite ? (
+      {canViewEarnings && !isLite ? (
       <motion.section variants={fadeUpBlur} className="rounded-2xl border border-white/10 bg-slate-950/50 p-5 md:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-display text-base font-semibold text-white">Estado de minería</h3>
@@ -270,6 +283,7 @@ export const MainDashboardView = memo(function MainDashboardView({
       ) : null}
 
       {/* 5. Quick actions — financial ops solo en Wallet */}
+      {canViewEarnings ? (
       <motion.section variants={fadeUpBlur}>
         <h3 className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Acciones rápidas</h3>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -296,6 +310,7 @@ export const MainDashboardView = memo(function MainDashboardView({
           </motion.button>
         </div>
       </motion.section>
+      ) : null}
 
       {/* Vista previa actividad — Lite (después de acciones rápidas) */}
       {isLite ? (

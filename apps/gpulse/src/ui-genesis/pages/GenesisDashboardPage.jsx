@@ -14,6 +14,7 @@ import { PurchaseModal } from '../modals/PurchaseModal.jsx';
 import { ProcessingModal } from '../modals/ProcessingModal.jsx';
 import { fadeUpBlur } from '../motion/variants.js';
 import { pathToNav, navToPath, normalizeGenesisNav } from '../navigation/genesisPaths.js';
+import { normalizeUserAccess, DEFAULT_PERMISSIONS } from '../lib/userPermissions.js';
 import { GenesisDashboardLayout } from './GenesisDashboardLayout.jsx';
 import { useGenesisDashboardStore } from '../stores/genesisDashboardStore.js';
 import { useGenesisRealtime } from '../hooks/useGenesisRealtime.js';
@@ -108,6 +109,7 @@ export function GenesisDashboardPage({
   const claim = useGenesisDashboardStore((s) => s.claim);
   const deposit = useGenesisDashboardStore((s) => s.deposit);
   const simulateDepositFn = useGenesisDashboardStore((s) => s.simulateDeposit);
+  const storeUserAccess = useGenesisDashboardStore((s) => s.userAccess);
 
   const [successOpen, setSuccessOpen] = useState(false);
   const [successMeta, setSuccessMeta] = useState({ message: '', txHash: null, explorerUrl: null });
@@ -135,6 +137,20 @@ export function GenesisDashboardPage({
   const effectiveHasSession = hasSession || isSimulationMode;
   const effectiveWallet = simulationDataset?.wallet ?? wallet;
   const effectiveNetwork = simulationDataset?.network ?? network;
+
+  const simUserAccess = useMemo(
+    () =>
+      simulationDataset?.wallet && typeof simulationDataset.wallet === 'object'
+        ? normalizeUserAccess(simulationDataset.wallet)
+        : null,
+    [simulationDataset],
+  );
+  const userAccess = isSimulationMode && simUserAccess ? simUserAccess : storeUserAccess;
+  const permissions = userAccess?.permissions ?? DEFAULT_PERMISSIONS;
+  const uiPermissions = useMemo(
+    () => (effectiveHasSession ? permissions : DEFAULT_PERMISSIONS),
+    [effectiveHasSession, permissions],
+  );
 
   const acceptedTerms = useTermsAcceptanceStore((s) => s.acceptedTerms);
   const needsTermsAcceptance = Boolean(hasSession && !acceptedTerms && !isSimulationMode);
@@ -188,6 +204,19 @@ export function GenesisDashboardPage({
     loadDashboardData().catch(() => {});
     return undefined;
   }, [hasSession, authToken, mockBearer, sessionAuth, loadDashboardData]);
+
+  useEffect(() => {
+    if (!effectiveHasSession) return;
+    const p = uiPermissions;
+    const blocked =
+      (nav === 'network' && !p.canViewNetwork) ||
+      (nav === 'p2p' && !p.canAccessP2P) ||
+      (['mining', 'booster', 'staking'].includes(nav) && !p.canViewEarnings);
+    if (blocked) {
+      setNav('dashboard');
+      navigate(navToPath('dashboard'));
+    }
+  }, [nav, uiPermissions, effectiveHasSession, navigate]);
 
   const directClaim = Number(effectiveWallet?.directClaimableUsdt ?? 0);
   const ledgerNet = Number(effectiveWallet?.ledgerNetUsdt ?? 0);
@@ -244,13 +273,26 @@ export function GenesisDashboardPage({
   );
 
   const openPurchase = useCallback(() => {
+    if (effectiveHasSession && !permissions.canExecuteActions) {
+      setToastMessage('Tu cuenta no tiene permiso para ejecutar esta acción.');
+      setToastOpen(true);
+      return;
+    }
     if (onOpenPurchaseProp) onOpenPurchaseProp();
     else setPurchaseOpen(true);
-  }, [onOpenPurchaseProp]);
+  }, [onOpenPurchaseProp, effectiveHasSession, permissions.canExecuteActions]);
 
-  const openPaymentFlow = useCallback((/** @type {'booster'|'mining'|'gpulse'|'staking'} */ product) => {
-    setPaymentFlowProduct(product);
-  }, []);
+  const openPaymentFlow = useCallback(
+    (/** @type {'booster'|'mining'|'gpulse'|'staking'} */ product) => {
+      if (effectiveHasSession && !permissions.canExecuteActions) {
+        setToastMessage('Tu cuenta no tiene permiso para compras o activaciones.');
+        setToastOpen(true);
+        return;
+      }
+      setPaymentFlowProduct(product);
+    },
+    [effectiveHasSession, permissions.canExecuteActions],
+  );
 
   const closePaymentFlow = useCallback(() => setPaymentFlowProduct(null), []);
 
@@ -375,6 +417,11 @@ export function GenesisDashboardPage({
   });
 
   const claimAllFromDashboard = useCallback(async () => {
+    if (effectiveHasSession && !permissions.canExecuteActions) {
+      setToastMessage('No tienes permiso para ejecutar claims u operaciones financieras.');
+      setToastOpen(true);
+      return;
+    }
     if (isSimulationMode) {
       setToastMessage('Simulación: claim desactivado (sin API real).');
       setToastOpen(true);
@@ -542,6 +589,7 @@ export function GenesisDashboardPage({
               walletLoaded={Boolean(wallet || isSimulationMode)}
               stakingEconomy={stakingEconomy}
               centralRewardBalanceAig={centralRewardBalanceAig}
+              uiPermissions={uiPermissions}
             />
           ) : null}
         </LedgerProvider>

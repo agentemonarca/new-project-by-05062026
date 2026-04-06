@@ -18,6 +18,15 @@ import {
 import { BRAND } from '@/branding/brand.js';
 import { BrandLogo, BrandLockupText } from '@/branding/BrandLogo.jsx';
 import { SidebarItem } from '../components/SidebarItem.jsx';
+import { DEFAULT_PERMISSIONS } from '../lib/userPermissions.js';
+
+/** @param {string} id @param {Record<string, boolean>} p */
+function isNavItemAllowed(id, p) {
+  if (id === 'network') return p.canViewNetwork;
+  if (id === 'p2p') return p.canAccessP2P;
+  if (id === 'mining' || id === 'booster' || id === 'staking') return p.canViewEarnings;
+  return true;
+}
 
 /**
  * AiGenesis navigation — core flow → ecosystem → user (product spec).
@@ -60,9 +69,20 @@ function NavSeparator({ compact }) {
  *   onSelect?: (id: string) => void,
  *   className?: string,
  *   compact?: boolean,
+ *   hasSession?: boolean,
+ *   permissions?: Record<string, boolean> | null,
  * }} props
  */
-export function DashboardSidebar({ activeId, onSelect, className = '', compact = false }) {
+export function DashboardSidebar({
+  activeId,
+  onSelect,
+  className = '',
+  compact = false,
+  hasSession = false,
+  permissions = null,
+}) {
+  const p = permissions && typeof permissions === 'object' ? permissions : DEFAULT_PERMISSIONS;
+  const effectivePerms = hasSession ? p : DEFAULT_PERMISSIONS;
   return (
     <motion.aside
       initial={false}
@@ -114,6 +134,10 @@ export function DashboardSidebar({ activeId, onSelect, className = '', compact =
                 </p>
               </div>
             );
+          }
+
+          if (entry.kind === 'item' && !isNavItemAllowed(entry.id, effectivePerms)) {
+            return null;
           }
 
           return (

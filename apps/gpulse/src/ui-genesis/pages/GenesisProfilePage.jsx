@@ -30,13 +30,23 @@ function avatarFromAddress(addr) {
 
 /**
  * Perfil — Web3 identity hub (`nav === 'profile'`).
- * @param {{ walletAddress: string | null, hasSession: boolean }} props
+ * @param {{ walletAddress: string | null, hasSession: boolean, canEditProfile?: boolean }} props
  */
-export function GenesisProfilePage({ walletAddress, hasSession }) {
+export function GenesisProfilePage({ walletAddress, hasSession, canEditProfile = true }) {
   const reduceMotion = useReducedMotion();
+  const readOnly = Boolean(hasSession && !canEditProfile);
 
   return (
-    <motion.div className="space-y-8 md:space-y-10" variants={staggerContainer} initial="hidden" animate="show">
+    <motion.div className="relative space-y-8 md:space-y-10" variants={staggerContainer} initial="hidden" animate="show">
+      {readOnly ? (
+        <div
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/95"
+          role="status"
+        >
+          Perfil en solo lectura: tu rol no permite editar datos de cuenta.
+        </div>
+      ) : null}
+      <div className={readOnly ? 'pointer-events-none select-none opacity-[0.72]' : undefined} aria-disabled={readOnly || undefined}>
       {/* Hero — digital passport */}
       <motion.section variants={fadeUpBlur}>
         <GlassCard
@@ -245,6 +255,7 @@ export function GenesisProfilePage({ walletAddress, hasSession }) {
           ))}
         </div>
       </motion.section>
+      </div>
     </motion.div>
   );
 }

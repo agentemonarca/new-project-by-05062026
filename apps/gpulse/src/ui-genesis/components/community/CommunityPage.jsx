@@ -33,7 +33,7 @@ function shortenRef(s) {
   return `${s.slice(0, 6)}…${s.slice(-4)}`;
 }
 
-export function CommunityPage() {
+export function CommunityPage({ canViewFullNetwork = true }) {
   const reduceMotion = useReducedMotion();
   const wallet = useGenesisDashboardStore((s) => s.wallet);
   const network = useGenesisDashboardStore((s) => s.network);
@@ -196,7 +196,21 @@ export function CommunityPage() {
         ))}
       </motion.section>
 
+      {!canViewFullNetwork ? (
+        <motion.section
+          variants={fadeUpBlur}
+          className="rounded-xl border border-cyan-500/20 bg-slate-950/50 px-4 py-4 text-sm text-slate-300"
+        >
+          <p className="font-medium text-cyan-100/90">Vista de red limitada</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Tu rol permite ver el resumen de volumen arriba; el árbol binario, bonos detallados y el listado de referidos
+            están ocultos.
+          </p>
+        </motion.section>
+      ) : null}
+
       {/* 3. Binary tree */}
+      {canViewFullNetwork ? (
       <motion.section variants={fadeUpBlur} className="relative overflow-hidden rounded-2xl border border-teal-500/20 bg-slate-950/65 p-6 md:p-8">
         <div className="pointer-events-none absolute inset-0 opacity-40">
           <motion.div
@@ -250,7 +264,9 @@ export function CommunityPage() {
           </div>
         </div>
       </motion.section>
+      ) : null}
 
+      {canViewFullNetwork ? (
       <div className="grid gap-6 lg:grid-cols-2">
         {/* 4. Binary bonus */}
         <motion.section variants={fadeUpBlur} className="rounded-2xl border border-violet-500/20 bg-slate-950/60 p-5 md:p-6">
@@ -304,8 +320,10 @@ export function CommunityPage() {
           </div>
         </motion.section>
       </div>
+      ) : null}
 
       {/* 6. Referral list */}
+      {canViewFullNetwork ? (
       <motion.section variants={fadeUpBlur}>
         <h2 className="font-display text-base font-semibold text-white">Referral list</h2>
         <p className="mb-3 text-xs text-slate-500">
@@ -345,8 +363,10 @@ export function CommunityPage() {
           <p className="mt-2 text-xs text-slate-500">Sign in to sync network and ledger data.</p>
         ) : null}
       </motion.section>
+      ) : null}
 
       {/* 7. Referral link */}
+      {canViewFullNetwork ? (
       <motion.section variants={fadeUpBlur} className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-950/40 to-slate-950/80 p-5 md:p-6">
         <h2 className="flex items-center gap-2 font-display text-base font-semibold text-white">
           <Share2 className="h-4 w-4 text-emerald-400" />
@@ -377,8 +397,10 @@ export function CommunityPage() {
           </div>
         </div>
       </motion.section>
+      ) : null}
 
       {/* 8. Impact */}
+      {canViewFullNetwork ? (
       <motion.section variants={fadeUpBlur} className="rounded-2xl border border-white/10 bg-slate-950/50 p-5 md:p-6">
         <h2 className="font-display text-base font-semibold text-white">How your network affects mining</h2>
         <ul className="mt-4 space-y-3 text-sm text-slate-300">
@@ -396,6 +418,7 @@ export function CommunityPage() {
           </li>
         </ul>
       </motion.section>
+      ) : null}
     </motion.div>
   );
 }

@@ -1,0 +1,43 @@
+{
+  "family": "g-pulse-core-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/g-pulse-core-api-task",
+  "containerDefinitions": [
+    {
+      "name": "core-api",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/g-pulse-core-api:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 5050, "protocol": "tcp" }],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "5050" },
+        { "name": "SESSION_COOKIE_SECURE", "value": "1" }
+      ],
+      "secrets": [
+        { "name": "MONGO_URI", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:g-pulse/mongo-uri" },
+        { "name": "SESSION_SECRET", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:g-pulse/session-secret" },
+        { "name": "GENESIS_ADMIN_API_KEY", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:g-pulse/genesis-admin" },
+        { "name": "GENESIS_PROMETHEUS_SCRAPE_TOKEN", "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:g-pulse/prometheus-token" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/g-pulse-core-api",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:5050/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

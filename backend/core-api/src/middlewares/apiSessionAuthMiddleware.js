@@ -7,12 +7,18 @@ export function createApiSessionAuthMiddleware({ authService }) {
     '/auth/request-message',
     '/auth/verify-signature',
     '/verify-deposit',
+    '/metrics/genesis',
   ]);
 
   return function apiSessionAuth(req, res, next) {
     const sub = req.path || '';
     if (publicPaths.has(sub)) return next();
     if (sub.startsWith('/webhooks/')) return next();
+    if (sub.startsWith('/admin/genesis') || sub === '/admin/audit/run' || sub === '/ledger/export') {
+      const expected = String(process.env.GENESIS_ADMIN_API_KEY || '').trim();
+      const got = String(req.headers['x-admin-api-key'] || '').trim();
+      if (expected && got === expected) return next();
+    }
 
     if (req.session?.address) return next();
 

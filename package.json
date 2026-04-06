@@ -8,6 +8,7 @@
     "dev": "echo 'Run dev:backoffice, dev:gpulse, dev:core-api in separate terminals — see README.md'",
     "dev:backoffice": "pnpm --filter @ai-genesis/backoffice dev",
     "dev:gpulse": "pnpm --filter @ai-genesis/gpulse dev",
+    "dev:admin-core": "pnpm --filter @ai-genesis/admin-core dev",
     "dev:core-api": "pnpm --filter @ai-genesis/core-api dev",
     "dev:api-gateway": "pnpm --filter @ai-genesis/api-gateway dev",
     "dev:gpulse-api": "pnpm --filter @ai-genesis/gpulse-api dev",

@@ -114,6 +114,9 @@ export { GenesisLobbyPage } from './pages/GenesisLobbyPage.jsx';
 export { AdminCorePanelPage } from './pages/AdminCorePanelPage.jsx';
 export { AdminCoreApp, ADMIN_APP_RETURN_PATH } from './AdminCoreApp.jsx';
 export { AdminCoreLayout } from './layout/AdminCoreLayout.jsx';
+export { AdminLayout, AdminPanelRouter, AdminProvider, useAdmin } from '../modules/admin/index.js';
+export { useAdminPanelStore } from './stores/adminPanelStore.js';
+export { ADMIN_NAV_SECTIONS, ADMIN_MODULE_IDS } from './admin/adminNavConfig.js';
 
 export { GenesisDesignPreview } from './GenesisDesignPreview.jsx';
 
@@ -126,7 +129,20 @@ export {
   getMasterWalletAddress,
   getDevMockBearer,
 } from './api/genesisConfig.js';
-export { fetchWallet, fetchEarnings, fetchNetwork, postClaim } from './api/genesisApi.js';
+export {
+  fetchWallet,
+  fetchEarnings,
+  fetchNetwork,
+  postClaim,
+  fetchP2POrderbook,
+  fetchP2PMyOrders,
+  createP2POrder,
+  cancelP2POrder,
+  takeP2POrder,
+  postWalletTransfer,
+  postWalletWithdraw,
+  fetchLedger,
+} from './api/genesisApi.js';
 export { safeFetch } from './api/safeFetch.js';
 export { FALLBACK_WALLET, FALLBACK_EARNINGS, FALLBACK_NETWORK } from './api/dashboardFallbacks.js';
 export {

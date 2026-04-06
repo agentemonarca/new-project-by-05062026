@@ -6,6 +6,7 @@ import { FALLBACK_WALLET, FALLBACK_EARNINGS, FALLBACK_NETWORK } from '../api/das
 import { getDevMockBearer } from '../api/genesisConfig.js';
 import { walletLoginWithSigner, siweLogout } from '../api/compensationClient.js';
 import { executeNativeDeposit } from '../api/depositFlow.js';
+import { normalizeUserAccess } from '../lib/userPermissions.js';
 
 function resolveSessionToken(get) {
   return get().authToken || getDevMockBearer() || null;
@@ -27,6 +28,9 @@ export const useGenesisDashboardStore = create(
       earnings: null,
       network: null,
 
+      /** Rol + permisos efectivos (API wallet o normalización por defecto). */
+      userAccess: normalizeUserAccess(null),
+
       /** Dashboard fetch in flight */
       loading: false,
       /** Last dashboard / claim / deposit error message */
@@ -45,6 +49,7 @@ export const useGenesisDashboardStore = create(
           wallet: null,
           earnings: null,
           network: null,
+          userAccess: normalizeUserAccess(null),
           lastClaimResult: null,
           error: null,
         }),
@@ -74,7 +79,14 @@ export const useGenesisDashboardStore = create(
         const token = resolveSessionToken(get);
         const sessionOk = get().sessionAuth;
         if (!token && !sessionOk) {
-          set({ wallet: null, earnings: null, network: null, error: null, loading: false });
+          set({
+            wallet: null,
+            earnings: null,
+            network: null,
+            userAccess: normalizeUserAccess(null),
+            error: null,
+            loading: false,
+          });
           return;
         }
         set({ loading: true, error: null });
@@ -89,10 +101,17 @@ export const useGenesisDashboardStore = create(
           safeFetch(() => fetchNetwork(apiToken), FALLBACK_NETWORK, (e) => pushErr(syncErrors, 'network', e)),
         ]);
 
+        const userAccess = normalizeUserAccess(
+          wallet && typeof wallet === 'object'
+            ? { role: wallet.role, permissions: wallet.permissions ?? wallet.userPermissions }
+            : null,
+        );
+
         set({
           wallet,
           earnings,
           network,
+          userAccess,
           loading: false,
           error: syncErrors.length ? syncErrors.join(' · ') : null,
         });
