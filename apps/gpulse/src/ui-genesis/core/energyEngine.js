@@ -1,4 +1,5 @@
-import { coreRemainingUsdt, getStakingLockedAig, USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { coreRemainingUsdt, getStakingLockedAig } from '../types/miningCore.js';
+import { usdToAig } from '../../utils/pricing.js';
 
 /**
  * @typedef {import('../types/miningCore.js').MiningCore} MiningCore
@@ -107,7 +108,7 @@ export function reactorStateFromEnergy(energy) {
 
 /** @param {number} usdtPerSecond */
 export function usdtPerSecondToAigPerSecond(usdtPerSecond) {
-  return Math.max(0, usdtPerSecond * USDT_TO_AIG_DISPLAY);
+  return Math.max(0, usdToAig(usdtPerSecond));
 }
 
 export const EnergyEngine = {

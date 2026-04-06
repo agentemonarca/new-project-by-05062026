@@ -1,17 +1,44 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { animate, motion, useReducedMotion } from 'framer-motion';
+
+const DEFAULT_FORMAT = (v) =>
+  typeof v === 'number' && !Number.isInteger(v)
+    ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 })
+    : String(v);
+
+/** Stable object identities for Framer Motion (avoids new {} each render). */
+const SCALE_IDLE = { scale: 1 };
+const SCALE_PULSE = { scale: [1, 1.06, 1] };
+const PULSE_TRANSITION = { duration: 0.42, ease: [0.22, 1, 0.36, 1] };
+
+/** Ignore float noise when deciding to restart the tween (parent may pass unstable decimals). */
+const VALUE_EPS = 1e-9;
 
 /**
  * Smoothly interpolates toward `value`; optional subtle pulse on meaningful changes (throttled).
+ *
+ * Performance:
+ * - `format` is kept in a ref so inline `format={(v) => ...}` does not defeat `memo`.
+ * - Memo compares only `value`, `className`, `pulseOnChange` (see propTypes note below).
+ * - Motion `animate` / `transition` use stable references.
+ *
+ * Edge case: if `value` is unchanged but `format` behavior changes without a parent re-render
+ * that changes other compared props, the label could be stale until `value` updates (rare in practice).
  */
-export function AnimatedMetric({ value, format, className = '', pulseOnChange = true }) {
-  if (import.meta.env.DEV) console.count('Metric render');
-  const fmt =
-    format ??
-    ((v) =>
-      typeof v === 'number' && !Number.isInteger(v)
-        ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 4 })
-        : String(v));
+export const AnimatedMetric = memo(function AnimatedMetric({
+  value,
+  format,
+  className = '',
+  pulseOnChange = true,
+}) {
+  const formatRef = useRef(format);
+  formatRef.current = format;
+
+  const formatDisplay = useCallback((v) => {
+    const fn = formatRef.current ?? DEFAULT_FORMAT;
+    return fn(v);
+  }, []);
+
   const fromRef = useRef(value);
   const prevValueRef = useRef(value);
   const lastPulseAtRef = useRef(0);
@@ -20,7 +47,27 @@ export function AnimatedMetric({ value, format, className = '', pulseOnChange = 
   const [pulse, setPulse] = useState(false);
   const reduceMotion = useReducedMotion();
 
+  const rootClassName = useMemo(
+    () => `inline-block tabular-nums ${className}`.trim(),
+    [className],
+  );
+
+  const animateTarget = useMemo(() => {
+    if (reduceMotion) return SCALE_IDLE;
+    return pulse ? SCALE_PULSE : SCALE_IDLE;
+  }, [reduceMotion, pulse]);
+
   useEffect(() => {
+    const from = fromRef.current;
+    const bothNumbers = typeof value === 'number' && typeof from === 'number';
+    if (bothNumbers) {
+      if (Number.isFinite(value) && Number.isFinite(from) && Math.abs(value - from) < VALUE_EPS) {
+        return undefined;
+      }
+    } else if (Object.is(value, from)) {
+      return undefined;
+    }
+
     const controls = animate(fromRef.current, value, {
       type: 'tween',
       duration: 0.5,
@@ -54,11 +101,11 @@ export function AnimatedMetric({ value, format, className = '', pulseOnChange = 
   useEffect(() => {
     if (!pulseOnChange || reduceMotion) {
       prevValueRef.current = value;
-      return;
+      return undefined;
     }
     const delta = Math.abs(value - prevValueRef.current);
     prevValueRef.current = value;
-    if (delta < 1e-12) return;
+    if (delta < 1e-12) return undefined;
 
     const now = Date.now();
     const bigJump = delta >= 0.15;
@@ -74,11 +121,23 @@ export function AnimatedMetric({ value, format, className = '', pulseOnChange = 
 
   return (
     <motion.span
-      className={`inline-block tabular-nums ${className}`.trim()}
-      animate={reduceMotion ? { scale: 1 } : pulse ? { scale: [1, 1.06, 1] } : { scale: 1 }}
-      transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+      className={rootClassName}
+      animate={animateTarget}
+      transition={PULSE_TRANSITION}
     >
-      {fmt(display)}
+      {formatDisplay(display)}
     </motion.span>
   );
+}, areAnimatedMetricPropsEqual);
+
+function areAnimatedMetricPropsEqual(prev, next) {
+  // Intentionally omit `format`: callers almost always pass an inline function; comparing by
+  // reference would force a re-render on every parent render. Latest format is read via ref.
+  return (
+    prev.value === next.value &&
+    prev.className === next.className &&
+    prev.pulseOnChange === next.pulseOnChange
+  );
 }
+
+AnimatedMetric.displayName = 'AnimatedMetric';

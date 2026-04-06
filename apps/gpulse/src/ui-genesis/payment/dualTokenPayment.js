@@ -1,32 +1,33 @@
 /**
  * AIG / USDT pricing helpers (oracle USD per AIG + leg equivalence).
+ * **USD/AIG rate** comes from `src/utils/pricing.js` only.
  * **Module splits** live in paymentRuleEngine.js — use getPaymentSplit there.
  */
 
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { getAigPrice, usdToAig } from '../../utils/pricing.js';
 
 const EPS = 1e-4;
 
 /**
- * USD price of 1 AIG (from contract). Fallback: invert legacy display rate.
+ * USD price of 1 AIG (single global oracle).
  * @returns {number}
  */
 export function getAigPriceUsd() {
-  const raw = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_AIG_PRICE_USD : undefined;
-  const n = raw != null && String(raw).trim() !== '' ? parseFloat(String(raw)) : NaN;
-  if (Number.isFinite(n) && n > 0) return n;
-  return 1 / Math.max(1e-12, USDT_TO_AIG_DISPLAY);
+  return getAigPrice();
 }
 
 /**
  * @param {number} priceUSD
- * @param {number} aigPriceUsd
+ * @param {number} [aigPriceUsd]
  * @returns {number}
  */
 export function aigUnitsForFullUsdPayment(priceUSD, aigPriceUsd) {
   const usd = Math.max(0, Number(priceUSD) || 0);
-  const px = Math.max(1e-12, Number(aigPriceUsd) || getAigPriceUsd());
-  return usd / px;
+  const override = Number(aigPriceUsd);
+  if (Number.isFinite(override) && override > 0 && Math.abs(override - getAigPrice()) > 1e-12) {
+    return usd / Math.max(1e-12, override);
+  }
+  return usdToAig(usd);
 }
 
 /**

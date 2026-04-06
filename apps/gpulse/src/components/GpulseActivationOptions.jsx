@@ -14,7 +14,8 @@ import {
   validateTransfer,
 } from '../utils/web3Payment.js';
 import { isWeb3MockMode } from '../utils/web3Mode.js';
-import { aigUnitsForFullUsdPayment, getAigPriceUsd } from '../ui-genesis/payment/dualTokenPayment.js';
+import { aigUnitsForFullUsdPayment } from '../ui-genesis/payment/dualTokenPayment.js';
+import { useLiveAigUsdPerUnit } from '../hooks/useUsdValue.js';
 
 function truncateAddress(addr) {
   if (!addr || addr.length < 12) return addr || '';
@@ -73,7 +74,7 @@ export default function GpulseActivationOptions({ activePlan, onTrustFlowChange 
     }
   }, [activePlan?.price]);
 
-  const aigOracleUsd = useMemo(() => getAigPriceUsd(), []);
+  const aigOracleUsd = useLiveAigUsdPerUnit();
   const fullAigForPlan = useMemo(
     () => (planPriceUsd > 0 ? aigUnitsForFullUsdPayment(planPriceUsd, aigOracleUsd) : 0),
     [planPriceUsd, aigOracleUsd],

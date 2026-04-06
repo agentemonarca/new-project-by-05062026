@@ -6,6 +6,8 @@ import { NeonInput } from '../components/NeonInput.jsx';
 import { GradientButton } from '../components/GradientButton.jsx';
 import { WalletConnectButton } from '../components/WalletConnectButton.jsx';
 import { staggerContainer, fadeUpBlur } from '../motion/variants.js';
+import { BRAND } from '@/branding/brand.js';
+import { BrandLogo } from '@/branding/BrandLogo.jsx';
 
 function TextLink({ to, children, className = '' }) {
   return (
@@ -28,8 +30,11 @@ export function RegisterPage({ onRegister, LinkComponent: Link = TextLink }) {
         <AuthCard className="max-w-lg">
           <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-4">
             <motion.div variants={fadeUpBlur} className="text-center">
-              <h1 className="text-2xl font-semibold tracking-tight text-white">Join AiGenesis</h1>
-              <p className="mt-1 text-sm text-slate-500">Initialize your G-Pulse identity</p>
+              <div className="mb-4 flex justify-center">
+                <BrandLogo size="lg" />
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight text-white">Join {BRAND.name}</h1>
+              <p className="mt-1 text-sm text-slate-500">Initialize your {BRAND.productLine} identity</p>
             </motion.div>
             <motion.div variants={fadeUpBlur}>
               <NeonInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />

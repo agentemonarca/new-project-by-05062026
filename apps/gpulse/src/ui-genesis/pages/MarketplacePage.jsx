@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, LayoutGrid, MapPin, SlidersHorizontal, Sparkles, TrendingUp, Zap } from 'lucide-react';
 import { LivingBackground } from '../backgrounds/LivingBackground.jsx';
@@ -43,6 +44,7 @@ function HeroMomentumBar({ value, reduceMotion }) {
 
 /** Full marketplace — sorted by ROI; quick-buy modal; works with or without CoreProvider. */
 export default function MarketplacePage() {
+  const navigate = useNavigate();
   const [raw, setRaw] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -112,11 +114,11 @@ export default function MarketplacePage() {
       tickHybridFintechState();
       closeModal();
     },
-    [core, closeModal],
+    [core, ctx, closeModal],
   );
 
   const goHome = () => {
-    window.location.assign('/');
+    navigate('/');
   };
 
   const scrollToListings = () => {
@@ -175,7 +177,7 @@ export default function MarketplacePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.location.assign('/marketplace/local')}
+                    onClick={() => navigate('/marketplace/local')}
                     className="rounded-2xl border border-cyan-400/35 bg-cyan-500/10 px-6 py-3 text-sm font-bold uppercase tracking-wide text-cyan-100 transition hover:border-cyan-300/50 hover:bg-cyan-500/15"
                   >
                     <MapPin className="mr-2 inline h-4 w-4" strokeWidth={2} />
@@ -183,7 +185,7 @@ export default function MarketplacePage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => window.location.assign('/marketplace/merchant')}
+                    onClick={() => navigate('/marketplace/merchant')}
                     className="rounded-2xl border border-violet-400/35 bg-violet-500/10 px-6 py-3 text-sm font-bold uppercase tracking-wide text-violet-100 transition hover:border-violet-300/50 hover:bg-violet-500/15"
                   >
                     Sell on local map

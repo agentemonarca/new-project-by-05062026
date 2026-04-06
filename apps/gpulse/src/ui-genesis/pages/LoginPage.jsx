@@ -6,6 +6,8 @@ import { NeonInput } from '../components/NeonInput.jsx';
 import { GradientButton } from '../components/GradientButton.jsx';
 import { WalletConnectButton } from '../components/WalletConnectButton.jsx';
 import { staggerContainer, fadeUpBlur } from '../motion/variants.js';
+import { BRAND } from '@/branding/brand.js';
+import { BrandLogo } from '@/branding/BrandLogo.jsx';
 
 function TextLink({ to, children, className = '' }) {
   return (
@@ -26,11 +28,13 @@ export function LoginPage({ onLogin, LinkComponent: Link = TextLink, showLinks =
         <AuthCard>
           <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-5">
             <motion.div variants={fadeUpBlur} className="text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400/40 via-fuchsia-500/35 to-violet-600/40 text-lg font-bold text-white shadow-glowCyan animate-breathe">
-                AG
+              <div className="mb-4 flex justify-center">
+                <BrandLogo size="lg" className="animate-breathe shadow-[0_0_32px_-10px_rgba(34,211,238,0.45)]" />
               </div>
               <h1 className="text-2xl font-semibold tracking-tight text-white">Welcome back</h1>
-              <p className="mt-1 text-sm text-slate-500">AiGenesis · G-Pulse</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {BRAND.name} · {BRAND.productLine}
+              </p>
             </motion.div>
             <motion.div variants={fadeUpBlur}>
               <NeonInput

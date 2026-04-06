@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Radar } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard.jsx';
@@ -11,6 +12,8 @@ const ringDelays = ['0s', '0.8s', '1.6s', '2.4s'];
  * @param {{ onBackToDashboard: () => void, onActivateMembership?: () => void }} props
  */
 export function GPulseLobby({ onBackToDashboard, onActivateMembership }) {
+  const navigate = useNavigate();
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden bg-[#070b14] px-4 py-10 md:py-14">
       {/* Concentric radial rings — cyan, pulse / ping */}
@@ -137,7 +140,7 @@ export function GPulseLobby({ onBackToDashboard, onActivateMembership }) {
           <NeonButton
             variant="primary"
             className="!normal-case !font-semibold !tracking-normal"
-            onClick={() => window.open('https://gpulse.app', '_blank', 'noopener,noreferrer')}
+            onClick={() => navigate('/gpulse')}
           >
             Abrir App GPulse
           </NeonButton>

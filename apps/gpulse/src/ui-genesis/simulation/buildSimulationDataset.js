@@ -1,4 +1,5 @@
 import { normalizeLedgerEvents } from '../ledger/normalize.js';
+import { getAigPrice } from '../../utils/pricing.js';
 
 /** Base spec — binary volumes (points). */
 const BINARY_LEFT = 10000;
@@ -107,7 +108,11 @@ export function buildFullSimulationDataset(amplitude = 0.035) {
       title: 'Staking rewards',
       summary: 'Recompensa diaria — motor sim',
       amountUsdt: Math.round(simulationJitter(45, amplitude) * 100) / 100,
-      amountAig: Math.round(simulationJitter(12, amplitude)),
+      amountAig: (() => {
+        const rewardUSD = 10;
+        const rewardAIG = rewardUSD / getAigPrice();
+        return Math.round(rewardAIG * 100) / 100;
+      })(),
       txHash: tx(),
     },
     {
@@ -136,7 +141,11 @@ export function buildFullSimulationDataset(amplitude = 0.035) {
       kind: 'MINING_CLAIM',
       title: 'Mining rewards',
       summary: 'Claim minería (sim)',
-      amountAig: Math.round(simulationJitter(180, amplitude)),
+      amountAig: (() => {
+        /** USD notional for mining claim sim; AIG amount follows live `getAigPrice()`. */
+        const miningRewardUsd = simulationJitter(4230, amplitude);
+        return Math.round((miningRewardUsd / getAigPrice()) * 100) / 100;
+      })(),
       txHash: tx(),
     },
   ];

@@ -3,8 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { GlassCard } from '../GlassCard.jsx';
 import { AnimatedMetric } from '../AnimatedMetric.jsx';
 import { useStakingEngineStore } from '../../stores/stakingEngineStore.js';
-
-const AIG_USD = 0.02;
+import { useUSDValue } from '@/hooks/useUsdValue.js';
 
 /**
  * Top economic summary — USD totals, daily flow, ROI %, LIVE status.
@@ -24,9 +23,10 @@ export function StakingEngineHero({
     [activeEngineStakings],
   );
 
+  const lockedAigUsd = useUSDValue(totalLockedAig);
   const totalStakingUsd = useMemo(
-    () => totalLockedAig * AIG_USD + engineInvested,
-    [totalLockedAig, engineInvested],
+    () => lockedAigUsd + engineInvested,
+    [lockedAigUsd, engineInvested],
   );
 
   const dailyUsdt = userEconomicallyActive ? rateUsdtPerSecond * 86400 : 0;

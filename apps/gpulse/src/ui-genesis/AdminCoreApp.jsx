@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LedgerProvider } from './ledger/LedgerContext.jsx';
 import { useGenesisDashboardStore } from './stores/genesisDashboardStore.js';
 import { getDevMockBearer } from './api/genesisConfig.js';
@@ -15,6 +16,7 @@ export const ADMIN_APP_RETURN_PATH = '/genesis-lobby';
  * Ledger + binary sync mirror the user app only where needed for admin metrics.
  */
 export function AdminCoreApp() {
+  const navigate = useNavigate();
   const authToken = useGenesisDashboardStore((s) => s.authToken);
   const sessionAuth = useGenesisDashboardStore((s) => s.sessionAuth);
   const network = useGenesisDashboardStore((s) => s.network);
@@ -41,13 +43,15 @@ export function AdminCoreApp() {
   }, [hasSession, leftPts, rightPts, ingestApiUpdate]);
 
   const onBackToApp = useCallback(() => {
-    window.location.assign(ADMIN_APP_RETURN_PATH);
-  }, []);
+    navigate(ADMIN_APP_RETURN_PATH);
+  }, [navigate]);
 
-  const onNavigateUserApp = useCallback((navId) => {
-    const path = navToPath(navId);
-    window.location.assign(path);
-  }, []);
+  const onNavigateUserApp = useCallback(
+    (navId) => {
+      navigate(navToPath(navId));
+    },
+    [navigate],
+  );
 
   return (
     <LedgerProvider hasSession={hasSession}>

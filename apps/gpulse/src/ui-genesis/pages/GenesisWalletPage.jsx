@@ -6,7 +6,7 @@ import { GradientButton } from '../components/GradientButton.jsx';
 import { AnimatedMetric } from '../components/AnimatedMetric.jsx';
 import { StatCardSkeleton } from '../components/StatCardSkeleton.jsx';
 import { fadeUpBlur, staggerContainer } from '../motion/variants.js';
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { usdToAig } from '../../utils/pricing.js';
 
 /**
  * Single financial hub: claim + withdraw only here (Genesis shell).
@@ -48,9 +48,9 @@ export function GenesisWalletPage({
   const [localErr, setLocalErr] = useState(null);
 
   const binaryMin = Math.min(leftPts, rightPts);
-  const miningAigRaw = totalUsdtAccumMining * USDT_TO_AIG_DISPLAY;
-  const binaryAigRaw = binaryMin * USDT_TO_AIG_DISPLAY;
-  const directAigRaw = directClaimUsdt * USDT_TO_AIG_DISPLAY;
+  const miningAigRaw = usdToAig(totalUsdtAccumMining);
+  const binaryAigRaw = usdToAig(binaryMin);
+  const directAigRaw = usdToAig(directClaimUsdt);
   const miningAig = userEconomicallyActive ? miningAigRaw : 0;
   const binaryAig = userEconomicallyActive ? binaryAigRaw : 0;
   const directAig = userEconomicallyActive ? directAigRaw : 0;
@@ -78,10 +78,10 @@ export function GenesisWalletPage({
             <Wallet className="h-6 w-6" strokeWidth={1.75} />
           </div>
           <div>
-            <h2 className="font-display text-xl font-semibold text-white">Wallet</h2>
+            <h2 className="font-display text-xl font-semibold text-white">Portfolio</h2>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
-              Único punto de control financiero: convertir ganancias USDT → AIG al precio vigente, consolidar en el balance
-              de recompensas central y solicitar retiros.
+              Hub interno del protocolo (no es tu wallet Web3): convertir ganancias USDT → AIG al precio vigente,
+              consolidar en el balance de recompensas central y solicitar retiros.
             </p>
             <p className="mt-2 max-w-2xl text-xs text-slate-500">
               Claim y withdraw solo desde aquí. El resto del protocolo muestra estado sin ejecutar movimientos.

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
 
@@ -14,12 +15,13 @@ const glowHover =
  * @param {{ onNavigate?: () => void }} props
  */
 export function EnterGpulseCta({ onNavigate }) {
+  const navigate = useNavigate();
   const go = () => {
     if (typeof onNavigate === 'function') {
       onNavigate();
       return;
     }
-    window.location.assign('/gpulse-lobby');
+    navigate('/gpulse-lobby');
   };
 
   return (

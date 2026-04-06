@@ -9,6 +9,8 @@ import { AdminGenerationCard } from '../components/admin/AdminGenerationCard.jsx
 import { AdminBinaryPanel } from '../components/admin/AdminBinaryPanel.jsx';
 import { AdminLedgerConsole } from '../components/admin/AdminLedgerConsole.jsx';
 import { AdminInsightsPanel } from '../components/admin/AdminInsightsPanel.jsx';
+import { P2PSettings } from '@/modules/admin/components/P2PSettings.jsx';
+import { P2PConfigProvider } from '@/modules/p2p/context/P2PConfigContext.jsx';
 import { fadeUpBlur, staggerContainer } from '../motion/variants.js';
 
 /**
@@ -109,6 +111,10 @@ export function AdminCorePanelPage({ onNavigate }) {
           onOpenNetwork={() => onNavigate?.('network')}
         />
       </motion.div>
+
+      <P2PConfigProvider>
+        <P2PSettings />
+      </P2PConfigProvider>
     </motion.div>
   );
 }

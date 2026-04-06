@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceKm, isMerchantOpenNow } from '../local-marketplace/geo.js';
 import { getAigPriceUsd } from '../payment/dualTokenPayment.js';
+import { usdToAig } from '../../utils/pricing.js';
 import { getPaymentSplit, PAYMENT_MODULE_RULES } from '../payment/paymentRuleEngine.js';
 
 /**
@@ -193,7 +194,7 @@ export function LocalMerchantDetailModal({
                 </div>
                 <ul className="space-y-3">
                   {merchant.products.map((p) => {
-                    const fullAigForPrice = p.priceUSD / aigPx;
+                    const fullAigForPrice = usdToAig(p.priceUSD);
                     const preview = getPaymentSplit('gmarket', p.priceUSD, aigPx, {
                       internalAigBalance: balanceAIG,
                       internalUsdtBalance: balanceUSD,

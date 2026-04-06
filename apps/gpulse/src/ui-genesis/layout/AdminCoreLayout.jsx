@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   LayoutGrid,
   Menu,
@@ -21,6 +22,7 @@ const SIDEBAR_ITEMS = [
  * }} props
  */
 export function AdminCoreLayout({ children, onBackToApp }) {
+  const navigate = useNavigate();
   const [mobileNav, setMobileNav] = useState(false);
 
   return (
@@ -57,14 +59,24 @@ export function AdminCoreLayout({ children, onBackToApp }) {
               </div>
             </div>
           </div>
-          <GradientButton
-            type="button"
-            variant="ghost"
-            className="!shrink-0 !border-amber-500/25 !bg-amber-500/10 !py-2 !text-xs !text-amber-100 hover:!bg-amber-500/20 md:!px-4"
-            onClick={onBackToApp}
-          >
-            Back to App
-          </GradientButton>
+          <div className="flex shrink-0 items-center gap-2">
+            <GradientButton
+              type="button"
+              variant="ghost"
+              className="!shrink-0 !max-w-[10rem] !truncate !border-orange-500/35 !bg-orange-500/10 !py-2 !px-2 !text-[10px] !font-semibold !text-orange-100/95 hover:!bg-orange-500/15 sm:!max-w-none sm:!px-3 sm:!text-xs"
+              onClick={() => navigate('/onboarding?ref=demo')}
+            >
+              🔥 Onboarding Preview
+            </GradientButton>
+            <GradientButton
+              type="button"
+              variant="ghost"
+              className="!shrink-0 !border-amber-500/25 !bg-amber-500/10 !py-2 !text-xs !text-amber-100 hover:!bg-amber-500/20 md:!px-4"
+              onClick={onBackToApp}
+            >
+              Back to App
+            </GradientButton>
+          </div>
         </div>
       </header>
 

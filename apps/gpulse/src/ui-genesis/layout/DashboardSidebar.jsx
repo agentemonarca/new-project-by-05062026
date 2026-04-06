@@ -6,6 +6,7 @@ import {
   ShoppingBag,
   Coins,
   User,
+  Wallet,
   Clock,
   LifeBuoy,
   Megaphone,
@@ -14,6 +15,8 @@ import {
   Hexagon,
   Sparkles,
 } from 'lucide-react';
+import { BRAND } from '@/branding/brand.js';
+import { BrandLogo, BrandLockupText } from '@/branding/BrandLogo.jsx';
 import { SidebarItem } from '../components/SidebarItem.jsx';
 
 /**
@@ -35,6 +38,7 @@ const NAV_STRUCTURE = [
   { kind: 'item', id: 'nft', label: 'NFT', icon: Hexagon },
   { kind: 'separator' },
   { kind: 'section', label: 'Usuario' },
+  { kind: 'item', id: 'wallet', label: 'Portfolio', icon: Wallet },
   { kind: 'item', id: 'profile', label: 'Perfil', icon: User },
   { kind: 'item', id: 'history', label: 'Historial operativo', icon: Clock },
   { kind: 'item', id: 'support', label: 'Soporte VIP', icon: LifeBuoy },
@@ -74,19 +78,14 @@ export function DashboardSidebar({ activeId, onSelect, className = '', compact =
         >
           <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-cyan-500/15 blur-2xl" />
           <div className="pointer-events-none absolute -bottom-6 left-4 h-16 w-16 rounded-full bg-violet-500/20 blur-xl" />
-          <div className={compact ? 'md:flex md:justify-center' : ''}>
-            <div className={compact ? 'md:sr-only' : ''}>
-              <p className="font-display text-base font-semibold tracking-tight text-white">AiGenesis</p>
-              <p className="mt-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-cyan-300/90">
-                G-Pulse Core
-              </p>
+          <div className={`flex items-start gap-3 ${compact ? 'md:justify-center' : ''}`}>
+            <BrandLogo size="md" className={`shrink-0 ${compact ? 'md:sr-only' : ''}`} />
+            <div className={`min-w-0 ${compact ? 'md:sr-only' : ''}`}>
+              <BrandLockupText showTagline />
             </div>
             {compact ? (
-              <div
-                className="hidden md:flex md:h-10 md:w-10 md:items-center md:justify-center md:rounded-xl md:border md:border-cyan-500/30 md:bg-gradient-to-br md:from-cyan-500/15 md:to-violet-600/15 md:text-cyan-200 md:shadow-[0_0_20px_-8px_rgba(34,211,238,0.35)]"
-                aria-hidden
-              >
-                <Sparkles className="h-5 w-5" strokeWidth={1.75} />
+              <div className="hidden shrink-0 md:flex" aria-hidden>
+                <BrandLogo size="md" />
               </div>
             ) : null}
           </div>

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { usdToAig } from '../../utils/pricing.js';
 
 /**
  * Aggregate ledger + legs into admin dashboard figures (UI layer; replace with API totals later).
@@ -48,9 +48,9 @@ export function useAdminCoreSnapshot({ events, leftPts, rightPts }) {
       activeWalletsProxy: Math.min(9999, 120 + list.length * 3),
       byCategory: byCat,
       globalRateUsdt,
-      globalRateAig: globalRateUsdt * USDT_TO_AIG_DISPLAY,
+      globalRateAig: usdToAig(globalRateUsdt),
       topRateUsdt,
-      topRateAig: topRateUsdt * USDT_TO_AIG_DISPLAY,
+      topRateAig: usdToAig(topRateUsdt),
       inactiveNodes,
       totalVol,
       leftPts,

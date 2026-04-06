@@ -1,5 +1,5 @@
 import { getAigPriceUsd, usdEquivalentFromDualLegs } from '../payment/dualTokenPayment.js';
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { aigToUsd } from '../../utils/pricing.js';
 
 /**
  * Smart revenue distribution for local / Web3 marketplace purchases.
@@ -232,8 +232,7 @@ export function buildMarketplaceRevenueLedgerRaws(p) {
     distribution: d,
   } = p;
 
-  const equivUsdt =
-    d.grossUsd + d.grossAig * USDT_TO_AIG_DISPLAY;
+  const equivUsdt = d.grossUsd + aigToUsd(d.grossAig);
 
   const purchaseMeta = {
     purchaseId,
@@ -278,9 +277,9 @@ export function buildMarketplaceRevenueLedgerRaws(p) {
 
   const refEquiv =
     d.merchantReferrer.usd +
-    d.merchantReferrer.aig * USDT_TO_AIG_DISPLAY +
+    aigToUsd(d.merchantReferrer.aig) +
     d.buyerReferrer.usd +
-    d.buyerReferrer.aig * USDT_TO_AIG_DISPLAY;
+    aigToUsd(d.buyerReferrer.aig);
 
   if (refEquiv > 0 || d.merchantReferrer.binaryPts + d.buyerReferrer.binaryPts > 0) {
     rows.push({
@@ -308,7 +307,7 @@ export function buildMarketplaceRevenueLedgerRaws(p) {
     });
   }
 
-  const platEquiv = d.platform.usd + d.platform.aig * USDT_TO_AIG_DISPLAY;
+  const platEquiv = d.platform.usd + aigToUsd(d.platform.aig);
   if (platEquiv > 0 || d.platform.binaryPts > 0) {
     rows.push({
       id: `mkt-platform-${purchaseId}`,

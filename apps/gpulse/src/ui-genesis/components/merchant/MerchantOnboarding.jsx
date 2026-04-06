@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents } from 'react-leaflet';
 import { MapPin, Store, CheckCircle2, ExternalLink, X, Crosshair } from 'lucide-react';
@@ -60,18 +61,13 @@ function MapClickLayer({ lat, lng, onPick }) {
  */
 function OnboardingMapPicker({ lat, lng, onPick, hint }) {
   return (
-    <div className="space-y-2">
+    <div className="flex min-h-0 flex-col gap-2">
       <p className="text-[11px] font-medium text-slate-500">
         <Crosshair className="mr-1 inline h-3 w-3 text-cyan-400" />
         {hint ?? 'Click the map to place your business pin (lat / lng update below).'}
       </p>
-      <div className="local-leaflet-wrap h-52 w-full overflow-hidden rounded-xl border border-white/15 bg-slate-900 md:h-60">
-        <MapContainer
-          center={[lat, lng]}
-          zoom={13}
-          className="h-full w-full"
-          scrollWheelZoom
-        >
+      <div className="relative isolate h-[300px] w-full overflow-hidden rounded-xl border border-white/15 bg-slate-900">
+        <MapContainer center={[lat, lng]} zoom={13} className="h-full w-full" scrollWheelZoom>
           <MapResizeFix />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -102,6 +98,7 @@ function MerchantOnboardingInner({
   defaultLng = 55.2708,
   onRegistered,
 }) {
+  const navigate = useNavigate();
   const wallet = useOptionalWallet();
   const owner = wallet?.address ?? null;
 
@@ -253,109 +250,115 @@ function MerchantOnboardingInner({
         )}
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
-              <Store className="h-4 w-4 text-cyan-400" />
-              Business details
-            </h2>
-            <div className="grid gap-3">
-              <label className="block text-xs font-medium text-slate-400">
-                Business name
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
-                  placeholder="e.g. Harbor Roasters"
-                />
-              </label>
-              <label className="block text-xs font-medium text-slate-400">
-                Description
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  className="mt-1 w-full resize-y rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-slate-200"
-                />
-              </label>
-              <label className="block text-xs font-medium text-slate-400">
-                Category
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
-                >
-                  {MERCHANT_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-xs font-medium text-slate-400">
-                <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3 w-3 text-cyan-500" />
-                  Address
-                </span>
-                <input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
-                  placeholder="Street, area, city"
-                />
-              </label>
+          <div className="min-w-0 space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5">
+              <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
+                <Store className="h-4 w-4 text-cyan-400" />
+                Business details
+              </h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-4">
+                <div className="order-2 grid min-w-0 gap-3 md:order-1">
+                  <label className="block text-xs font-medium text-slate-400">
+                    Business name
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                      placeholder="e.g. Harbor Roasters"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-400">
+                    Description
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={3}
+                      className="mt-1 w-full resize-y rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-slate-200"
+                    />
+                  </label>
+                  <label className="block text-xs font-medium text-slate-400">
+                    Category
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                    >
+                      {MERCHANT_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-xs font-medium text-slate-400">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="h-3 w-3 text-cyan-500" />
+                      Address
+                    </span>
+                    <input
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-sm text-white"
+                      placeholder="Street, area, city"
+                    />
+                  </label>
 
-              <OnboardingMapPicker lat={mapPickLat} lng={mapPickLng} onPick={pickOnMap} />
+                  <button
+                    type="button"
+                    onClick={useMyLocationPin}
+                    className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/15"
+                  >
+                    Use my map anchor for pin
+                  </button>
 
-              <button
-                type="button"
-                onClick={useMyLocationPin}
-                className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/15"
-              >
-                Use my map anchor for pin
-              </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block text-xs font-medium text-slate-400">
+                      Latitude
+                      <input
+                        value={lat}
+                        onChange={(e) => setLat(e.target.value)}
+                        inputMode="decimal"
+                        className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 font-mono text-sm text-white"
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-slate-400">
+                      Longitude
+                      <input
+                        value={lng}
+                        onChange={(e) => setLng(e.target.value)}
+                        inputMode="decimal"
+                        className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 font-mono text-sm text-white"
+                      />
+                    </label>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs font-medium text-slate-400">
-                  Latitude
-                  <input
-                    value={lat}
-                    onChange={(e) => setLat(e.target.value)}
-                    inputMode="decimal"
-                    className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 font-mono text-sm text-white"
-                  />
-                </label>
-                <label className="block text-xs font-medium text-slate-400">
-                  Longitude
-                  <input
-                    value={lng}
-                    onChange={(e) => setLng(e.target.value)}
-                    inputMode="decimal"
-                    className="mt-1 w-full rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 font-mono text-sm text-white"
-                  />
-                </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={acceptsAIG}
+                      onChange={(e) => setAcceptsAIG(e.target.checked)}
+                      className="rounded border-white/20 bg-slate-900"
+                    />
+                    Accepts AIG at checkout
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={saveStore}
+                    className="mt-1 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 py-2.5 text-sm font-bold uppercase tracking-wide text-white shadow-lg"
+                  >
+                    {mode === 'modal' ? 'Register on map' : 'Save store'}
+                  </button>
+                </div>
+
+                <div className="order-1 min-h-0 md:order-2">
+                  <OnboardingMapPicker lat={mapPickLat} lng={mapPickLng} onPick={pickOnMap} />
+                </div>
               </div>
-
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={acceptsAIG}
-                  onChange={(e) => setAcceptsAIG(e.target.checked)}
-                  className="rounded border-white/20 bg-slate-900"
-                />
-                Accepts AIG at checkout
-              </label>
-
-              <button
-                type="button"
-                onClick={saveStore}
-                className="mt-1 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 py-2.5 text-sm font-bold uppercase tracking-wide text-white shadow-lg"
-              >
-                {mode === 'modal' ? 'Register on map' : 'Save store'}
-              </button>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {activeMerchantId && activeMerchant ? (
               <>
                 <ProductForm onSubmit={onProductSubmit} />
@@ -403,7 +406,7 @@ function MerchantOnboardingInner({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => window.location.assign('/marketplace/local')}
+                      onClick={() => navigate('/marketplace/local')}
                       className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-500/35 bg-cyan-500/10 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/15"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
@@ -478,7 +481,7 @@ function MerchantOnboardingInner({
             role="dialog"
             aria-modal="true"
             aria-labelledby="merchant-onboard-title"
-            className="relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-y-auto rounded-2xl border border-violet-500/40 bg-slate-950 p-4 shadow-2xl md:p-6"
+            className="relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-y-auto overflow-x-hidden rounded-2xl border border-violet-500/40 bg-slate-950 p-4 shadow-2xl md:p-6"
             initial={{ y: 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 16, opacity: 0 }}

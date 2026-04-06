@@ -14,6 +14,24 @@ const STATUS_MESSAGES = {
 const RING_R = 52;
 const RING_C = 2 * Math.PI * RING_R;
 
+const MULTIPLIER_FLASH_INITIAL = { opacity: 0.85 };
+const MULTIPLIER_FLASH_ANIMATE = { opacity: 0 };
+const MULTIPLIER_FLASH_TRANSITION = { duration: 0.55, ease: 'easeOut' };
+
+const ENERGY_RING_INITIAL_MOTION = { scale: 0.88, opacity: 0.9 };
+const ENERGY_RING_INITIAL_REDUCED = { opacity: 0 };
+const ENERGY_RING_ANIMATE_MOTION = { scale: 1.12, opacity: 0 };
+const ENERGY_RING_ANIMATE_REDUCED = { opacity: 0 };
+const ENERGY_RING_TRANSITION = { duration: 0.5, ease: 'easeOut' };
+
+const RING_DASH_TRANSITION = { type: 'spring', stiffness: 80, damping: 22 };
+
+const LABEL_METRIC_IDLE = {};
+const LABEL_METRIC_PULSE = { scale: [1, 1.06, 1] };
+const LABEL_METRIC_PULSE_TRANSITION = { duration: 0.45 };
+
+const BURST_INITIAL_MOTION = { opacity: 0.85 };
+
 function formatAigShort(v) {
   const n = Number(v) || 0;
   if (n >= 0.001) return n.toFixed(4);
@@ -35,6 +53,7 @@ function formatAigShort(v) {
  *   claimBurstTick?: number,
  *   onClick?: () => void,
  *   className?: string,
+ *   aigPrice?: number | null,
  * }} props
  */
 function ReactorVisualInner({
@@ -48,6 +67,7 @@ function ReactorVisualInner({
   claimBurstTick = 0,
   onClick,
   className = '',
+  aigPrice = null,
 }) {
   const reduceMotion = useReducedMotion();
   const uid = useId().replace(/:/g, '');
@@ -76,7 +96,7 @@ function ReactorVisualInner({
           ? 'rgba(34, 211, 238, 0.9)'
           : 'rgba(100, 116, 139, 0.65)';
 
-  const shellClass = `relative h-40 w-40 shrink-0 outline-none md:h-44 md:w-44 ${
+  const shellClass = `relative h-44 w-44 shrink-0 outline-none ${
     onClick
       ? 'touch-manipulation rounded-full border-2 border-transparent bg-slate-950/85 ring-offset-2 ring-offset-slate-950 transition focus-visible:ring-2 focus-visible:ring-cyan-400/60 cursor-pointer'
       : 'rounded-full bg-slate-950/85'
@@ -92,7 +112,7 @@ function ReactorVisualInner({
                 background:
                   'radial-gradient(circle, rgba(34,211,238,0.45) 0%, rgba(139,92,246,0.2) 45%, transparent 70%)',
               }}
-              initial={reduceMotion ? false : { opacity: 0.85 }}
+              initial={reduceMotion ? false : BURST_INITIAL_MOTION}
             />
           ) : null}
 
@@ -100,9 +120,9 @@ function ReactorVisualInner({
             <motion.div
               key={multiplierFlashTick}
               className="pointer-events-none absolute inset-1 z-[4] rounded-full bg-fuchsia-400/25"
-              initial={{ opacity: 0.85 }}
-              animate={{ opacity: 0 }}
-              transition={{ duration: 0.55, ease: 'easeOut' }}
+              initial={MULTIPLIER_FLASH_INITIAL}
+              animate={MULTIPLIER_FLASH_ANIMATE}
+              transition={MULTIPLIER_FLASH_TRANSITION}
             />
           ) : null}
 
@@ -110,9 +130,9 @@ function ReactorVisualInner({
             <motion.div
               key={energyPulseTick}
               className="pointer-events-none absolute inset-2 z-[4] rounded-full border-2 border-cyan-300/70"
-              initial={reduceMotion ? { opacity: 0 } : { scale: 0.88, opacity: 0.9 }}
-              animate={reduceMotion ? { opacity: 0 } : { scale: 1.12, opacity: 0 }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
+              initial={reduceMotion ? ENERGY_RING_INITIAL_REDUCED : ENERGY_RING_INITIAL_MOTION}
+              animate={reduceMotion ? ENERGY_RING_ANIMATE_REDUCED : ENERGY_RING_ANIMATE_MOTION}
+              transition={ENERGY_RING_TRANSITION}
             />
           ) : null}
 
@@ -192,7 +212,7 @@ function ReactorVisualInner({
               strokeDasharray={RING_C}
               initial={false}
               animate={{ strokeDashoffset: ringOffset }}
-              transition={{ type: 'spring', stiffness: 80, damping: 22 }}
+              transition={RING_DASH_TRANSITION}
             />
           </svg>
 
@@ -211,11 +231,8 @@ function ReactorVisualInner({
           <div className="absolute left-1/2 top-[42%] z-[3] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center">
             <motion.span
               className="font-display text-2xl font-bold tabular-nums text-white md:text-3xl"
-              animate={
-                reduceMotion || energyPulseTick === 0
-                  ? {}
-                  : { scale: [1, 1.06, 1], transition: { duration: 0.45 } }
-              }
+              animate={reduceMotion || energyPulseTick === 0 ? LABEL_METRIC_IDLE : LABEL_METRIC_PULSE}
+              transition={reduceMotion || energyPulseTick === 0 ? undefined : LABEL_METRIC_PULSE_TRANSITION}
               key={`n-${energyPulseTick}-${Math.round(pct)}`}
             >
               {Math.round(pct)}
@@ -239,29 +256,38 @@ function ReactorVisualInner({
   return (
     <div className={`relative flex flex-col items-center ${className}`}>
       {showEfficiencyWarning ? (
-        <p className="mb-2 max-w-[200px] text-center text-[10px] font-semibold leading-tight text-amber-300/95">
+        <p className="mb-2 max-w-[80%] text-center text-[10px] font-semibold leading-tight text-amber-300/95">
           ⚠️ Core underperforming
         </p>
       ) : null}
 
-      {onClick ? (
-        <motion.button
-          type="button"
-          onClick={onClick}
-          whileTap={!reduceMotion ? { scale: 0.98 } : undefined}
-          className={shellClass}
-          aria-label="Open reactor details"
-        >
-          {inner}
-        </motion.button>
-      ) : (
-        <div className={shellClass}>{inner}</div>
-      )}
+      <div className="reactor-visual-bounds">
+        <div className="reactor-visual-scaled-shell">
+          {onClick ? (
+            <motion.button
+              type="button"
+              onClick={onClick}
+              whileTap={!reduceMotion ? { scale: 0.98 } : undefined}
+              className={shellClass}
+              aria-label="Open reactor details"
+            >
+              {inner}
+            </motion.button>
+          ) : (
+            <div className={shellClass}>{inner}</div>
+          )}
+        </div>
+      </div>
 
-      <p className="mt-3 max-w-[220px] text-center text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+      <p className="mt-3 max-w-[80%] text-center text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
         {status}
       </p>
-      <p className="mt-1 font-mono text-[10px] text-slate-600">System core</p>
+      <p className="mt-1 max-w-[80%] text-center font-mono text-[10px] text-slate-600">System core</p>
+      {aigPrice != null && Number.isFinite(aigPrice) ? (
+        <p className="mt-1 text-xs opacity-70 transition-all duration-300 ease-in-out">
+          AIG Price: ${Number(aigPrice).toFixed(2)}
+        </p>
+      ) : null}
     </div>
   );
 }

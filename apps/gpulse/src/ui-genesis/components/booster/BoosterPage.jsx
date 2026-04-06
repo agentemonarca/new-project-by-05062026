@@ -7,7 +7,7 @@ import { BoosterHistoryList } from './BoosterHistoryList.jsx';
 import { BoosterActions } from './BoosterActions.jsx';
 import { BoosterImpact } from './BoosterImpact.jsx';
 import ProtocolDisclaimer from '../ProtocolDisclaimer.jsx';
-import { USDT_TO_AIG_DISPLAY } from '../../types/miningCore.js';
+import { usdToAig } from '../../../utils/pricing.js';
 import { staggerContainer, fadeUpBlur } from '../../motion/variants.js';
 import { useCore } from '../../core/CoreContext.jsx';
 
@@ -35,7 +35,7 @@ export function BoosterPage({ onInject, hideNonWalletFinancialActions = false, o
     }, 0);
   }, [boosterCores]);
 
-  const rateAigPerSecond = rateUsdtPerSecond * USDT_TO_AIG_DISPLAY;
+  const rateAigPerSecond = usdToAig(rateUsdtPerSecond);
 
   const { generatedAgg, capAgg, progressAgg, liveField } = useMemo(() => {
     let g = 0;

@@ -5,6 +5,7 @@ import { AuthCard } from '../components/AuthCard.jsx';
 import { NeonInput } from '../components/NeonInput.jsx';
 import { GradientButton } from '../components/GradientButton.jsx';
 import { staggerContainer, fadeUpBlur } from '../motion/variants.js';
+import { BrandLogo } from '@/branding/BrandLogo.jsx';
 
 function TextLink({ to, children, className = '' }) {
   return (
@@ -24,6 +25,9 @@ export function ForgotPasswordPage({ onSendRecovery, LinkComponent: Link = TextL
         <AuthCard>
           <motion.div variants={staggerContainer} initial="hidden" animate="show" className="space-y-5">
             <motion.div variants={fadeUpBlur} className="text-center">
+              <div className="mb-4 flex justify-center">
+                <BrandLogo size="md" />
+              </div>
               <h1 className="text-2xl font-semibold tracking-tight text-white">Recover access</h1>
               <p className="mt-1 text-sm text-slate-500">We&apos;ll send recovery instructions to your email.</p>
             </motion.div>

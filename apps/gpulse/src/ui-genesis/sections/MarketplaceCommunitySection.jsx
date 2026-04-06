@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Store } from 'lucide-react';
 import { fetchMarketplaceItems } from '../api/marketplaceApi.js';
@@ -10,6 +11,7 @@ import { sortMarketplaceProducts, STANDALONE_CORE_SNAPSHOT } from '../marketplac
 
 /** Community strip — same ROI sort as dashboard (standalone core when outside CoreProvider). */
 export function MarketplaceCommunitySection() {
+  const navigate = useNavigate();
   const [raw, setRaw] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalProduct, setModalProduct] = useState(null);
@@ -74,7 +76,7 @@ export function MarketplaceCommunitySection() {
         <GradientButton
           type="button"
           className="!rounded-2xl !px-6 !py-3 !text-sm font-semibold shadow-[0_0_24px_rgba(139,92,246,0.35)]"
-          onClick={() => window.location.assign('/marketplace')}
+          onClick={() => navigate('/marketplace')}
         >
           Ver más ofertas
         </GradientButton>

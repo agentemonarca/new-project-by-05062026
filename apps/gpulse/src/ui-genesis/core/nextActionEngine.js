@@ -272,11 +272,12 @@ export function getNextAction(state) {
 
   if (!state.hasSession) {
     return {
-      message: 'Conecta tu wallet e inicia sesión para ver el siguiente paso personalizado en el protocolo.',
-      action: 'wallet',
+      message:
+        'Conecta tu wallet Web3 e inicia sesión con la API para ver el siguiente paso personalizado en el protocolo.',
+      action: 'dashboard',
       priority: 'LOW',
       healthy: true,
-      ctaLabel: 'Abrir wallet',
+      ctaLabel: 'Ir al panel',
     };
   }
 
@@ -292,10 +293,10 @@ export function getNextAction(state) {
 
   if (portfolioDenRelevant(holdingPct) && holdingPct < minH) {
     return {
-      message: `Tu holding AIG (~${holdingPct.toFixed(1)}%) está por debajo del objetivo (~${minH}%). Refuerza el ratio en wallet para evitar límites.`,
+      message: `Tu holding AIG (~${holdingPct.toFixed(1)}%) está por debajo del objetivo (~${minH}%). Refuerza el ratio en Portfolio para evitar límites.`,
       action: 'wallet',
       priority: 'HIGH',
-      ctaLabel: 'Abrir wallet',
+      ctaLabel: 'Ir a Portfolio',
     };
   }
 
@@ -311,16 +312,16 @@ export function getNextAction(state) {
 
   if (direct >= DIRECT_BONUS_MIN) {
     return {
-      message: `Tienes bono directo disponible (~${direct.toFixed(4)} USDT). Revisa y reclama desde wallet.`,
+      message: `Tienes bono directo disponible (~${direct.toFixed(4)} USDT). Revisa y reclama desde Portfolio.`,
       action: 'wallet',
       priority: 'MEDIUM',
-      ctaLabel: 'Ir a wallet',
+      ctaLabel: 'Ir a Portfolio',
     };
   }
 
   return {
     message:
-      'Tu posición está alineada con el protocolo. Sigue el panel de red y wallet cuando quieras optimizar.',
+      'Tu posición está alineada con el protocolo. Sigue el panel de red y Portfolio cuando quieras optimizar.',
     action: 'network',
     priority: 'LOW',
     healthy: true,

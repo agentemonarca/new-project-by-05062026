@@ -1,5 +1,6 @@
 import React from 'react';
 import { GenesisNotificationCenter } from './GenesisNotificationCenter.jsx';
+import { deriveGpulseNavVisualState, GpulseChromeButton } from './GpulseChromeButton.jsx';
 
 /**
  * Secondary protocol context: mining rate, rules/alerts copy, text links, notifications.
@@ -15,6 +16,7 @@ import { GenesisNotificationCenter } from './GenesisNotificationCenter.jsx';
  *   rateUsdtPerSecond: number,
  *   navigateTo: (id: string) => void,
  *   notificationProps: Record<string, unknown>,
+ *   gpulseLobbyActive?: boolean,
  * }} props
  */
 export function GenesisChromeContextBar({
@@ -27,6 +29,7 @@ export function GenesisChromeContextBar({
   rateUsdtPerSecond,
   navigateTo,
   notificationProps,
+  gpulseLobbyActive = false,
 }) {
   const rate =
     rateUsdtPerSecond < 0.001 ? rateUsdtPerSecond.toExponential(2) : rateUsdtPerSecond.toFixed(6);
@@ -36,7 +39,7 @@ export function GenesisChromeContextBar({
     alertLine =
       'Activa staking y mantén AIG ≥ umbral para desbloquear ingresos del protocolo.';
   } else if (hasSession && accountFrozen) {
-    alertLine = 'Cuenta congelada por holding AIG — regulariza en Wallet.';
+    alertLine = 'Cuenta congelada por holding AIG — regulariza en Portfolio.';
   } else if (hasSession && !userHasActiveStaking) {
     alertLine = 'Sin staking activo · ingresos limitados hasta participar.';
   } else if (hasSession && holdingPctAig + 1e-6 < minHoldingPct) {
@@ -49,6 +52,13 @@ export function GenesisChromeContextBar({
 
   const linkCl =
     'rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition hover:bg-white/[0.05] hover:text-cyan-200/90';
+
+  const gpulseState = deriveGpulseNavVisualState({
+    gpulseLobbyActive,
+    hasSession,
+    userEconomicallyActive,
+    accountFrozen,
+  });
 
   return (
     <div className="border-b border-white/[0.06] bg-slate-950/40 px-4 py-2 backdrop-blur-md md:px-8">
@@ -79,14 +89,16 @@ export function GenesisChromeContextBar({
             ·
           </span>
           <button type="button" className={linkCl} onClick={() => navigateTo('wallet')}>
-            Wallet
+            Portfolio
           </button>
-          <span className="text-slate-700" aria-hidden>
+          <span className="text-slate-700 max-sm:hidden" aria-hidden>
             ·
           </span>
-          <button type="button" className={linkCl} onClick={() => navigateTo('gpulse-lobby')}>
-            GPulse
-          </button>
+          <GpulseChromeButton
+            state={gpulseState}
+            onClick={() => navigateTo('gpulse-lobby')}
+            className="max-sm:ml-auto"
+          />
           <GenesisNotificationCenter {...notificationProps} />
         </div>
       </div>

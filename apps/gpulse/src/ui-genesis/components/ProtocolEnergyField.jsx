@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Activity, Pause } from 'lucide-react';
 import { AnimatedMetric } from './AnimatedMetric.jsx';
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { usdToAig } from '../../utils/pricing.js';
 
 /**
  * Global “protocol energy field” above core grid — unified generation context.
@@ -15,7 +15,7 @@ import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
  */
 export function ProtocolEnergyField({ totalRatePerSecond, totalAccumulated, hasSession, coreCount }) {
   const reduceMotion = useReducedMotion();
-  const aigEquiv = totalAccumulated * USDT_TO_AIG_DISPLAY;
+  const aigEquiv = usdToAig(totalAccumulated);
 
   const { status, statusLabel } = useMemo(() => {
     const generating = hasSession && totalRatePerSecond > 1e-8;

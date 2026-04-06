@@ -37,6 +37,7 @@ const PATH_TO_NAV = {
   '/network': 'network',
   '/comunidad': 'network',
   '/wallet': 'wallet',
+  '/portfolio': 'wallet',
   '/ledger': 'history',
   '/transactions': 'history',
   '/history': 'history',

@@ -4,8 +4,9 @@
  */
 
 import { getAigPriceUsd } from './dualTokenPayment.js';
+import { assertPaymentMatchesPrice, PRICING_EPS } from '../../utils/pricing.js';
 
-const EPS = 1e-4;
+const EPS = PRICING_EPS;
 
 /** @typedef {'mining' | 'booster' | 'staking' | 'membership' | 'gpulse' | 'gmarket'} PaymentModule */
 
@@ -98,7 +99,7 @@ export function catalogCategoryToModule(category) {
  * @param {number} usdtAmount
  * @param {number} [eps]
  */
-export function validateUsdEquivalence(priceUSD, usdValueAig, usdtAmount, eps = EPS) {
+export function validateLegsSumMatchesPrice(priceUSD, usdValueAig, usdtAmount, eps = EPS) {
   const usd = Math.max(0, Number(priceUSD) || 0);
   if (usd <= 0) return false;
   const sum = Math.max(0, Number(usdValueAig) || 0) + Math.max(0, Number(usdtAmount) || 0);
@@ -135,15 +136,16 @@ export function getPaymentSplit(module, priceUSD, aigPrice, options = {}) {
 
   const aigAmount = usdValueAig / px;
   const totalUsdCovered = usdValueAig + usdtAmount;
-  const equivOk = validateUsdEquivalence(usd, usdValueAig, usdtAmount);
 
-  let valid = usd > 0 && equivOk;
+  if (usd > 0) {
+    assertPaymentMatchesPrice(usd, aigAmount, usdtAmount);
+  }
+
+  let valid = usd > 0;
   /** @type {string | null} */
   let validationError = null;
   if (usd <= 0) {
     validationError = 'Precio USD inválido';
-  } else if (!equivOk) {
-    validationError = 'Suma AIG+USDT no equivale al precio USD';
   }
 
   if (valid && options.internalAigBalance != null && usdValueAig > 0) {

@@ -59,7 +59,7 @@ const ACTION_ICON = {
 
 const CTA_LABEL = {
   staking: 'Ir a staking',
-  wallet: 'Abrir wallet',
+  wallet: 'Ir a Portfolio',
   network: 'Ver red',
   dashboard: 'Ir al inicio',
 };

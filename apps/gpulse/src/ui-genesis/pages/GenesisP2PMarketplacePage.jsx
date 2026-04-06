@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Wallet } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard.jsx';
@@ -6,6 +7,8 @@ import { NeonButton } from '../components/NeonButton.jsx';
 import { useP2PMarketplaceStore } from '../stores/p2pMarketplaceStore.js';
 import { useWallet } from '../../context/WalletContext.jsx';
 import { fadeUpBlur } from '../motion/variants.js';
+import { P2PConfigProvider } from '@/modules/p2p/context/P2PConfigContext.jsx';
+import { P2PMarket } from '@/modules/p2p/components/P2PMarket.jsx';
 
 const NETWORKS = ['ERC-20', 'BEP-20', 'USDC'];
 
@@ -224,6 +227,7 @@ function UserTooltip({ order, lang, position }) {
  * @param {{ onNavigate?: (id: string) => void }} props
  */
 export function GenesisP2PMarketplacePage({ onNavigate }) {
+  const navigate = useNavigate();
   const {
     p2pMode,
     setP2pMode,
@@ -318,6 +322,7 @@ export function GenesisP2PMarketplacePage({ onNavigate }) {
   const rowActionLabel = p2pMode === 'buy' ? s('buy') : s('sell');
 
   return (
+    <P2PConfigProvider>
     <motion.div
       variants={fadeUpBlur}
       initial="hidden"
@@ -391,7 +396,7 @@ export function GenesisP2PMarketplacePage({ onNavigate }) {
                       { label: s('settings'), onClick: () => onNavigate?.('profile') },
                       { label: s('disconnect'), onClick: () => { disconnectWallet(); setWalletMenuOpen(false); } },
                       { label: s('myListings'), onClick: () => {} },
-                      { label: s('marketplace'), onClick: () => window.location.assign('/marketplace') },
+                      { label: s('marketplace'), onClick: () => navigate('/marketplace') },
                       { label: s('myReports'), onClick: () => {} },
                       { label: s('tgSupport'), onClick: () => window.open('https://t.me/G11P2P', '_blank', 'noopener,noreferrer') },
                       { label: s('faqs'), onClick: () => onNavigate?.('support') },
@@ -415,6 +420,8 @@ export function GenesisP2PMarketplacePage({ onNavigate }) {
           )}
         </div>
       </header>
+
+      <P2PMarket />
 
       {/* Tabs + filter */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -677,5 +684,6 @@ export function GenesisP2PMarketplacePage({ onNavigate }) {
         ) : null}
       </AnimatePresence>
     </motion.div>
+    </P2PConfigProvider>
   );
 }

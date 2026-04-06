@@ -19,8 +19,7 @@
  * @property {number} [lockStartTime] — staking: inicio del bloqueo (epoch ms); por defecto startTime
  */
 
-/** Rough protocol display factor: AIG per 1 USDT for equivalent line (UI only). */
-export const USDT_TO_AIG_DISPLAY = 0.92;
+/** USDT→AIG display conversions: use `usdToAig` / `aigToUsd` from `src/utils/pricing.js`. */
 
 /**
  * @param {MiningCore} core

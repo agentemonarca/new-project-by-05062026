@@ -2,6 +2,8 @@
  * @typedef {import('./operativeLedgerModel.js').OperativeTransaction} OperativeTransaction
  */
 
+import { aigToUsd } from '../../utils/pricing.js';
+
 /**
  * @param {import('./ledgerModel.js').LedgerEvent} ev
  * @returns {OperativeTransaction}
@@ -24,7 +26,8 @@ export function mapLedgerEventToOperative(ev) {
           username: meta.teamUsername != null ? String(meta.teamUsername) : related_user.username,
           level: meta.teamLevel === 'indirect' || meta.teamLevel === 'direct' ? meta.teamLevel : related_user.level === 'indirect' || related_user.level === 'direct' ? related_user.level : null,
           volumeGenerated: meta.volumeGenerated != null ? Number(meta.volumeGenerated) : undefined,
-          commissionEarned: meta.commissionEarned != null ? Number(meta.commissionEarned) : amount_usdt || amount_aig * 0.02,
+          commissionEarned:
+            meta.commissionEarned != null ? Number(meta.commissionEarned) : amount_usdt || aigToUsd(amount_aig),
         }
       : null;
 
@@ -95,7 +98,12 @@ export function mapLedgerEventToOperative(ev) {
 
   const volume_generated = meta.volumeGenerated != null ? Number(meta.volumeGenerated) : meta.matchedVolume != null ? Number(meta.matchedVolume) : meta.left != null && meta.right != null ? Number(meta.left) + Number(meta.right) : 0;
 
-  const commission_earned = meta.commissionEarned != null ? Number(meta.commissionEarned) : source === 'binary' || source === 'direct' ? amount_usdt || amount_aig * 0.02 : amount_usdt;
+  const commission_earned =
+    meta.commissionEarned != null
+      ? Number(meta.commissionEarned)
+      : source === 'binary' || source === 'direct'
+        ? amount_usdt || aigToUsd(amount_aig)
+        : amount_usdt;
 
   const product = String(meta.product ?? meta.productName ?? ev.title ?? '—');
   const product_active = meta.productActive !== false && meta.activeProduct !== false;

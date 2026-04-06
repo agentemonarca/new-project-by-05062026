@@ -1,4 +1,5 @@
 import { getAigPriceUsd } from '../payment/dualTokenPayment.js';
+import { aigToUsd } from '../../utils/pricing.js';
 import {
   catalogCategoryToModule,
   getPaymentSplit as paymentEngineSplit,
@@ -65,7 +66,7 @@ export function calculateProductImpact(product, core) {
   const afterAigS = baseAigS * (1 + pct / 100);
   const incAigS = Math.max(0, afterAigS - baseAigS);
   const estimatedAigPerDay = incAigS * 86400;
-  const estimatedUsdtPerSecond = incAigS > 0 ? incAigS / USDT_TO_AIG_DISPLAY : 0;
+  const estimatedUsdtPerSecond = incAigS > 0 ? aigToUsd(incAigS) : 0;
   const incrementalUsdtDay = estimatedUsdtPerSecond * 86400;
   const paybackRaw = product.priceUsdt / Math.max(1e-12, incrementalUsdtDay);
   const paybackTime = Number.isFinite(paybackRaw) ? Math.min(9999, Math.max(0, paybackRaw)) : 9999;

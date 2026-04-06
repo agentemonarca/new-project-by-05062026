@@ -11,7 +11,7 @@ import {
   Sprout,
 } from 'lucide-react';
 import { AnimatedMetric } from '../AnimatedMetric.jsx';
-import { USDT_TO_AIG_DISPLAY } from '../../types/miningCore.js';
+import { usdToAig } from '../../../utils/pricing.js';
 import { staggerContainer, fadeUpBlur } from '../../motion/variants.js';
 import { useGenesisDashboardStore } from '../../stores/genesisDashboardStore.js';
 import { getDevMockBearer } from '../../api/genesisConfig.js';
@@ -54,15 +54,15 @@ export function CommunityPage() {
   const imbalance = Math.abs(leftVol - rightVol);
   const imbalancePct = totalVol > 0 ? Math.round((100 * imbalance) / totalVol) : 0;
 
-  const directAig = directClaim * USDT_TO_AIG_DISPLAY;
-  const binaryAig = Math.min(leftVol, rightVol) * USDT_TO_AIG_DISPLAY;
+  const directAig = usdToAig(directClaim);
+  const binaryAig = usdToAig(Math.min(leftVol, rightVol));
   const totalAigRewards = useMemo(
     () => directAig + binaryAig + Math.min(leftVol, rightVol) * 0.05,
     [directAig, binaryAig, leftVol, rightVol],
   );
 
   /** Binary bonus “accumulated” layer (UI estimate from network symmetry) */
-  const binaryAccumulatedAig = Math.min(leftVol, rightVol) * USDT_TO_AIG_DISPLAY * 0.85;
+  const binaryAccumulatedAig = usdToAig(Math.min(leftVol, rightVol)) * 0.85;
 
   const referralSource = useMemo(() => {
     const raw = earnings?.entries;

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { LivingBackground } from '../backgrounds/LivingBackground.jsx';
 import { HologramBackground } from '../backgrounds/HologramBackground.jsx';
 import { ChatWidgetPlaceholder } from '../widgets/ChatWidgetPlaceholder.jsx';
@@ -32,6 +33,11 @@ import { useGpulseMembershipStore } from '../stores/gpulseMembershipStore.js';
 import { useSimulationModeStore } from '../stores/simulationModeStore.js';
 import { useStakingEngineStore } from '../stores/stakingEngineStore.js';
 import { buildFullSimulationDataset } from '../simulation/buildSimulationDataset.js';
+import { useAigPrice, AigPriceContext } from '@/hooks/useAigPrice.js';
+import { useUSDValue } from '@/hooks/useUsdValue.js';
+import { usdToAig } from '../../utils/pricing.js';
+
+const SHOW_HOLOGRAM = false;
 
 /** Ledger net (USDT) required to unlock claims + live system actions on the main dashboard. */
 const MIN_PROTOCOL_HOLDING_USDT = 50;
@@ -48,7 +54,7 @@ const TOPBAR_COPY = {
   gpulse: { title: 'GPulse Oracle', subtitle: 'Shell principal' },
   'gpulse-lobby': { title: 'GPulse Oracle', subtitle: 'Lobby predictivo' },
   'genesis-lobby': { title: 'Genesis Lobby', subtitle: 'Núcleo del ecosistema' },
-  wallet: { title: 'Wallet', subtitle: 'Único hub financiero' },
+  wallet: { title: 'Portfolio', subtitle: 'Balances y actividad del protocolo' },
   profile: { title: 'Perfil', subtitle: 'Cuenta y sesión' },
   history: { title: 'Historial operativo', subtitle: 'Explorador financiero' },
   support: { title: 'Soporte VIP', subtitle: 'Tickets y asistencia prioritaria' },
@@ -71,6 +77,9 @@ export function GenesisDashboardPage({
   enablePolling = true,
   simulateDeposit = import.meta.env.VITE_SIMULATE_DEPOSIT === '1',
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [nav, setNav] = useState(() => {
     if (typeof window === 'undefined') return 'genesis-lobby';
     if (import.meta.env.VITE_GENESIS_INITIAL_NAV) {
@@ -245,27 +254,23 @@ export function GenesisDashboardPage({
 
   const closePaymentFlow = useCallback(() => setPaymentFlowProduct(null), []);
 
-  const navigateTo = useCallback((next) => {
-    const id = normalizeGenesisNav(next);
-    setNav(id);
-    if (typeof window === 'undefined') return;
-    const path = navToPath(id);
-    const cur = window.location.pathname.replace(/\/$/, '') || '/';
-    const norm = path.replace(/\/$/, '') || '/';
-    if (cur !== norm) {
-      window.history.pushState({ genesisNav: id }, '', path);
-    }
-  }, []);
+  const navigateTo = useCallback(
+    (next) => {
+      const id = normalizeGenesisNav(next);
+      setNav(id);
+      navigate(navToPath(id));
+    },
+    [navigate],
+  );
 
   const openMarketplace = useCallback(() => {
-    window.location.assign('/marketplace');
-  }, []);
+    navigate('/marketplace');
+  }, [navigate]);
 
   useEffect(() => {
-    const onPop = () => setNav(pathToNav(window.location.pathname));
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+    if (import.meta.env.VITE_GENESIS_INITIAL_NAV) return;
+    setNav(pathToNav(location.pathname));
+  }, [location.pathname]);
 
   const runClaim = async (type) => {
     if (!hasSession) {
@@ -416,7 +421,17 @@ export function GenesisDashboardPage({
   const isGenesisLobby = nav === 'genesis-lobby';
   const isImmersiveShell = isGpulseLobby || isGenesisLobby;
 
-  const totalLobbyBalanceUsd = ledgerNet + aigDisplay * 0.02;
+  const aigTicker = useAigPrice();
+  const aigUsdLobby = useUSDValue(aigDisplay);
+  const totalLobbyBalanceUsd = useMemo(() => ledgerNet + aigUsdLobby, [ledgerNet, aigUsdLobby]);
+  /** Central reward (AIG): protocol slice of AIG balance + 2% of ledger USDT converted at oracle (not a raw USDT×0.02 as AIG). */
+  const centralRewardBalanceAig = useMemo(
+    () =>
+      effectiveHasSession
+        ? Math.max(0, aigDisplay * 0.1 + usdToAig(Math.max(0, ledgerNet) * 0.02))
+        : 0,
+    [effectiveHasSession, aigDisplay, ledgerNet, aigTicker.price],
+  );
   const miningInvestedTotal = useMemo(
     () =>
       miningLive.cores.filter((c) => c.type === 'mining').reduce((s, c) => s + (Number(c.contribution) || 0), 0),
@@ -460,11 +475,12 @@ export function GenesisDashboardPage({
 
   return (
     <div className="relative isolate min-h-screen min-h-[100dvh] overflow-x-hidden font-display text-slate-200">
-      <HologramBackground />
+      {SHOW_HOLOGRAM && <HologramBackground />}
       <LivingBackground />
-      <HologramEntity />
+      {SHOW_HOLOGRAM && <HologramEntity />}
       <div className="relative z-[2] min-h-screen min-h-[100dvh]">
       {needsTermsAcceptance ? <TermsAcceptanceModal /> : null}
+      <AigPriceContext.Provider value={aigTicker}>
       <CoreProvider
         mining={mining}
         network={networkForCore}
@@ -525,10 +541,12 @@ export function GenesisDashboardPage({
               loading={loading}
               walletLoaded={Boolean(wallet || isSimulationMode)}
               stakingEconomy={stakingEconomy}
+              centralRewardBalanceAig={centralRewardBalanceAig}
             />
           ) : null}
         </LedgerProvider>
       </CoreProvider>
+      </AigPriceContext.Provider>
       {!needsTermsAcceptance && nav !== 'support' && nav !== 'gpulse-lobby' && nav !== 'genesis-lobby' ? (
         <ChatWidgetPlaceholder />
       ) : null}

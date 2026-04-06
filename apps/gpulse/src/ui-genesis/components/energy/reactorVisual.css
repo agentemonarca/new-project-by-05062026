@@ -1,5 +1,57 @@
 /* ReactorVisual — lightweight CSS animations (Framer Motion handles transforms) */
 
+/* Responsive bounds: caps reactor footprint so glow does not overlap side panels */
+.reactor-visual-bounds {
+  container-type: size;
+  container-name: reactor;
+  width: min(280px, 72vw);
+  height: min(280px, 72vw);
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .reactor-visual-bounds {
+    width: min(320px, 65vw);
+    height: min(320px, 65vw);
+  }
+}
+
+@media (min-width: 1024px) {
+  .reactor-visual-bounds {
+    width: min(400px, 60vw);
+    height: min(400px, 60vw);
+  }
+}
+
+/* Inner design is 176px (Tailwind h-44 w-44); scale to fill bounded square */
+.reactor-visual-scaled-shell {
+  width: 176px;
+  height: 176px;
+  flex-shrink: 0;
+  transform: scale(calc(100cqw / 176px));
+  transform-origin: center center;
+}
+
+@supports not (container-type: size) {
+  .reactor-visual-scaled-shell {
+    transform: scale(1.35);
+  }
+  @media (min-width: 640px) {
+    .reactor-visual-scaled-shell {
+      transform: scale(1.65);
+    }
+  }
+  @media (min-width: 1024px) {
+    .reactor-visual-scaled-shell {
+      transform: scale(2.05);
+    }
+  }
+}
+
 @keyframes reactor-idle-glow {
   0%,
   100% {

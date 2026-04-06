@@ -3,7 +3,6 @@
  */
 
 import { getAigPriceUsd, totalAigVolumeUnits } from '../payment/dualTokenPayment.js';
-import { USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
 
 /** Cashback rate on amounts paid in each rail (1.5%). */
 export const HYBRID_CASHBACK_RATE = 0.015;

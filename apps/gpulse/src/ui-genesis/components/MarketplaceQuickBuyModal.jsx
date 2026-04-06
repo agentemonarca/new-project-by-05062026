@@ -11,6 +11,7 @@ import {
   getProductCtaLabel,
 } from '../marketplace/impactEngine.js';
 import { getAigPriceUsd } from '../payment/dualTokenPayment.js';
+import { usdToAig } from '../../utils/pricing.js';
 
 function AnimatedSplitBars({ aigPercent, reduceMotion }) {
   const aig = Math.min(100, Math.max(0, aigPercent));
@@ -190,7 +191,7 @@ export function MarketplaceQuickBuyModal({ open, product, onClose, onConfirm }) 
                   </div>
                   <div className="flex justify-between text-slate-400">
                     <span className="text-slate-500">USD → AIG equiv.</span>
-                    <span>{(priceUSD / aigOracle).toFixed(2)} AIG (full price)</span>
+                    <span>{usdToAig(priceUSD).toFixed(2)} AIG (full price)</span>
                   </div>
                 </div>
               </div>

@@ -18,6 +18,11 @@ export { StatCard } from './components/StatCard.jsx';
 export { SidebarItem } from './components/SidebarItem.jsx';
 export { Topbar } from './components/Topbar.jsx';
 export { GenesisChromeContextBar } from './components/GenesisChromeContextBar.jsx';
+export {
+  GpulseChromeButton,
+  deriveGpulseNavVisualState,
+  GPULSE_NAV_STATE,
+} from './components/GpulseChromeButton.jsx';
 export { GenesisNotificationCenter } from './components/GenesisNotificationCenter.jsx';
 export { useGenesisNotificationStore } from './stores/genesisNotificationStore.js';
 export {
@@ -49,6 +54,11 @@ export { useTermsAcceptanceStore } from './stores/termsAcceptanceStore.js';
 export { useUiModeStore } from './stores/uiModeStore.js';
 export { useSimulationModeStore } from './stores/simulationModeStore.js';
 export { buildFullSimulationDataset, buildSimulationLedgerEvents, simulationJitter } from './simulation/buildSimulationDataset.js';
+export {
+  createGpulseOutcomeEngineState,
+  advanceGpulseOutcome,
+  drawGpulseOutcomeDemo,
+} from './simulation/gpulseOutcomeEngine.js';
 export { SimulationModeToggle } from './components/SimulationModeToggle.jsx';
 export { UiModeToggle } from './components/UiModeToggle.jsx';
 
@@ -73,9 +83,17 @@ export {
   PAYMENT_MODULE_RULES,
   normalizePaymentModule,
   catalogCategoryToModule,
-  validateUsdEquivalence,
+  validateLegsSumMatchesPrice,
   getPaymentSplit,
 } from './payment/paymentRuleEngine.js';
+export {
+  getAigPrice,
+  usdToAig,
+  aigToUsd,
+  validateUsdEquivalence,
+  assertPaymentMatchesPrice,
+  PRICING_EPS,
+} from '../utils/pricing.js';
 export { executeDualTokenPayment } from '../utils/dualTokenExecution.js';
 export { usePaymentLedgerStore } from './stores/paymentLedgerStore.js';
 export { useMerchantDebtStore } from './stores/merchantDebtStore.js';

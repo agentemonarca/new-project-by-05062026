@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -57,6 +58,7 @@ const ACTIVITY_BADGE = /** @type {const} */ ({
  * Near-me economy: map + list, filters, merchant profile, mock Web3 checkout.
  */
 export default function LocalMarketplacePage() {
+  const navigate = useNavigate();
   const wallet = useOptionalWallet();
   const core = useOptionalCore();
   const userLat = useLocalMarketplaceUserStore((s) => s.userLat);
@@ -309,14 +311,14 @@ export default function LocalMarketplacePage() {
             </button>
             <button
               type="button"
-              onClick={() => window.location.assign('/marketplace/merchant')}
+              onClick={() => navigate('/marketplace/merchant')}
               className="inline-flex items-center gap-2 rounded-xl border border-violet-500/35 bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-100 hover:border-violet-400/50"
             >
               Full merchant hub
             </button>
             <button
               type="button"
-              onClick={() => window.location.assign('/marketplace')}
+              onClick={() => navigate('/marketplace')}
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-300 hover:border-cyan-500/30 hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -324,7 +326,7 @@ export default function LocalMarketplacePage() {
             </button>
             <button
               type="button"
-              onClick={() => window.location.assign('/')}
+              onClick={() => navigate('/')}
               className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white"
             >
               Home
@@ -380,7 +382,7 @@ export default function LocalMarketplacePage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.location.assign('/marketplace/merchant')}
+                  onClick={() => navigate('/marketplace/merchant')}
                   className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:text-white"
                 >
                   Open full hub

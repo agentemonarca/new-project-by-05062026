@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Topbar } from '../components/Topbar.jsx';
 import { GlassCard } from '../components/GlassCard.jsx';
@@ -29,6 +30,8 @@ import { GenesisChromeContextBar } from '../components/GenesisChromeContextBar.j
 import { GenesisNotificationCenter } from '../components/GenesisNotificationCenter.jsx';
 import { UiModeToggle } from '../components/UiModeToggle.jsx';
 import { SimulationModeToggle } from '../components/SimulationModeToggle.jsx';
+import { useWallet } from '../../context/WalletContext.jsx';
+import { useGenesisDashboardStore } from '../stores/genesisDashboardStore.js';
 
 /**
  * Dashboard shell layout — module-scoped so React does not remount the tree on every parent render.
@@ -80,8 +83,23 @@ export function GenesisDashboardLayout({
   loading,
   walletLoaded,
   stakingEconomy,
+  centralRewardBalanceAig = 0,
 }) {
   const ctx = useCore();
+  const navigate = useNavigate();
+  const { address: web3Address, connectWallet, disconnectWallet, isConnecting } = useWallet();
+  const signOut = useGenesisDashboardStore((s) => s.signOut);
+
+  const onHeaderWeb3Action = useCallback(() => {
+    if (web3Address) {
+      void signOut();
+      disconnectWallet();
+    } else {
+      void connectWallet().catch(() => {});
+    }
+  }, [web3Address, connectWallet, disconnectWallet, signOut]);
+
+  const onGoToWallet = useCallback(() => navigateTo('wallet'), [navigateTo]);
 
   useEffect(() => {
     if (!isSidebarOpen) return undefined;
@@ -117,7 +135,7 @@ export function GenesisDashboardLayout({
           activeId={nav}
           onSelect={(id) => {
             if (id === 'marketplace') {
-              window.location.assign('/marketplace');
+              navigate('/marketplace');
               return;
             }
             navigateTo(id);
@@ -150,10 +168,19 @@ export function GenesisDashboardLayout({
             walletAddress={walletAddress}
             balanceUsd={totalLobbyBalanceUsd}
             balanceLoading={Boolean(hasSession && loading && !walletLoaded && !isSimulationMode)}
-            primaryLabel={hasSession ? 'Cartera' : 'Empezar'}
-            onPrimaryAction={() => navigateTo(hasSession ? 'wallet' : 'dashboard')}
+            primaryLabel={web3Address ? 'Disconnect' : 'Connect'}
+            primaryDisabled={isConnecting}
+            onPrimaryAction={onHeaderWeb3Action}
             trailing={
               <>
+                <button
+                  type="button"
+                  onClick={() => navigate('/onboarding?ref=demo')}
+                  className="hidden shrink-0 rounded-lg border border-orange-500/35 bg-orange-500/10 px-2 py-1.5 text-[10px] font-semibold text-orange-100/95 transition hover:bg-orange-500/15 sm:inline-flex"
+                  title="Simular entrada con referido (demo)"
+                >
+                  🔥 Onboarding Preview
+                </button>
                 <SimulationModeToggle className="shrink-0" />
                 <UiModeToggle className="shrink-0" />
                 {isImmersiveShell ? <GenesisNotificationCenter {...notificationProps} /> : null}
@@ -176,6 +203,7 @@ export function GenesisDashboardLayout({
               rateUsdtPerSecond={ctx.totalYieldUsdtPerSecond}
               navigateTo={navigateTo}
               notificationProps={notificationProps}
+              gpulseLobbyActive={isGpulseLobby}
             />
           )}
         </div>
@@ -263,14 +291,14 @@ export function GenesisDashboardLayout({
                   userHasActiveStaking={userHasActiveStaking}
                   referralActive={referralActive}
                   userEconomicallyActive={userEconomicallyActive}
-                  onGoToWallet={() => navigateTo('wallet')}
+                  onGoToWallet={onGoToWallet}
                 />
               ) : null}
 
               {nav === 'mining' ? (
                 <MiningCoreSystem
                   hideNonWalletFinancialActions
-                  onGoToWallet={() => navigateTo('wallet')}
+                  onGoToWallet={onGoToWallet}
                   onActivatePurchase={openPaymentFlow ? () => openPaymentFlow('mining') : undefined}
                   onOpenMiningWarning={onOpenMiningWarning}
                 />
@@ -280,16 +308,16 @@ export function GenesisDashboardLayout({
                 <BoosterPage
                   onInject={openPaymentFlow ? () => openPaymentFlow('booster') : openPurchase}
                   hideNonWalletFinancialActions
-                  onGoToWallet={() => navigateTo('wallet')}
+                  onGoToWallet={onGoToWallet}
                 />
               ) : null}
 
               {nav === 'staking' ? (
                 <StakingPage
                   onStake={openPaymentFlow ? () => openPaymentFlow('staking') : openPurchase}
-                  onWithdraw={() => navigateTo('wallet')}
+                  onWithdraw={onGoToWallet}
                   hideNonWalletFinancialActions
-                  onGoToWallet={() => navigateTo('wallet')}
+                  onGoToWallet={onGoToWallet}
                   economy={stakingEconomy}
                 />
               ) : null}
@@ -313,7 +341,7 @@ export function GenesisDashboardLayout({
                   }
                   accountFrozen={accountFrozen}
                   userEconomicallyActive={userEconomicallyActive}
-                  centralRewardBalanceAig={hasSession ? Math.max(0, aigDisplay * 0.1 + ledgerNet * 0.02) : 0}
+                  centralRewardBalanceAig={centralRewardBalanceAig}
                   onClaimAll={claimAllFromDashboard}
                   onWithdraw={onOpenWithdraw ?? (() => {})}
                 />

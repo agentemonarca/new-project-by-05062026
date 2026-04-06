@@ -16,7 +16,8 @@ import { StakingHistory } from './StakingHistory.jsx';
 import { StakingActions } from './StakingActions.jsx';
 import ProtocolDisclaimer from '../ProtocolDisclaimer.jsx';
 import { RuleHint } from '../RuleHint.jsx';
-import { USDT_TO_AIG_DISPLAY, coreRemainingUsdt, getStakingLockedAig } from '../../types/miningCore.js';
+import { coreRemainingUsdt, getStakingLockedAig } from '../../types/miningCore.js';
+import { usdToAig } from '../../../utils/pricing.js';
 import { staggerContainer, fadeUpBlur } from '../../motion/variants.js';
 import { useCore } from '../../core/CoreContext.jsx';
 import { useStakingEngineStore } from '../../stores/stakingEngineStore.js';
@@ -58,7 +59,7 @@ export function StakingPage({
     }, 0);
   }, [stakingCores]);
 
-  const rateAigPerSecond = rateUsdtPerSecond * USDT_TO_AIG_DISPLAY;
+  const rateAigPerSecond = usdToAig(rateUsdtPerSecond);
 
   const participationActive = useMemo(
     () => stakingCores.some((c) => coreRemainingUsdt(c) > 0),

@@ -16,9 +16,11 @@ import { useWallet } from '../context/WalletContext.jsx';
 import { GenesisPreviewWalletBridgeContext } from '../context/GenesisPreviewWalletBridge.jsx';
 import { useGenesisDashboardStore } from './stores/genesisDashboardStore.js';
 import { getBackendBaseUrl, getTxExplorerUrl } from './api/genesisConfig.js';
+import { useNavigate } from 'react-router-dom';
 
 /** Full design-system sandbox: switch auth / dashboard + open any modal. */
 function GenesisDesignPreview() {
+  const navigate = useNavigate();
   const walletApi = useWallet();
   const { address, expectedChainId } = walletApi;
   const deposit = useGenesisDashboardStore((s) => s.deposit);
@@ -64,8 +66,15 @@ function GenesisDesignPreview() {
         <GradientButton variant="ghost" className="!py-1.5 !text-xs" onClick={() => setDisclaimer(true)}>
           Disclaimer
         </GradientButton>
-        <GradientButton variant="ghost" className="!py-1.5 !text-xs" onClick={() => setMining(true)}>
+        <GradientButton variant="ghost" className="!py-1.5 !text-xs" onClick={() => setProcessing(true)}>
           Mining
+        </GradientButton>
+        <GradientButton
+          variant="ghost"
+          className="!border !border-orange-500/35 !bg-orange-500/10 !py-1.5 !text-xs !font-semibold !text-orange-100/95"
+          onClick={() => navigate('/onboarding?ref=demo')}
+        >
+          🔥 Onboarding Preview
         </GradientButton>
         <GradientButton variant="ghost" className="!py-1.5 !text-xs" onClick={() => setPurchase(true)}>
           Purchase

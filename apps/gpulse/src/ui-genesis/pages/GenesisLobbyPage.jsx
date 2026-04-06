@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
+import GenesisHologram from "../components/GenesisHologram";
 import { motion, useReducedMotion } from 'framer-motion';
 import {
   Binary,
@@ -23,6 +24,8 @@ import { useCore } from '../core/CoreContext.jsx';
 import { fadeUpBlur, staggerContainer } from '../motion/variants.js';
 import { RuleHint } from '../components/RuleHint.jsx';
 import { useUiModeStore } from '../stores/uiModeStore.js';
+import { BRAND } from '@/branding/brand.js';
+import { BrandLogo } from '@/branding/BrandLogo.jsx';
 
 const FEED_ITEMS = [
   { id: '1', text: 'WhaleX hizo staking de $5,000', tone: 'cyan' },
@@ -61,7 +64,7 @@ export function GenesisLobbyPage({
   userEconomicallyActive,
   minHoldingPct,
 }) {
-  const reduceMotion = useReducedMotion();
+  const shouldReduceMotion = useReducedMotion();
   const uiMode = useUiModeStore((s) => s.uiMode);
   const isLite = uiMode === 'lite';
   const { leftPts, rightPts, totalYieldUsdtPerSecond, hasSession: coreSession } = useCore();
@@ -156,6 +159,7 @@ export function GenesisLobbyPage({
 
   return (
     <div className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <GenesisHologram />
       <div
         className="pointer-events-none absolute inset-0 opacity-90"
         aria-hidden
@@ -168,7 +172,7 @@ export function GenesisLobbyPage({
         className="pointer-events-none absolute -left-24 top-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl"
         aria-hidden
         animate={
-          reduceMotion
+          shouldReduceMotion
             ? {}
             : {
                 opacity: [0.35, 0.55, 0.35],
@@ -181,7 +185,7 @@ export function GenesisLobbyPage({
         className="pointer-events-none absolute -right-20 bottom-32 h-80 w-80 rounded-full bg-violet-500/12 blur-3xl"
         aria-hidden
         animate={
-          reduceMotion
+          shouldReduceMotion
             ? {}
             : {
                 opacity: [0.3, 0.5, 0.3],
@@ -221,23 +225,22 @@ export function GenesisLobbyPage({
               </span>
             </div>
           )}
+          <div className={`mb-4 flex justify-center ${isLite ? '' : 'md:justify-start'}`}>
+            <BrandLogo size={isLite ? 'md' : 'lg'} />
+          </div>
           <h1
             className={`font-display font-bold leading-[1.08] tracking-tight text-white ${
               isLite ? 'text-3xl md:text-4xl' : 'text-4xl md:text-5xl lg:text-6xl'
             }`}
           >
             {isLite ? (
-              <span className="bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-500 bg-clip-text text-transparent">
-                AiGenesis
-              </span>
+              <span className={BRAND.shell.wordmarkGradient}>{BRAND.name}</span>
             ) : (
               <>
                 <span className="bg-gradient-to-r from-white via-cyan-100 to-white bg-clip-text text-transparent">
                   Bienvenido a{' '}
                 </span>
-                <span className="bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-500 bg-clip-text text-transparent">
-                  AiGenesis
-                </span>
+                <span className={BRAND.shell.wordmarkGradient}>{BRAND.name}</span>
               </>
             )}
           </h1>
@@ -255,7 +258,7 @@ export function GenesisLobbyPage({
                   modalContent={
                     <div className="space-y-3 text-slate-300">
                       <p>
-                        El uso de AiGenesis implica aceptar las reglas de participación, incluidas binario (match por lado menor,
+                        El uso de {BRAND.name} implica aceptar las reglas de participación, incluidas binario (match por lado menor,
                         consumo de volumen), posible reducción mensual de arrastre en piernas, staking y umbral de holding en AIG
                         mostrado en la app.
                       </p>
@@ -413,7 +416,7 @@ export function GenesisLobbyPage({
         {isLite ? (
           <motion.section variants={fadeUpBlur}>
             <h2 className="mb-3 font-display text-lg font-semibold text-white md:text-xl">Acciones rápidas</h2>
-            <p className="mb-3 text-xs text-slate-500">Operaciones financieras en Wallet.</p>
+            <p className="mb-3 text-xs text-slate-500">Operaciones financieras en Portfolio (cuenta interna).</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <NeonButton type="button" variant="outline" className="!min-w-0 w-full" onClick={() => onNavigate('mining')}>
                 Minería
@@ -431,7 +434,7 @@ export function GenesisLobbyPage({
                 onClick={() => onNavigate('wallet')}
               >
                 <Wallet className="mr-2 inline h-4 w-4" strokeWidth={1.75} />
-                Wallet
+                Portfolio
               </NeonButton>
             </div>
           </motion.section>
@@ -456,7 +459,7 @@ export function GenesisLobbyPage({
               return (
                 <motion.div
                   key={m.id}
-                  whileHover={reduceMotion ? undefined : { scale: 1.02 }}
+                  whileHover={shouldReduceMotion ? undefined : { scale: 1.02 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 26 }}
                   className="group relative"
                 >
@@ -546,7 +549,7 @@ export function GenesisLobbyPage({
             {!userEconomicallyActive && hasSession ? (
               <motion.p
                 className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/95"
-                animate={reduceMotion ? {} : { opacity: [0.92, 1, 0.92] }}
+                animate={shouldReduceMotion ? {} : { opacity: [0.92, 1, 0.92] }}
                 transition={{ duration: 3, repeat: Infinity }}
               >
                 No estás generando ingresos actualmente
@@ -559,7 +562,7 @@ export function GenesisLobbyPage({
         {!isLite ? (
         <motion.section variants={fadeUpBlur} className="pb-4">
           <h2 className="mb-4 font-display text-lg font-semibold text-white md:text-xl">Acciones rápidas</h2>
-          <p className="mb-3 text-xs text-slate-500">Reclamaciones y retiros solo en Wallet.</p>
+          <p className="mb-3 text-xs text-slate-500">Reclamaciones y retiros solo en Portfolio.</p>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <NeonButton type="button" variant="outline" className="!min-w-0 flex-1" onClick={() => onNavigate('mining')}>
               Minería
@@ -577,7 +580,7 @@ export function GenesisLobbyPage({
               onClick={() => onNavigate('wallet')}
             >
               <Wallet className="mr-2 inline h-4 w-4" strokeWidth={1.75} />
-              Wallet
+              Portfolio
             </NeonButton>
           </div>
         </motion.section>

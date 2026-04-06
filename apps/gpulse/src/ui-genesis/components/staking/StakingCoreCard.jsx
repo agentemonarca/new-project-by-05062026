@@ -3,7 +3,6 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { AnimatedMetric } from '../AnimatedMetric.jsx';
 import { GradientButton } from '../GradientButton.jsx';
 import {
-  USDT_TO_AIG_DISPLAY,
   coreRemainingUsdt,
   getStakingLockedAig,
   isStakingFlexible,
@@ -11,6 +10,7 @@ import {
   stakingLockTimeProgress01,
   stakingProgramLabel,
 } from '../../types/miningCore.js';
+import { usdToAig } from '../../../utils/pricing.js';
 
 function coreDisplayIndex(core) {
   const tail = core.id.split('-').pop();
@@ -148,7 +148,7 @@ export function StakingCoreCard({
               <p className="font-mono text-sm text-slate-300">
                 ≈{' '}
                 <AnimatedMetric
-                  value={core.accumulated * USDT_TO_AIG_DISPLAY}
+                  value={usdToAig(core.accumulated)}
                   format={(v) => Number(v).toFixed(2)}
                 />{' '}
                 AIG

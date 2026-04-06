@@ -1,5 +1,9 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Service account / PEM fields must NEVER ship to the browser.
@@ -66,6 +70,7 @@ export default defineConfig(({ mode }) => {
     plugins,
     resolve: {
       alias: {
+        '@': path.resolve(__dirname, 'src'),
         buffer: 'buffer',
       },
       /** One React instance → Context matches across lazy chunks and linked deps */

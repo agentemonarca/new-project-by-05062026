@@ -14,6 +14,7 @@ import { WalletProvider } from './context/WalletContext.jsx';
 import { installBackofficeAuthSync } from './bridge/backofficeAuthSync.ts';
 import { getApiBaseUrl } from './ui-genesis/api/genesisConfig.js';
 import { GenesisErrorBoundary } from './ui-genesis/components/GenesisErrorBoundary.jsx';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 /** Relative path from this file (`src/main.jsx`) — required for stable Vite dynamic chunks */
 const GenesisDesignPreview = lazy(() => import('./ui-genesis/GenesisDesignPreview.jsx'));
@@ -23,14 +24,10 @@ const MerchantDashboardPage = lazy(() => import('./ui-genesis/pages/MerchantDash
 const AdminCoreApp = lazy(() =>
   import('./ui-genesis/AdminCoreApp.jsx').then((m) => ({ default: m.AdminCoreApp })),
 );
+const OnboardingRegisterPreviewPage = lazy(() => import('./ui-genesis/pages/OnboardingRegisterPreviewPage.jsx'));
+const OnboardingInvitePage = lazy(() => import('./ui-genesis/onboarding/OnboardingInvitePage.jsx'));
 
-/** Isolated admin control plane (`/admin`, `/admin-core`, `/admin-core/...`). */
-function isAdminCorePath(pathname) {
-  const p = (pathname || '/').replace(/\/$/, '') || '/';
-  return p === '/admin' || p === '/admin-core' || p.startsWith('/admin-core/');
-}
-
-/** Same idea as `<Route path="/ping" element={...} />` — no extra router dep (monorepo uses `workspace:*`). */
+/** Health check route (see `AppRoutes`). */
 function PingRoute() {
   return <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 font-mono text-base text-emerald-400">Frontend running 🚀</div>;
 }
@@ -154,21 +151,70 @@ function AdminCoreShell() {
   );
 }
 
+function RegisterPreviewShell() {
+  return (
+    <GenesisErrorBoundary>
+      <WalletProvider>
+        <Suspense
+          fallback={
+            <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 font-display text-orange-200/90">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-orange-400/30 border-t-orange-400" />
+              <p className="text-sm">Cargando onboarding…</p>
+            </div>
+          }
+        >
+          <OnboardingRegisterPreviewPage />
+        </Suspense>
+      </WalletProvider>
+    </GenesisErrorBoundary>
+  );
+}
+
+function OnboardingInviteShell() {
+  return (
+    <GenesisErrorBoundary>
+      <WalletProvider>
+        <Suspense
+          fallback={
+            <div
+              className="flex min-h-screen flex-col items-center justify-center gap-3 font-display text-cyan-200/90"
+              style={{ backgroundColor: '#0b0f1a' }}
+            >
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
+              <p className="text-sm tracking-wide">AiGenesis · Invitación…</p>
+            </div>
+          }
+        >
+          <OnboardingInvitePage />
+        </Suspense>
+      </WalletProvider>
+    </GenesisErrorBoundary>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/ping" element={<PingRoute />} />
+      <Route path="/gpulse" element={<GpulseMainApp />} />
+      <Route path="/marketplace" element={<GenesisMarketplaceShell />} />
+      <Route path="/marketplace/local" element={<LocalMarketplaceShell />} />
+      <Route path="/marketplace/merchant" element={<MerchantOnboardingShell />} />
+      <Route path="/admin" element={<AdminCoreShell />} />
+      <Route path="/admin-core/*" element={<AdminCoreShell />} />
+      <Route path="/register" element={<RegisterPreviewShell />} />
+      <Route path="/onboarding" element={<OnboardingInviteShell />} />
+      <Route path="*" element={<MainShell />} />
+    </Routes>
+  );
+}
+
 function Root() {
-  if (typeof window !== 'undefined') {
-    const path = window.location.pathname.replace(/\/$/, '') || '/';
-    if (path === '/ping') return <PingRoute />;
-    /** Main G-Pulse shell (full app) — linked from Genesis dashboard CTA */
-    if (path === '/gpulse') return <GpulseMainApp />;
-    /** Genesis marketplace (mock catalog; API later) */
-    if (path === '/marketplace') return <GenesisMarketplaceShell />;
-    /** Geolocation merchants — map + list (demo data; API later) */
-    if (path === '/marketplace/local') return <LocalMarketplaceShell />;
-    if (path === '/marketplace/merchant') return <MerchantOnboardingShell />;
-    /** Admin Core — separate from user Genesis shell */
-    if (isAdminCorePath(path)) return <AdminCoreShell />;
-  }
-  return <MainShell />;
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
+  );
 }
 
 if (import.meta.env.DEV && import.meta.env.VITE_VERBOSE_BOOT === '1') {

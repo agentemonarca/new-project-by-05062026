@@ -19,7 +19,8 @@ import { AnimatedMetric } from '../components/AnimatedMetric.jsx';
 import { useCore } from '../core/CoreContext.jsx';
 import { multiplierFromBooster } from '../core/energyEngine.js';
 import { staggerContainer, fadeUpBlur } from '../motion/variants.js';
-import { coreRemainingUsdt, coreProgress01, USDT_TO_AIG_DISPLAY } from '../types/miningCore.js';
+import { coreRemainingUsdt, coreProgress01 } from '../types/miningCore.js';
+import { usdToAig } from '../../utils/pricing.js';
 
 const TABS = [
   { id: 'mining', label: 'MINERÍA' },
@@ -308,7 +309,7 @@ export function GenesisNftPage({ onNavigate }) {
                           <div className="flex justify-between gap-2">
                             <dt className="text-slate-500">AIG /s (vista)</dt>
                             <dd className="font-mono text-xs text-slate-400">
-                              {(core.ratePerSecond * USDT_TO_AIG_DISPLAY).toFixed(6)}
+                              {usdToAig(core.ratePerSecond).toFixed(6)}
                             </dd>
                           </div>
                         </dl>

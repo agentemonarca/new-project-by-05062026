@@ -1,6 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ChevronsLeft, ChevronsRight, Menu, Sparkles } from 'lucide-react';
+import { useAigPriceFromContext } from '@/hooks/useAigPrice.js';
+import { ChevronsLeft, ChevronsRight, Menu } from 'lucide-react';
+import { BRAND } from '@/branding/brand.js';
+import { BrandLogo } from '@/branding/BrandLogo.jsx';
 import { GradientButton } from './GradientButton.jsx';
 
 function shortAddr(addr) {
@@ -18,7 +21,7 @@ function formatUsd(n) {
 }
 
 /**
- * Minimal Web3 top bar: logo · single status · wallet + balance + one primary CTA.
+ * Top bar: logo · status · Web3 address · protocol balance · AIG ticker · Web3 Connect/Disconnect (no internal Portfolio link).
  *
  * @param {{
  *   onMenu: () => void,
@@ -32,6 +35,7 @@ function formatUsd(n) {
  *   balanceUsd: number | null | undefined,
  *   balanceLoading?: boolean,
  *   primaryLabel: string,
+ *   primaryDisabled?: boolean,
  *   onPrimaryAction: () => void,
  *   trailing?: React.ReactNode,
  * }} props
@@ -48,9 +52,11 @@ export function Topbar({
   balanceUsd,
   balanceLoading = false,
   primaryLabel,
+  primaryDisabled = false,
   onPrimaryAction,
   trailing = null,
 }) {
+  const aig = useAigPriceFromContext();
   const active = Boolean(hasSession && userEconomicallyActive && !accountFrozen);
   let dotClass = 'bg-slate-500';
   if (hasSession && accountFrozen) dotClass = 'bg-rose-400';
@@ -93,13 +99,11 @@ export function Topbar({
             type="button"
             onClick={onLogoClick}
             className="flex min-w-0 items-center gap-2 rounded-lg text-left outline-none ring-cyan-400/0 transition hover:bg-white/[0.04] focus-visible:ring-2"
-            aria-label="Inicio AiGenesis"
+            aria-label={`Inicio ${BRAND.name}`}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-500/25 bg-gradient-to-br from-cyan-500/15 to-violet-600/15 text-cyan-200 shadow-[0_0_20px_-8px_rgba(34,211,238,0.4)]">
-              <Sparkles className="h-4 w-4" strokeWidth={1.75} />
-            </span>
+            <BrandLogo size="md" className="shrink-0" />
             <span className="hidden font-display text-sm font-semibold tracking-tight text-white sm:inline md:text-base">
-              AiGenesis
+              {BRAND.name}
             </span>
           </button>
         </div>
@@ -117,16 +121,49 @@ export function Topbar({
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 sm:flex-nowrap md:gap-4">
-          <div className="flex min-w-0 flex-col items-end text-right">
+          <div
+            className="flex min-w-0 flex-col items-end text-right"
+            title={
+              walletAddress
+                ? 'Dirección Web3 (conexión en cadena). El importe es saldo de cuenta en protocolo (Portfolio), no el balance on-chain.'
+                : 'Conecta tu wallet Web3 con el botón Connect'
+            }
+          >
             <span className="font-mono text-[10px] text-slate-500 md:text-[11px]">
-              {hasSession ? shortAddr(walletAddress) : 'Wallet'}
+              {walletAddress ? (
+                <>
+                  <span className="text-slate-600">Web3 · </span>
+                  {shortAddr(walletAddress)}
+                </>
+              ) : (
+                <span className="text-slate-600">Web3 · sin conectar</span>
+              )}
             </span>
-            <span className="font-mono text-xs font-semibold tabular-nums text-white md:text-sm">{balanceShown}</span>
+            <span
+              className="font-mono text-xs font-semibold tabular-nums text-white md:text-sm"
+              title="Saldo estimado en protocolo (Portfolio)"
+            >
+              {balanceShown}
+            </span>
           </div>
+          {aig ? (
+            <div className="flex items-center gap-2 text-sm transition-all duration-300 ease-in-out">
+              <span className="text-slate-400">AIG</span>
+              <span className="font-semibold tabular-nums text-white">${aig.price}</span>
+              <span
+                className={`tabular-nums transition-all duration-300 ease-in-out ${
+                  aig.direction === 'up' ? 'text-green-400' : 'text-red-400'
+                }`}
+              >
+                {aig.direction === 'up' ? '▲' : '▼'} {aig.percent}%
+              </span>
+            </div>
+          ) : null}
           {trailing}
           <GradientButton
             type="button"
             className="!shrink-0 !rounded-xl !py-2 !px-4 !text-xs !font-semibold md:!px-5"
+            disabled={primaryDisabled}
             onClick={onPrimaryAction}
           >
             {primaryLabel}

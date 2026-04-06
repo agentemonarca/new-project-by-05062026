@@ -1,12 +1,13 @@
 import React from 'react';
 import { ChevronRight, Home } from 'lucide-react';
+import { BRAND } from '@/branding/brand.js';
 
 const LABELS = {
   dashboard: 'Inicio',
   mining: 'Minería',
   booster: 'AiG Booster',
   network: 'Red Binaria',
-  wallet: 'Wallet',
+  wallet: 'Portfolio',
   marketplace: 'Marketplace',
   gpulse: 'GPulse Oracle',
   'gpulse-lobby': 'GPulse Oracle',
@@ -35,7 +36,7 @@ export function DashboardBreadcrumb({ nav, onNavigate }) {
         className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium text-slate-400 transition hover:bg-white/5 hover:text-cyan-200/90"
       >
         <Home className="h-3 w-3" />
-        AiGenesis
+        {BRAND.name}
       </button>
       <ChevronRight className="h-3 w-3 shrink-0 text-slate-600" aria-hidden />
       <span className="font-semibold text-slate-200">{current}</span>

@@ -1,7 +1,19 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AnimatedMetric } from '../AnimatedMetric.jsx';
-import { USDT_TO_AIG_DISPLAY } from '../../types/miningCore.js';
+import { usdToAig } from '../../../utils/pricing.js';
 import { useCore } from '../../core/CoreContext.jsx';
+
+function formatAigBalanceInt(v) {
+  return `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })} AIG`;
+}
+
+function formatAigPerSecHighPrecision(v) {
+  return `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 8 })}`;
+}
+
+function formatRawAigPerSec(v) {
+  return `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 8 })} AIG/s`;
+}
 
 function Row({ label, children }) {
   return (
@@ -24,29 +36,23 @@ export function EnergyStats() {
     energy,
   } = useCore();
 
-  const rawAigPerSec = rawTotalRatePerSecond * USDT_TO_AIG_DISPLAY;
+  const rawAigPerSec = useMemo(
+    () => usdToAig(rawTotalRatePerSecond),
+    [rawTotalRatePerSecond],
+  );
 
   return (
     <div className="rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-4 backdrop-blur-md">
       <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Energy engine</p>
       <Row label="AIG balance (est.)">
-        <AnimatedMetric
-          value={aigBalance}
-          format={(v) => `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 })} AIG`}
-        />
+        <AnimatedMetric value={aigBalance} format={formatAigBalanceInt} />
       </Row>
       <Row label="AIG/s (engine)">
-        <AnimatedMetric
-          value={totalYieldAigPerSecond}
-          format={(v) => `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 8 })}`}
-        />
+        <AnimatedMetric value={totalYieldAigPerSecond} format={formatAigPerSecHighPrecision} />
       </Row>
       <Row label="Raw rate (protocol)">
         <span className="text-xs text-slate-400">
-          <AnimatedMetric
-            value={rawAigPerSec}
-            format={(v) => `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 8 })} AIG/s`}
-          />
+          <AnimatedMetric value={rawAigPerSec} format={formatRawAigPerSec} />
         </span>
       </Row>
       <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/[0.06] pt-3">

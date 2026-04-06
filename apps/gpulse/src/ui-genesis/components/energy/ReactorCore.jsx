@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { useAigPriceFromContext } from '@/hooks/useAigPrice.js';
 import { useCore } from '../../core/CoreContext.jsx';
 import { getEfficiency } from '../../core/nextActionEngine.js';
 import { ReactorVisual } from './ReactorVisual.jsx';
@@ -8,16 +9,35 @@ import { ReactorVisual } from './ReactorVisual.jsx';
 /** Same threshold as next-action engine (energy index 0–1). */
 const EFFICIENCY_WARN = 0.7;
 
-function ReactorBreakdownModal({ open, onClose, power, multiplier, networkBoost, stakingYield, energy }) {
+const BREAKDOWN_OVERLAY_INITIAL = { opacity: 0 };
+const BREAKDOWN_OVERLAY_ANIMATE = { opacity: 1 };
+const BREAKDOWN_OVERLAY_EXIT = { opacity: 0 };
+const BREAKDOWN_DIALOG_INITIAL = { y: 20, opacity: 0 };
+const BREAKDOWN_DIALOG_ANIMATE = { y: 0, opacity: 1 };
+const BREAKDOWN_DIALOG_EXIT = { y: 12, opacity: 0 };
+const BREAKDOWN_DIALOG_SPRING = { type: 'spring', stiffness: 380, damping: 34 };
+
+const ReactorBreakdownModal = memo(function ReactorBreakdownModal({
+  open,
+  onClose,
+  power,
+  multiplier,
+  networkBoost,
+  stakingYield,
+  energy,
+}) {
   const reduceMotion = useReducedMotion();
 
-  const rows = [
-    { label: 'Power', value: Number(power).toFixed(4), hint: 'mining engines (0–1)' },
-    { label: 'Multiplier', value: Number(multiplier).toFixed(3), hint: 'booster curve' },
-    { label: 'Network boost', value: `${Math.round(Number(networkBoost) * 100)}%`, hint: 'binary balance' },
-    { label: 'Staking yield', value: `${Math.round(Number(stakingYield) * 100)}%`, hint: 'participation' },
-    { label: 'Energy index', value: `${Math.round(Number(energy))} / 100`, hint: 'unified score' },
-  ];
+  const rows = useMemo(
+    () => [
+      { label: 'Power', value: Number(power).toFixed(4), hint: 'mining engines (0–1)' },
+      { label: 'Multiplier', value: Number(multiplier).toFixed(3), hint: 'booster curve' },
+      { label: 'Network boost', value: `${Math.round(Number(networkBoost) * 100)}%`, hint: 'binary balance' },
+      { label: 'Staking yield', value: `${Math.round(Number(stakingYield) * 100)}%`, hint: 'participation' },
+      { label: 'Energy index', value: `${Math.round(Number(energy))} / 100`, hint: 'unified score' },
+    ],
+    [power, multiplier, networkBoost, stakingYield, energy],
+  );
 
   return (
     <AnimatePresence mode="wait">
@@ -25,20 +45,25 @@ function ReactorBreakdownModal({ open, onClose, power, multiplier, networkBoost,
         <motion.div
           key="reactor-breakdown"
           className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          initial={BREAKDOWN_OVERLAY_INITIAL}
+          animate={BREAKDOWN_OVERLAY_ANIMATE}
+          exit={BREAKDOWN_OVERLAY_EXIT}
         >
-          <button type="button" className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm" aria-label="Close" onClick={onClose} />
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm"
+            aria-label="Close"
+            onClick={onClose}
+          />
           <motion.div
             role="dialog"
             aria-modal="true"
             aria-labelledby="reactor-breakdown-title"
             className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-cyan-500/25 bg-slate-950/95 shadow-[0_24px_80px_-20px_rgba(34,211,238,0.35)]"
-            initial={reduceMotion ? false : { y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={reduceMotion ? undefined : { y: 12, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 34 }}
+            initial={reduceMotion ? false : BREAKDOWN_DIALOG_INITIAL}
+            animate={BREAKDOWN_DIALOG_ANIMATE}
+            exit={reduceMotion ? undefined : BREAKDOWN_DIALOG_EXIT}
+            transition={BREAKDOWN_DIALOG_SPRING}
           >
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <h2 id="reactor-breakdown-title" className="font-display text-lg font-semibold text-white">
@@ -74,17 +99,16 @@ function ReactorBreakdownModal({ open, onClose, power, multiplier, networkBoost,
       ) : null}
     </AnimatePresence>
   );
-}
+});
 
 /**
  * Container: CoreContext → feedback edges → {@link ReactorVisual}.
- * Optional audio (hum / pulse) can be wired later behind a user gesture + preference flag — omitted to avoid autoplay policy issues.
- *
- * @param {{ className?: string }} props
+ * AIG spot label uses {@link AigPriceContext} when mounted under Genesis dashboard (null-safe).
  */
-export function ReactorCore({ className = '' }) {
-  if (import.meta.env.DEV) console.count('Reactor render');
+export const ReactorCore = memo(function ReactorCore({ className = '' }) {
   const core = useCore();
+  const aigTicker = useAigPriceFromContext();
+
   const {
     energy,
     reactorState,
@@ -97,7 +121,16 @@ export function ReactorCore({ className = '' }) {
     claimUi,
   } = core;
 
-  const showEfficiencyWarning = getEfficiency(core) < EFFICIENCY_WARN;
+  const showEfficiencyWarning = useMemo(
+    () => getEfficiency({ energy }) < EFFICIENCY_WARN,
+    [energy],
+  );
+
+  /** Simulated AIG/USD for reactor footer; omit line when context unavailable. */
+  const aigPriceForVisual = useMemo(() => {
+    const p = aigTicker?.price;
+    return typeof p === 'number' && Number.isFinite(p) ? p : null;
+  }, [aigTicker?.price]);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [feedback, setFeedback] = useState({ energy: 0, mult: 0, claim: 0 });
@@ -132,7 +165,7 @@ export function ReactorCore({ className = '' }) {
   const closeDetail = useCallback(() => setDetailOpen(false), []);
 
   useEffect(() => {
-    if (!detailOpen) return;
+    if (!detailOpen) return undefined;
     const onKey = (e) => {
       if (e.key === 'Escape') closeDetail();
     };
@@ -153,6 +186,7 @@ export function ReactorCore({ className = '' }) {
         multiplierFlashTick={feedback.mult}
         claimBurstTick={feedback.claim}
         onClick={openDetail}
+        aigPrice={aigPriceForVisual}
       />
       <ReactorBreakdownModal
         open={detailOpen}
@@ -165,4 +199,7 @@ export function ReactorCore({ className = '' }) {
       />
     </>
   );
-}
+});
+
+ReactorCore.displayName = 'ReactorCore';
+ReactorBreakdownModal.displayName = 'ReactorBreakdownModal';

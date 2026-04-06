@@ -3,7 +3,8 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { Pickaxe, Cpu, Layers } from 'lucide-react';
 import { GradientButton } from './GradientButton.jsx';
 import { AnimatedMetric } from './AnimatedMetric.jsx';
-import { USDT_TO_AIG_DISPLAY, coreRemainingUsdt } from '../types/miningCore.js';
+import { coreRemainingUsdt } from '../types/miningCore.js';
+import { usdToAig } from '../../utils/pricing.js';
 
 /** Reactor palette: glow + conic border + progress bar */
 const TYPE_REACTOR = {
@@ -157,7 +158,7 @@ export function MiningCoreCard({ core, onClaim, claiming, canClaim, hideFinancia
             <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">AIG (equiv.)</dt>
             <dd className="mt-0.5 font-mono text-violet-200/90">
               <AnimatedMetric
-                value={core.accumulated * USDT_TO_AIG_DISPLAY}
+                value={usdToAig(core.accumulated)}
                 format={(v) => `${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })} AIG`}
               />
             </dd>
