@@ -20,6 +20,7 @@ import { useGenesisDashboardStore } from '../stores/genesisDashboardStore.js';
 import { useGenesisRealtime } from '../hooks/useGenesisRealtime.js';
 import { useGenesisPolling } from '../hooks/useGenesisPolling.js';
 import { useGenesisWebSocketPlaceholder } from '../hooks/useGenesisWebSocketPlaceholder.js';
+import { useExternalSignals } from '../hooks/useExternalSignals.js';
 import { getTxExplorerUrl, getDevMockBearer } from '../api/genesisConfig.js';
 import { useWallet } from '../../context/WalletContext.jsx';
 import { useRuntimeTrace } from '../../utils/runtimeDiagnostics.js';
@@ -198,6 +199,7 @@ export function GenesisDashboardPage({
   useGenesisRealtime(Boolean(enableRealtime && hasSession && !isSimulationMode));
   useGenesisPolling(Boolean(enablePolling && hasSession && !isSimulationMode), 5000);
   useGenesisWebSocketPlaceholder(false);
+  useExternalSignals();
 
   useEffect(() => {
     if (!hasSession) return undefined;

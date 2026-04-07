@@ -9,6 +9,7 @@ import { EnergyStats } from '../energy/EnergyStats.jsx';
 import { NextActionCard } from '../NextActionCard.jsx';
 import { AIDecisionCard } from '../AIDecisionCard.jsx';
 import { ActivityFeed } from '../../widgets/ActivityFeed.jsx';
+import { ExternalSignalBoard } from '../signals/ExternalSignalBoard.jsx';
 import { useCore } from '../../core/CoreContext.jsx';
 import { useUiModeStore } from '../../stores/uiModeStore.js';
 import { fadeUpBlur, staggerContainer } from '../../motion/variants.js';
@@ -213,6 +214,10 @@ export const MainDashboardView = memo(function MainDashboardView({
             Añade {missing.toFixed(2)} USDT net al ledger para desbloquear acciones — mínimo {minHoldingUsdt} USDT.
           </p>
         ) : null}
+      </motion.section>
+
+      <motion.section variants={fadeUpBlur}>
+        <ExternalSignalBoard />
       </motion.section>
 
       {!canViewEarnings && hasSession ? (

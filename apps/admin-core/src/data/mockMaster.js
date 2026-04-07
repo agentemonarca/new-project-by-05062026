@@ -518,6 +518,17 @@ function seedSecurityByProject() {
   return base;
 }
 
+function readInitialAdminMongoSource() {
+  if (typeof window === 'undefined') return 'genesis';
+  try {
+    const s = localStorage.getItem('admin-core-mongo-source');
+    if (s === 'genesis' || s === 'winx' || s === 'gpulse') return s;
+  } catch {
+    /* ignore */
+  }
+  return 'genesis';
+}
+
 export function buildInitialState() {
   return {
     currentProject: PROJECT_IDS.gpulse,
@@ -542,6 +553,10 @@ export function buildInitialState() {
       loading: false,
       loadingByKey: {},
       isSwitchingProject: false,
+      /** Backend Mongo pool for `/api/admin/signals/*?source=` */
+      adminMongoSource: readInitialAdminMongoSource(),
+      /** Increments when `adminMongoSource` changes → refetch hooks */
+      adminMongoSourceRevision: 0,
     },
   };
 }

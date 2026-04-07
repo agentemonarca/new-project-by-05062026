@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import mongoose from 'mongoose';
 import { createRateLimiter } from '../../middlewares/rateLimitMiddleware.js';
+import { isGenesisMongoReady } from '../../db/connectBridge.js';
 import { getGenesisPlatformContext } from '../genesisPlatformSingleton.js';
 import { MongoGenesisStore } from '../store/MongoGenesisStore.js';
 import {
@@ -678,7 +678,7 @@ export function createGenesisPlatformRouter(deps) {
     '/observability/dashboard',
     asyncHandler(async (_req, res) => {
       const snap = getGenesisObservabilitySnapshot();
-      const mongoConnected = mongoose.connection.readyState === 1;
+      const mongoConnected = isGenesisMongoReady();
       const persistBackend = store instanceof MongoGenesisStore ? 'mongodb' : 'memory';
       let health = 'healthy';
       const notes = [];

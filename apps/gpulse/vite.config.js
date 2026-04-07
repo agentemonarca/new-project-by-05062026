@@ -53,7 +53,18 @@ export default defineConfig(({ mode }) => {
     define.__initial_auth_token = JSON.stringify(customToken);
   }
 
-  const plugins = [react()];
+  const plugins = [
+    react(),
+    {
+      name: 'dev-ready-banner-gpulse',
+      configureServer(server) {
+        server.httpServer?.once('listening', () => {
+          const port = server.config.server?.port ?? 5174;
+          console.log('✔ GPulse running on', port);
+        });
+      },
+    },
+  ];
   // When no custom token, `define` cannot emit a literal `undefined`. Declare the binding once so typeof checks behave like “unset”.
   if (!customToken) {
     plugins.push({
@@ -81,9 +92,9 @@ export default defineConfig(({ mode }) => {
       global: 'window',
     },
     server: {
-      /** Local live dev: fixed port when free; use `--port` CLI to override. */
+      /** Fail fast if 5174 is in use (no silent port bump). Override with `--port` if needed. */
       port: 5174,
-      strictPort: false,
+      strictPort: true,
       host: true,
       open: '/',
       /** Same-origin `/api` + `/auth` so SIWE session cookies work (browser → Vite → core-api). */
@@ -107,6 +118,11 @@ export default defineConfig(({ mode }) => {
               if (host) proxyReq.setHeader('X-Forwarded-Host', host);
             });
           },
+        },
+        '/socket.io': {
+          target: 'http://127.0.0.1:5050',
+          changeOrigin: true,
+          ws: true,
         },
       },
     },

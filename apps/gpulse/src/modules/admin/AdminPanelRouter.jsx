@@ -14,11 +14,7 @@ import { AdminNotificationsPage } from './pages/AdminNotificationsPage.jsx';
 import { AdminSecurityPage } from './pages/AdminSecurityPage.jsx';
 import { AdminAnalyticsPage } from './pages/AdminAnalyticsPage.jsx';
 import { AdminSystemPage } from './pages/AdminSystemPage.jsx';
-
-/**
- * @param {{ onNavigate?: (navId: string) => void }} props
- */
-export function AdminPanelRouter({ onNavigate: _onNavigate }) {
+export function AdminPanelRouter() {
   const activeModule = useAdminPanelStore((s) => s.activeModule);
   const setActiveModule = useAdminPanelStore((s) => s.setActiveModule);
 

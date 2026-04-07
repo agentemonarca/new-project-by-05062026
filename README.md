@@ -29,16 +29,50 @@ Modular Web3 operating system: **Backoffice** shell, **Génesis** legacy (iframe
 pnpm install
 ```
 
+## 🚀 Desarrollo rápido
+
+Un solo comando para **Core API**, **G-Pulse** y el **Admin Core** (backoffice opcional, Vite en `5190`):
+
+```bash
+npm install
+npm run dev:all
+```
+
+Solo API + G-Pulse (sin Admin Core):
+
+```bash
+npm run dev:main
+```
+
+Limpieza de puertos y arranque completo (`dev:all` tras liberar listeners):
+
+```bash
+npm run dev:start
+```
+
+Sin confirmación interactiva (CI o scripts; mata listeners en 5050 / 5174 / 5190 automáticamente):
+
+```bash
+npm run dev:start -- --force
+# equivalente: npm run dev:start:force
+# equivalente: DEV_START_FORCE=1 npm run dev:start
+```
+
+Los logs van prefijados (`CORE`, `GPULSE`, `BACKOFFICE`, `READY`). El proceso `READY` espera a que respondan `/health` (5050) y los frontends; al terminar verás mensajes del estilo `✔ Core API running on 5050` y `✔ GPulse running on 5174`.
+
+Requisitos: instala dependencias de cada app con `pnpm install` en la raíz (workspaces) antes del primer arranque; los scripts de servicio usan `npm run dev` dentro de cada carpeta.
+
 ## Local development
 
 Run services in separate terminals (ports are defaults):
 
-1. **Core API** — `pnpm dev:core-api` → `http://127.0.0.1:5050`
+1. **Core API** — `npm run dev:core-api` → `http://127.0.0.1:5050`
 2. **G-Pulse API** (optional forwarder) — `pnpm dev:gpulse-api` → `5052`
 3. **API Gateway** (optional) — `pnpm dev:api-gateway` → `4000`  
    - Leave `JWT_SECRET` unset for open `/api/*` during dev.
-4. **G-Pulse UI** — `pnpm dev:gpulse` → `http://localhost:5174`
-5. **Backoffice** — `pnpm dev:backoffice` → `http://localhost:5180`
+4. **G-Pulse UI** — `npm run dev:gpulse` → `http://localhost:5174`
+5. **Hub shell (backoffice principal)** — `npm run dev:hub` → `http://localhost:5180`
+6. **Admin Core** (opcional) — `npm run dev:backoffice` o `npm run dev:admin-core` → `http://localhost:5190`
 
 Legacy Génesis must be served separately at **`http://localhost:3000`** (or set `VITE_GENESIS_URL`).
 

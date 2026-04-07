@@ -10,17 +10,14 @@ export function createSocketServer(httpServer, { logger, corsOrigin = '*' } = {}
     cors: {
       origin: corsOrigin,
       methods: ['GET', 'POST'],
+      credentials: true,
     },
     pingInterval: 25_000,
     pingTimeout: 20_000,
   });
 
-  io.on('connection', (socket) => {
-    logger?.info?.('socket_connected', { id: socket.id });
-    socket.on('disconnect', () => {
-      logger?.info?.('socket_disconnected', { id: socket.id });
-    });
-  });
+  // No `io.on('connection')` aquí: eso es el namespace por defecto `/` y confunde el debug
+  // frente a `/admin-signals`. Los emits del hub (`socketHub.js`) siguen siendo `io.emit(...)`.
 
   return io;
 }

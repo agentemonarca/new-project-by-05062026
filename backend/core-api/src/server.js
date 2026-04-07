@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createServer as createNetServer } from 'node:net';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -24,6 +25,7 @@ import {
   getClientIp,
   keyByAuthAddressOrIp,
   keyByIpAndOptionalAuthAddress,
+  rateLimitUnless,
 } from './middlewares/rateLimitMiddleware.js';
 import { computeSystemHealth } from './services/systemHealthService.js';
 import { createTtlCache } from './infra/ttlCache.js';
@@ -38,10 +40,34 @@ import { createDepositCompensationBridge } from './services/depositCompensationB
 import session from 'express-session';
 import { siweAuthRoutes } from './routes/siweAuthRoutes.js';
 import { createApiSessionAuthMiddleware } from './middlewares/apiSessionAuthMiddleware.js';
+import { adminAuthRoutes } from './routes/adminAuthRoutes.js';
+import { registerAdminSignalsApiRoutes, attachAdminSignalsIo } from './admin-signals/index.js';
+import { startSignalMetricsDailyAggregation } from './admin-signals/signalMetricsDailyJob.js';
+import { startSignalAutoResponseScheduler } from './admin-signals/signalAutoResponseService.js';
+import { runMongoStartupVerify } from './db/mongoStartupVerify.js';
+import { runAdminSignalsHttpSmoke } from './db/adminSignalsHttpSmoke.js';
 
 dotenv.config();
 
 const logger = createLogger();
+
+/**
+ * Comprueba que ningún proceso esté escuchando en `port` antes de crear HTTP/Socket.IO.
+ * @param {number} port
+ * @returns {Promise<void>}
+ */
+function assertListenPortAvailable(port) {
+  return new Promise((resolve, reject) => {
+    const probe = createNetServer();
+    probe.once('error', (err) => {
+      probe.removeAllListeners();
+      reject(err);
+    });
+    probe.listen({ port, host: '0.0.0.0', exclusive: true }, () => {
+      probe.close(() => resolve());
+    });
+  });
+}
 
 process.on('unhandledRejection', (reason) => {
   const err = reason instanceof Error ? reason : new Error(String(reason));
@@ -69,21 +95,20 @@ async function main() {
   const SESSION_SECRET = process.env.SESSION_SECRET || 'dev_secret';
   /** HTTPS deployments: set SESSION_COOKIE_SECURE=1 so the session cookie is not sent over plain HTTP. */
   const sessionCookieSecure = process.env.SESSION_COOKIE_SECURE === '1';
-  app.use(
-    session({
-      secret: SESSION_SECRET,
-      resave: false,
-      saveUninitialized: true,
-      name: 'gpulse.sid',
-      cookie: {
-        httpOnly: true,
-        path: '/',
-        maxAge: 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        secure: Boolean(sessionCookieSecure),
-      },
-    }),
-  );
+  const sessionMiddleware = session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+    name: 'gpulse.sid',
+    cookie: {
+      httpOnly: true,
+      path: '/',
+      maxAge: 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+      secure: Boolean(sessionCookieSecure),
+    },
+  });
+  app.use(sessionMiddleware);
 
   app.use('/auth', express.json({ limit: '512kb' }));
   app.use('/auth', siweAuthRoutes());
@@ -234,28 +259,67 @@ async function main() {
 
   app.use(express.json({ limit: '1mb' }));
 
+  const IS_DEV_API = process.env.NODE_ENV !== 'production';
+
+  /**
+   * Admin email/cookie: montar antes del límite “API general” para orden de middleware predecible.
+   * Además, el límite general excluye `/api/admin/auth/*`, `/api/admin/session/*` y `/api/admin/signals/*`.
+   */
+  app.use('/api', adminAuthRoutes());
+
+  /** Rutas que no deben consumir el cubo “API general” (tienen cubo propio o van desacopladas). */
+  function shouldSkipGeneralApiRateLimit(req) {
+    const path = String(req.originalUrl || req.url || '').split('?')[0] || '';
+    if (path === '/api/admin/auth' || path.startsWith('/api/admin/auth/')) return true;
+    if (path === '/api/admin/session' || path.startsWith('/api/admin/session/')) return true;
+    if (path === '/api/admin/signals' || path.startsWith('/api/admin/signals/')) return true;
+    return false;
+  }
+
+  const generalApiMax = Math.max(
+    50,
+    Number(process.env.API_GENERAL_RATE_LIMIT_MAX ?? (IS_DEV_API ? 2500 : 600)),
+  );
+  const generalApiWindowMs = Math.max(
+    60_000,
+    Number(process.env.API_GENERAL_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  );
+  const generalApiLimit = rateLimit({
+    windowMs: generalApiWindowMs,
+    max: generalApiMax,
+    keyGenerator: keyByIpAndOptionalAuthAddress({ authService }),
+  });
   app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 100,
-      keyGenerator: keyByIpAndOptionalAuthAddress({ authService }),
+    rateLimitUnless({
+      skip: shouldSkipGeneralApiRateLimit,
+      limit: generalApiLimit,
     }),
+  );
+
+  /** SIWE / firma cartera: en desarrollo, límite alto; en producción, estricto (env sobreescribe). */
+  const authWalletRequestMax = Math.max(
+    1,
+    Number(process.env.API_AUTH_WALLET_REQUEST_MESSAGE_MAX ?? (IS_DEV_API ? 2000 : 10)),
+  );
+  const authWalletVerifyMax = Math.max(
+    1,
+    Number(process.env.API_AUTH_WALLET_VERIFY_MAX ?? (IS_DEV_API ? 2000 : 10)),
   );
 
   app.use(
     '/api/auth/request-message',
     rateLimit({
       windowMs: 5 * 60 * 1000,
-      max: 10,
-      keyGenerator: (req) => `ip:${getClientIp(req)}`,
+      max: authWalletRequestMax,
+      keyGenerator: (req) => `auth_wallet:request_msg:${getClientIp(req)}`,
     }),
   );
   app.use(
     '/api/auth/verify-signature',
     rateLimit({
       windowMs: 5 * 60 * 1000,
-      max: 10,
-      keyGenerator: (req) => `ip:${getClientIp(req)}`,
+      max: authWalletVerifyMax,
+      keyGenerator: (req) => `auth_wallet:verify:${getClientIp(req)}`,
     }),
   );
 
@@ -269,6 +333,29 @@ async function main() {
   );
 
   app.use('/api', createApiSessionAuthMiddleware({ authService }));
+
+  /** Admin signals: cubo alto (por minuto) separado del API general. */
+  const adminSignalsReadMax = Math.max(
+    60,
+    Number(process.env.ADMIN_SIGNALS_READ_RATE_LIMIT_PER_MIN ?? (IS_DEV_API ? 1200 : 400)),
+  );
+  const adminSignalsReadLimit = rateLimit({
+    windowMs: 60_000,
+    max: adminSignalsReadMax,
+    keyGenerator: (req) => `admin_signals_read:${getClientIp(req)}`,
+  });
+
+  const adminSignalsConfigLimit = rateLimit({
+    windowMs: 60_000,
+    max: Math.max(20, Number(process.env.ADMIN_SIGNALS_CONFIG_RATE_LIMIT_PER_MIN || 40)),
+    keyGenerator: (req) => `admin_signals_cfg:${getClientIp(req)}`,
+  });
+  const adminSignalsCtx = await registerAdminSignalsApiRoutes({
+    app,
+    logger,
+    configRateLimit: adminSignalsConfigLimit,
+    signalsRateLimit: adminSignalsReadLimit,
+  });
 
   app.use('/api', depositRoutes({ depositController }));
   app.use('/api', withdrawRoutes({ withdrawalController }));
@@ -294,17 +381,47 @@ async function main() {
   }
 
   const PORT = Number(process.env.PORT || 5050);
+
+  try {
+    await assertListenPortAvailable(PORT);
+  } catch (e) {
+    const err = /** @type {NodeJS.ErrnoException} */ (e);
+    if (err?.code === 'EADDRINUSE') {
+      console.warn(`\n[core-api] Puerto ${PORT} ya está en uso.`);
+      console.warn('Otra instancia del Core API (u otro servicio) está escuchando ahí.');
+      console.warn('Libera el puerto:  npm run dev:clean');
+      console.warn(`Comprueba el proceso:  lsof -i :${PORT}\n`);
+      process.exit(1);
+    }
+    throw e;
+  }
+
   const httpServer = createServer(app);
 
-  const socketCors = String(process.env.SOCKET_CORS_ORIGIN || '*')
+  const isProd = process.env.NODE_ENV === 'production';
+  const socketCors = String(process.env.SOCKET_CORS_ORIGIN || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  let corsOriginForIo =
+    socketCors.length > 0 ? socketCors : isProd ? false : '*';
+  if (isProd && socketCors.length === 0) {
+    logger.warn(
+      'production: SOCKET_CORS_ORIGIN unset — Socket.IO CORS origin disabled (set comma-separated origins)',
+    );
+  }
   const io = createSocketServer(httpServer, {
     logger,
-    corsOrigin: socketCors.length ? socketCors : '*',
+    corsOrigin: corsOriginForIo,
   });
   setSocketHub(io);
+
+  attachAdminSignalsIo({
+    io,
+    processor: adminSignalsCtx.processor,
+    logger,
+    sessionMiddleware,
+  });
 
   const queueStatsBroadcastMs = Number(process.env.QUEUE_STATS_BROADCAST_MS || 8000);
   if (queueStatsBroadcastMs > 0) {
@@ -363,12 +480,18 @@ async function main() {
   }
 
   httpServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`\n[core-api] Puerto ${PORT} ocupado al iniciar listen (¿carrera?).`);
+      console.warn('Libera el puerto:  npm run dev:clean');
+      console.warn(`Ver:  lsof -i :${PORT}\n`);
+    }
     logger.error('http_server_error', { message: err.message, code: err.code });
     process.exit(1);
   });
 
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on ${PORT}`);
+    console.log('✔ Core API running on', PORT);
+    console.log('PID:', process.pid);
     logger.info('Server started', {
       port: PORT,
       env: process.env.NODE_ENV || 'development',
@@ -376,6 +499,29 @@ async function main() {
       inlineWorker: Boolean(inlineWorker),
       node: process.version,
     });
+    startSignalMetricsDailyAggregation({ logger });
+    const arRaw = process.env.SIGNAL_AUTO_RESPONSE_INTERVAL_MS;
+    const arMs =
+      arRaw === '0'
+        ? 0
+        : Math.max(0, Number(arRaw !== undefined && String(arRaw).trim() !== '' ? arRaw : 300_000));
+    startSignalAutoResponseScheduler({
+      persistence: adminSignalsCtx.persistence,
+      logger,
+      intervalMs: arMs,
+    });
+
+    const smokeMs = Math.max(0, Number(process.env.MONGO_STARTUP_VERIFY_DELAY_MS || 800));
+    setTimeout(async () => {
+      try {
+        await runMongoStartupVerify(logger);
+        await runAdminSignalsHttpSmoke({ port: PORT, logger });
+      } catch (e) {
+        logger.warn('startup_mongo_smoke_failed', {
+          message: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }, smokeMs);
   });
 }
 

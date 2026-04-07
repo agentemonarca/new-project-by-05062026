@@ -14,16 +14,17 @@ import { WalletProvider } from './context/WalletContext.jsx';
 import { installBackofficeAuthSync } from './bridge/backofficeAuthSync.ts';
 import { getApiBaseUrl } from './ui-genesis/api/genesisConfig.js';
 import { GenesisErrorBoundary } from './ui-genesis/components/GenesisErrorBoundary.jsx';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { AdminLoginPage } from './modules/admin/pages/AdminLoginPage.jsx';
+import { AdminRoute } from './modules/admin/AdminRoute.jsx';
+import { AdminProtectedShell, AdminPanelWithNav } from './ui-genesis/AdminCoreApp.jsx';
+import { SignalsControlPage } from './modules/admin/pages/SignalsControlPage.jsx';
 
 /** Relative path from this file (`src/main.jsx`) — required for stable Vite dynamic chunks */
 const GenesisDesignPreview = lazy(() => import('./ui-genesis/GenesisDesignPreview.jsx'));
 const MarketplacePage = lazy(() => import('./ui-genesis/pages/MarketplacePage.jsx'));
 const LocalMarketplacePage = lazy(() => import('./ui-genesis/pages/LocalMarketplacePage.jsx'));
 const MerchantDashboardPage = lazy(() => import('./ui-genesis/pages/MerchantDashboardPage.jsx'));
-const AdminCoreApp = lazy(() =>
-  import('./ui-genesis/AdminCoreApp.jsx').then((m) => ({ default: m.AdminCoreApp })),
-);
 const OnboardingRegisterPreviewPage = lazy(() => import('./ui-genesis/pages/OnboardingRegisterPreviewPage.jsx'));
 const OnboardingInvitePage = lazy(() => import('./ui-genesis/onboarding/OnboardingInvitePage.jsx'));
 const GenesisDashboardPage = lazy(() =>
@@ -147,7 +148,7 @@ function AdminCoreShell() {
             </div>
           }
         >
-          <AdminCoreApp />
+          <Outlet />
         </Suspense>
       </WalletProvider>
     </GenesisErrorBoundary>
@@ -225,8 +226,28 @@ function AppRoutes() {
       <Route path="/marketplace" element={<GenesisMarketplaceShell />} />
       <Route path="/marketplace/local" element={<LocalMarketplaceShell />} />
       <Route path="/marketplace/merchant" element={<MerchantOnboardingShell />} />
-      <Route path="/admin" element={<AdminCoreShell />} />
-      <Route path="/admin-core/*" element={<AdminCoreShell />} />
+      <Route path="/admin" element={<AdminCoreShell />}>
+        <Route path="login" element={<AdminLoginPage />} />
+        <Route element={<AdminRoute />}>
+          <Route element={<AdminProtectedShell />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="signals" element={<SignalsControlPage />} />
+            <Route path="settings" element={<Navigate to="../config" replace />} />
+            <Route path="*" element={<AdminPanelWithNav />} />
+          </Route>
+        </Route>
+      </Route>
+      <Route path="/admin-core" element={<AdminCoreShell />}>
+        <Route path="login" element={<AdminLoginPage />} />
+        <Route element={<AdminRoute />}>
+          <Route element={<AdminProtectedShell />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="signals" element={<SignalsControlPage />} />
+            <Route path="settings" element={<Navigate to="../config" replace />} />
+            <Route path="*" element={<AdminPanelWithNav />} />
+          </Route>
+        </Route>
+      </Route>
       <Route path="/register" element={<RegisterPreviewShell />} />
       <Route path="/onboarding" element={<OnboardingInviteShell />} />
       <Route path="/dashboard" element={<GenesisDashboardShell />} />

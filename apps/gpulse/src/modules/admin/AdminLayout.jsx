@@ -1,9 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { Menu, Shield, X } from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Flame, Menu, Shield, X } from 'lucide-react';
 import { GradientButton } from '@/ui-genesis/components/GradientButton.jsx';
-import { useAdminPanelStore } from '@/ui-genesis/stores/adminPanelStore.js';
 import { ADMIN_NAV_SECTIONS } from './adminNavConfig.js';
 import { useAdmin } from './context/AdminContext.jsx';
 import { ToastViewport } from './components/ToastViewport.jsx';
@@ -18,18 +17,11 @@ import { ToastViewport } from './components/ToastViewport.jsx';
  */
 export function AdminLayout({ children, onBackToApp }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const adminBase = location.pathname.startsWith('/admin-core') ? '/admin-core' : '/admin';
+  const signalsPath = `${adminBase}/signals`;
   const [mobileNav, setMobileNav] = useState(false);
-  const activeModule = useAdminPanelStore((s) => s.activeModule);
-  const setActiveModule = useAdminPanelStore((s) => s.setActiveModule);
   const { state, clearToast } = useAdmin();
-
-  const onSelect = useCallback(
-    (id) => {
-      setActiveModule(id);
-      setMobileNav(false);
-    },
-    [setActiveModule],
-  );
 
   return (
     <div className="relative min-h-screen bg-[linear-gradient(165deg,#050814_0%,#0b0f1a_40%,#020617_100%)] font-display text-slate-200">
@@ -112,33 +104,66 @@ export function AdminLayout({ children, onBackToApp }) {
           >
             {ADMIN_NAV_SECTIONS.map((item) => {
               const Icon = item.icon;
-              const active = activeModule === item.id;
               return (
-                <button
+                <NavLink
                   key={item.id}
-                  type="button"
-                  onClick={() => onSelect(item.id)}
-                  className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
-                    active
-                      ? 'border border-cyan-500/35 bg-cyan-500/10 text-cyan-50 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]'
-                      : 'border border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-slate-200'
-                  }`}
+                  to={`${adminBase}/${item.id}`}
+                  onClick={() => setMobileNav(false)}
+                  className={({ isActive }) =>
+                    `flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                      isActive
+                        ? 'border border-cyan-500/35 bg-cyan-500/10 text-cyan-50 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]'
+                        : 'border border-transparent text-slate-400 hover:border-white/[0.06] hover:bg-white/[0.03] hover:text-slate-200'
+                    }`
+                  }
                 >
-                  <Icon
-                    className={`mt-0.5 h-4 w-4 shrink-0 ${active ? 'text-cyan-200' : 'text-slate-500'}`}
+                  {({ isActive }) => (
+                    <>
+                      <Icon
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${isActive ? 'text-cyan-200' : 'text-slate-500'}`}
+                        strokeWidth={1.75}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium leading-snug">{item.label}</span>
+                        {item.description ? (
+                          <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">
+                            {item.description}
+                          </span>
+                        ) : null}
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+            <NavLink
+              to={signalsPath}
+              onClick={() => setMobileNav(false)}
+              className={({ isActive }) =>
+                `flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                  isActive
+                    ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-50 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]'
+                    : 'border border-transparent text-slate-400 hover:border-emerald-500/25 hover:bg-emerald-500/[0.06] hover:text-slate-100'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Flame
+                    className={`mt-0.5 h-4 w-4 shrink-0 ${
+                      isActive ? 'text-emerald-200' : 'text-emerald-600/80'
+                    }`}
                     strokeWidth={1.75}
                   />
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium leading-snug">{item.label}</span>
-                    {item.description ? (
-                      <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">
-                        {item.description}
-                      </span>
-                    ) : null}
+                    <span className="block text-sm font-medium leading-snug">Signals Control</span>
+                    <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">
+                      Signal Intelligence · {signalsPath}
+                    </span>
                   </span>
-                </button>
-              );
-            })}
+                </>
+              )}
+            </NavLink>
           </nav>
         </aside>
 

@@ -20,6 +20,7 @@ import { AnimatedMetric } from '../components/AnimatedMetric.jsx';
 import { NextActionCard } from '../components/NextActionCard.jsx';
 import { AIDecisionCard } from '../components/AIDecisionCard.jsx';
 import { ActivityFeed } from '../widgets/ActivityFeed.jsx';
+import { ExternalSignalBoard } from '../components/signals/ExternalSignalBoard.jsx';
 import { useCore } from '../core/CoreContext.jsx';
 import { fadeUpBlur, staggerContainer } from '../motion/variants.js';
 import { RuleHint } from '../components/RuleHint.jsx';
@@ -406,9 +407,12 @@ export function GenesisLobbyPage({
             ) : null}
           </div>
           {!isLite ? (
-            <div>
-              <h2 className="mb-3 font-display text-lg font-semibold text-white">Actividad (preview)</h2>
-              <ActivityFeed items={activityItems} />
+            <div className="flex flex-col gap-5">
+              <ExternalSignalBoard compact />
+              <div>
+                <h2 className="mb-3 font-display text-lg font-semibold text-white">Actividad (preview)</h2>
+                <ActivityFeed items={activityItems} />
+              </div>
             </div>
           ) : null}
         </motion.section>

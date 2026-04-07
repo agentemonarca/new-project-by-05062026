@@ -2,7 +2,6 @@
  * Capa de persistencia MongoDB para Genesis + P2P — paridad con MemoryGenesisStore.
  */
 
-import mongoose from 'mongoose';
 import { getOrCreateModels } from '../db/p2pSchemas.js';
 
 function now() {
@@ -77,10 +76,14 @@ function orderToApi(doc) {
 }
 
 export class MongoGenesisStore {
-  /** @param {object} [logger] */
-  constructor(logger) {
+  /**
+   * @param {object} [logger]
+   * @param {import('mongoose').Connection} conn genesis pool (`getDbConnection('genesis')`)
+   */
+  constructor(logger, conn) {
     this.logger = logger;
-    const m = getOrCreateModels();
+    this._conn = conn;
+    const m = getOrCreateModels(conn);
     this.GenesisUser = m.GenesisUser;
     this.P2pOrder = m.P2pOrder;
     this.P2pTransaction = m.P2pTransaction;
@@ -98,7 +101,7 @@ export class MongoGenesisStore {
     if (String(process.env.GENESIS_DISABLE_MONGO_TRANSACTIONS || '').trim() === '1') {
       return fn(null);
     }
-    const session = await mongoose.startSession();
+    const session = await this._conn.startSession();
     try {
       let out;
       await session.withTransaction(async (s) => {

@@ -1,6 +1,9 @@
-import React, { memo } from 'react';
-import { Activity, Bell } from 'lucide-react';
+import React, { memo, useCallback, useState } from 'react';
+import { Activity, Bell, Loader2, LogOut } from 'lucide-react';
 import { ProjectSelector } from './ProjectSelector.jsx';
+import { MongoDbSourceSelector } from './MongoDbSourceSelector.jsx';
+import { MongoDbConnectionBadge } from './MongoDbConnectionBadge.jsx';
+import { useAdminAuth } from '../context/AdminAuthContext.jsx';
 
 /**
  * @param {{
@@ -11,6 +14,8 @@ import { ProjectSelector } from './ProjectSelector.jsx';
  *   onProjectChange: (id: string) => void,
  *   isSwitchingProject?: boolean,
  *   toast?: null | { type: string, message: string },
+ *   adminMongoSource?: 'genesis' | 'winx' | 'gpulse',
+ *   onAdminMongoSourceChange?: (id: 'genesis' | 'winx' | 'gpulse') => void,
  * }} props
  */
 function AdminHeaderInner({
@@ -21,7 +26,21 @@ function AdminHeaderInner({
   onProjectChange,
   isSwitchingProject = false,
   toast,
+  adminMongoSource = 'genesis',
+  onAdminMongoSourceChange,
 }) {
+  const { email, logout } = useAdminAuth();
+  const [logoutBusy, setLogoutBusy] = useState(false);
+
+  const handleLogout = useCallback(async () => {
+    setLogoutBusy(true);
+    try {
+      await logout();
+    } finally {
+      setLogoutBusy(false);
+    }
+  }, [logout]);
+
   return (
     <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#05080f]/90 backdrop-blur-xl">
       <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 lg:px-6">
@@ -36,6 +55,14 @@ function AdminHeaderInner({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <MongoDbConnectionBadge />
+          {onAdminMongoSourceChange ? (
+            <MongoDbSourceSelector
+              value={adminMongoSource}
+              onChange={onAdminMongoSourceChange}
+              disabled={isSwitchingProject}
+            />
+          ) : null}
           <ProjectSelector
             projects={projects}
             value={currentProject}
@@ -48,6 +75,20 @@ function AdminHeaderInner({
             aria-label="Alertas"
           >
             <Bell className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={logoutBusy || isSwitchingProject}
+            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-xs font-medium text-slate-300 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+            title={email ? `Sesión: ${email}` : 'Cerrar sesión'}
+          >
+            {logoutBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <LogOut className="h-3.5 w-3.5" aria-hidden />
+            )}
+            Salir
           </button>
         </div>
       </div>

@@ -1,21 +1,18 @@
 import React, { useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { LedgerProvider } from './ledger/LedgerContext.jsx';
 import { useGenesisDashboardStore } from './stores/genesisDashboardStore.js';
 import { getDevMockBearer } from './api/genesisConfig.js';
 import { useBinaryEngineStore } from './binary/binaryEngineStore.js';
-import { navToPath } from './navigation/genesisPaths.js';
 import { AdminProvider } from '../modules/admin/context/AdminContext.jsx';
 import { AdminLayout } from '../modules/admin/AdminLayout.jsx';
 import { AdminPanelRouter } from '../modules/admin/AdminPanelRouter.jsx';
-
+import { ADMIN_MODULE_IDS } from '../modules/admin/adminNavConfig.js';
+import { useAdminPanelStore } from './stores/adminPanelStore.js';
 /** User-app entry path when leaving the isolated admin shell. */
 export const ADMIN_APP_RETURN_PATH = '/genesis-lobby';
 
-/**
- * Root-level admin interface: Command Center con contexto operativo mock + layout premium.
- */
-export function AdminCoreApp() {
+export function AdminProtectedShell() {
   const navigate = useNavigate();
   const authToken = useGenesisDashboardStore((s) => s.authToken);
   const sessionAuth = useGenesisDashboardStore((s) => s.sessionAuth);
@@ -50,9 +47,43 @@ export function AdminCoreApp() {
     <LedgerProvider hasSession={hasSession}>
       <AdminProvider>
         <AdminLayout onBackToApp={onBackToApp}>
-          <AdminPanelRouter onNavigate={(navId) => navigate(navToPath(navId))} />
+          <Outlet />
         </AdminLayout>
       </AdminProvider>
     </LedgerProvider>
   );
+}
+
+export function AdminPanelWithNav() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const setActiveModule = useAdminPanelStore((s) => s.setActiveModule);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[gpulse admin] Current route:', location.pathname);
+    }
+    const parts = location.pathname.split('/').filter(Boolean);
+    const root = parts[0];
+    if (root !== 'admin' && root !== 'admin-core') return;
+    const seg = parts[1];
+    if (!seg || seg === 'signals' || seg === 'login') return;
+    const mod = seg === 'settings' ? 'config' : seg;
+    if (ADMIN_MODULE_IDS.includes(mod)) {
+      setActiveModule(mod);
+    } else {
+      const base = root === 'admin-core' ? '/admin-core' : '/admin';
+      navigate(`${base}/overview`, { replace: true });
+    }
+  }, [location.pathname, navigate, setActiveModule]);
+
+  return <AdminPanelRouter />;
+}
+
+/**
+ * @deprecated Las rutas del admin están definidas en `main.jsx` bajo `/admin` y `/admin-core`.
+ * Se mantiene el export por compatibilidad con `ui-genesis/index.js`.
+ */
+export function AdminCoreApp() {
+  return null;
 }

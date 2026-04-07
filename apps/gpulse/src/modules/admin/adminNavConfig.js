@@ -12,6 +12,9 @@ import {
   Wallet,
 } from 'lucide-react';
 
+/** Ruta dedicada Signals Control (React Router), fuera del switch por `activeModule`. */
+export const ADMIN_SIGNALS_CONTROL_PATH = '/admin/signals';
+
 /** @typedef {{ id: string, label: string, icon: import('lucide-react').LucideIcon, description?: string }} AdminNavItem */
 
 /** @type {readonly AdminNavItem[]} */

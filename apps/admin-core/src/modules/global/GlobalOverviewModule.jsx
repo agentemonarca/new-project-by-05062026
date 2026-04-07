@@ -1,5 +1,7 @@
 import React, { memo, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useAdminCore } from '../../context/AdminCoreContext.jsx';
+import AdminSignalsProPanel from '../../components/AdminSignalsProPanel.jsx';
 import { Users, Wallet, ArrowLeftRight, Activity } from 'lucide-react';
 
 function GlobalOverviewModuleInner() {
@@ -37,7 +39,7 @@ function GlobalOverviewModuleInner() {
         {cards.map((c) => (
           <div
             key={c.label}
-            className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-slate-950/80 to-slate-900/40 p-4"
+            className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-slate-950/80 to-slate-900/40 p-4 transition-shadow duration-300 hover:shadow-[0_12px_40px_-24px_rgba(34,211,238,0.15)]"
           >
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-slate-500">{c.label}</p>
@@ -47,6 +49,19 @@ function GlobalOverviewModuleInner() {
           </div>
         ))}
       </div>
+
+      <section className="admin-module signals-module rounded-2xl border border-white/[0.08] bg-gradient-to-br from-slate-950/85 to-indigo-950/20 p-5 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.5)]">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold tracking-tight text-white">⚡ Señales en Vivo</h2>
+          <Link
+            to="/admin/signals"
+            className="text-xs font-semibold uppercase tracking-wide text-cyan-300/90 transition hover:text-cyan-200"
+          >
+            Panel completo →
+          </Link>
+        </div>
+        <AdminSignalsProPanel compact compactMaxSignals={8} />
+      </section>
     </div>
   );
 }

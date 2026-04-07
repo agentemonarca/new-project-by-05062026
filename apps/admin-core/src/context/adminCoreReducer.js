@@ -59,6 +59,23 @@ export function adminCoreReducer(state, action) {
     }
     case 'SET_PROJECT':
       return { ...state, currentProject: action.payload };
+    case 'SET_ADMIN_MONGO_SOURCE': {
+      const src = action.payload;
+      if (src !== 'genesis' && src !== 'winx' && src !== 'gpulse') return state;
+      try {
+        localStorage.setItem('admin-core-mongo-source', src);
+      } catch {
+        /* ignore */
+      }
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          adminMongoSource: src,
+          adminMongoSourceRevision: (state.ui?.adminMongoSourceRevision ?? 0) + 1,
+        },
+      };
+    }
     case 'MERGE_USER': {
       const { project, userId, patch } = action.payload;
       const list = safeProjectSlice(state.usersByProject, project);

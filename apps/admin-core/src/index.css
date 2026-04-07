@@ -19,3 +19,51 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb {
   @apply rounded-full bg-white/10;
 }
+
+/* AdminSignalsProPanel — feed legible (sin JSON en vivo) */
+@layer components {
+  .signal-card {
+    @apply relative overflow-hidden rounded-xl border border-white/[0.08] bg-slate-900/85 px-3 py-2.5 shadow-inner;
+  }
+
+  .signal-card-latest {
+    @apply ring-2 ring-amber-400/45 ring-offset-2 ring-offset-[#070b14];
+  }
+
+  .signal-card .mesa {
+    @apply font-mono text-sm font-bold tracking-tight text-white;
+  }
+
+  .signal-card .prediction {
+    @apply text-sm font-black uppercase tracking-wide;
+  }
+
+  .signal-card .prediction.blue {
+    color: #3b82f6;
+  }
+
+  .signal-card .prediction.red {
+    color: #ef4444;
+  }
+
+  .signal-card .prediction.neutral {
+    color: #94a3b8;
+  }
+
+  .signal-card .martingale,
+  .signal-card .round {
+    @apply text-[11px] font-semibold text-slate-400;
+  }
+
+  .signal-card .time {
+    @apply font-mono text-[10px] text-slate-500;
+  }
+
+  .signal-card .signal-type {
+    @apply shrink-0;
+  }
+
+  .signal-card .signal-direction {
+    @apply min-w-0;
+  }
+}

@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -11,9 +12,11 @@ import {
   Shield,
   ScrollText,
   BarChart3,
+  Zap,
 } from 'lucide-react';
 
 const ICONS = {
+  signals: Zap,
   overview: LayoutDashboard,
   users: Users,
   wallet: Wallet,
@@ -27,9 +30,9 @@ const ICONS = {
   analytics: BarChart3,
 };
 
-/** @param {{ active: string, onNavigate: (id: string) => void }} props */
-function AdminSidebarInner({ active, onNavigate }) {
+function AdminSidebarInner() {
   const items = [
+    { id: 'signals', label: 'Señales' },
     { id: 'overview', label: 'Overview' },
     { id: 'users', label: 'Usuarios' },
     { id: 'wallet', label: 'Wallet' },
@@ -48,21 +51,21 @@ function AdminSidebarInner({ active, onNavigate }) {
       <nav className="custom-scrollbar flex-1 space-y-0.5 overflow-y-auto p-3">
         {items.map((item) => {
           const Icon = ICONS[item.id] || LayoutDashboard;
-          const on = active === item.id;
           return (
-            <button
+            <NavLink
               key={item.id}
-              type="button"
-              onClick={() => onNavigate(item.id)}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
-                on
-                  ? 'bg-cyan-500/15 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.2)]'
-                  : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
-              }`}
+              to={`/admin/${item.id}`}
+              className={({ isActive }) =>
+                `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
+                  isActive
+                    ? 'bg-cyan-500/15 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.2)]'
+                    : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
+                }`
+              }
             >
               <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
               {item.label}
-            </button>
+            </NavLink>
           );
         })}
       </nav>

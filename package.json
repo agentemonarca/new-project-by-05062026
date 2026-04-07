@@ -5,23 +5,44 @@
   "type": "module",
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev": "echo 'Run dev:backoffice, dev:gpulse, dev:core-api in separate terminals — see README.md'",
-    "dev:backoffice": "pnpm --filter @ai-genesis/backoffice dev",
-    "dev:gpulse": "pnpm --filter @ai-genesis/gpulse dev",
-    "dev:admin-core": "pnpm --filter @ai-genesis/admin-core dev",
-    "dev:core-api": "pnpm --filter @ai-genesis/core-api dev",
+    "dev": "echo 'Usa npm run dev:main, npm run dev:all, o dev:hub + servicios — ver README.md'",
+    "dev:hub": "pnpm --filter @ai-genesis/backoffice dev",
+    "dev:backoffice": "cd apps/admin-core && npm run dev",
+    "dev:gpulse": "cd apps/gpulse && npm run dev",
+    "dev:admin-core": "cd apps/admin-core && npm run dev",
+    "dev:core-api": "cd backend/core-api && npm run dev",
+    "dev:kill-ports": "node scripts/kill-dev-ports.mjs",
+    "dev:start": "node scripts/dev-clean-start.mjs",
+    "dev:start:force": "node scripts/dev-clean-start.mjs --force",
+    "dev:clean-start": "node scripts/dev-clean-start.mjs",
+    "dev:main": "node scripts/check-dev-ports.mjs main && concurrently -n CORE,GPULSE,READY -c green,blue,gray \"npm run dev:core-api\" \"npm run dev:gpulse\" \"node scripts/wait-and-ready.mjs main\"",
+    "dev:all:exec": "concurrently -n CORE,GPULSE,BACKOFFICE,READY -c green,blue,magenta,gray \"npm run dev:core-api\" \"npm run dev:gpulse\" \"npm run dev:backoffice\" \"node scripts/wait-and-ready.mjs all\"",
+    "dev:all": "node scripts/check-dev-ports.mjs all && npm run dev:all:exec",
     "dev:api-gateway": "pnpm --filter @ai-genesis/api-gateway dev",
     "dev:gpulse-api": "pnpm --filter @ai-genesis/gpulse-api dev",
     "build": "pnpm run -r --if-present build",
     "build:backoffice": "pnpm --filter @ai-genesis/backoffice build",
     "build:gpulse": "pnpm --filter @ai-genesis/gpulse build",
     "lint": "pnpm run -r --if-present lint",
-    "typecheck": "pnpm run -r --if-present typecheck"
+    "typecheck": "pnpm run -r --if-present typecheck",
+    "deps:react": "pnpm ls react react-dom -r"
   },
   "engines": {
     "node": ">=18.0.0"
   },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3",
+    "wait-on": "^8.0.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "react": "^18.3.1",
+      "react-dom": "^18.3.1"
+    }
   }
 }

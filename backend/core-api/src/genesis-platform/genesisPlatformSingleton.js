@@ -1,17 +1,17 @@
-import mongoose from 'mongoose';
 import { MemoryGenesisStore } from './store/MemoryGenesisStore.js';
 import { MongoGenesisStore } from './store/MongoGenesisStore.js';
 import { createP2pEngine } from './services/p2pEngine.js';
 import { onGenesisPlatformEvent } from './services/genesisPlatformEvents.js';
 import { initGenesisObservability, ingestGenesisPlatformEvent } from './services/genesisObservability.js';
+import { getDbConnection, isGenesisMongoReady } from '../db/connectBridge.js';
 
 let _instance = null;
 let _platformEventLogHooked = false;
 
 function createStore(logger) {
-  if (mongoose.connection.readyState === 1) {
+  if (isGenesisMongoReady()) {
     logger?.info?.('genesis_store_backend', { type: 'mongodb' });
-    return new MongoGenesisStore(logger);
+    return new MongoGenesisStore(logger, getDbConnection('genesis'));
   }
   logger?.warn?.('genesis_store_backend', { type: 'memory', hint: 'Set MONGO_URI for durable P2P' });
   return new MemoryGenesisStore();

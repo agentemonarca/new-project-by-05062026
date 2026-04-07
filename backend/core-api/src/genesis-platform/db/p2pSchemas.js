@@ -139,29 +139,41 @@ const genesisProjectConfigSchema = new Schema(
   { collection: 'genesis_project_configs' },
 );
 
-function getOrCreateModels() {
+/** @type {WeakMap<import('mongoose').Connection, object>} */
+const p2pModelCache = new WeakMap();
+
+/**
+ * P2P / Genesis models on the given connection (use `getDbConnection('genesis')`).
+ * @param {import('mongoose').Connection} conn
+ */
+export function getOrCreateModels(conn) {
+  if (!conn) throw new Error('getOrCreateModels: connection required');
+  let cached = p2pModelCache.get(conn);
+  if (cached) return cached;
+
   const RewardsTx =
-    mongoose.models.RewardsTransaction || mongoose.model('RewardsTransaction', rewardsTransactionSchema);
+    conn.models.RewardsTransaction || conn.model('RewardsTransaction', rewardsTransactionSchema);
   const Idempotency =
-    mongoose.models.GenesisIdempotency || mongoose.model('GenesisIdempotency', genesisIdempotencySchema);
-  if (mongoose.models.GenesisUser) {
-    return {
-      GenesisUser: mongoose.models.GenesisUser,
-      P2pOrder: mongoose.models.P2pOrder,
-      P2pTransaction: mongoose.models.P2pTransaction,
+    conn.models.GenesisIdempotency || conn.model('GenesisIdempotency', genesisIdempotencySchema);
+  if (conn.models.GenesisUser) {
+    cached = {
+      GenesisUser: conn.models.GenesisUser,
+      P2pOrder: conn.models.P2pOrder,
+      P2pTransaction: conn.models.P2pTransaction,
       RewardsTransaction: RewardsTx,
       GenesisIdempotency: Idempotency,
-      GenesisProjectConfig: mongoose.models.GenesisProjectConfig,
+      GenesisProjectConfig: conn.models.GenesisProjectConfig,
+    };
+  } else {
+    cached = {
+      GenesisUser: conn.model('GenesisUser', genesisUserSchema),
+      P2pOrder: conn.model('P2pOrder', p2pOrderSchema),
+      P2pTransaction: conn.model('P2pTransaction', p2pTransactionSchema),
+      RewardsTransaction: RewardsTx,
+      GenesisIdempotency: Idempotency,
+      GenesisProjectConfig: conn.model('GenesisProjectConfig', genesisProjectConfigSchema),
     };
   }
-  return {
-    GenesisUser: mongoose.model('GenesisUser', genesisUserSchema),
-    P2pOrder: mongoose.model('P2pOrder', p2pOrderSchema),
-    P2pTransaction: mongoose.model('P2pTransaction', p2pTransactionSchema),
-    RewardsTransaction: RewardsTx,
-    GenesisIdempotency: Idempotency,
-    GenesisProjectConfig: mongoose.model('GenesisProjectConfig', genesisProjectConfigSchema),
-  };
+  p2pModelCache.set(conn, cached);
+  return cached;
 }
-
-export { getOrCreateModels };

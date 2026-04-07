@@ -1,4 +1,5 @@
 export { AdminLayout } from './AdminLayout.jsx';
+export { AdminRoute } from './AdminRoute.jsx';
 export { AdminPanelRouter } from './AdminPanelRouter.jsx';
 export { AdminProvider, useAdmin } from './context/AdminContext.jsx';
 export { ADMIN_NAV_SECTIONS, ADMIN_MODULE_IDS } from './adminNavConfig.js';

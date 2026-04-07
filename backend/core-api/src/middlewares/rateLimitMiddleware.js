@@ -67,6 +67,18 @@ export function createRateLimiter({ logger } = {}) {
 }
 
 /**
+ * Aplica `limit` salvo que `skip(req)` sea true (rutas exentas del cubo “general”).
+ * @param {{ skip: (req: import('express').Request) => boolean, limit: import('express').RequestHandler }} opts
+ * @returns {import('express').RequestHandler}
+ */
+export function rateLimitUnless({ skip, limit }) {
+  return (req, res, next) => {
+    if (skip(req)) return next();
+    return limit(req, res, next);
+  };
+}
+
+/**
  * Key generator: IP plus authenticated address (if present).
  *
  * Reads Authorization: Bearer <token> and resolves it through authService.getSession(token).

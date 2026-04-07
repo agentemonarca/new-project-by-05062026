@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { buildInitialState, PROJECT_LIST } from '../data/mockMaster.js';
 import * as api from '../services/adminCoreService.js';
+import { adminApiFetch as adminApiFetchWithSource } from '../lib/adminBackendApi.js';
 import { assertProject, safeProjectSlice } from '../lib/adminCoreValidation.js';
 import { buildAuditLogFromPartial } from '../lib/auditLog.js';
 import { exportLedgerSelection } from '../utils/walletBulkExport.js';
@@ -833,6 +834,23 @@ export function AdminCoreProvider({ children }) {
     [state.currentProject, showToast],
   );
 
+  const adminMongoSource = state.ui?.adminMongoSource ?? 'genesis';
+  const adminMongoSourceRevision = state.ui?.adminMongoSourceRevision ?? 0;
+
+  const setAdminMongoSource = useCallback((src) => {
+    if (src !== 'genesis' && src !== 'winx' && src !== 'gpulse') {
+      showToast('error', 'Origen Mongo inválido');
+      return;
+    }
+    if (src === adminMongoSource) return;
+    dispatch({ type: 'SET_ADMIN_MONGO_SOURCE', payload: src });
+  }, [adminMongoSource, showToast]);
+
+  const adminApiFetch = useCallback(
+    (path, init) => adminApiFetchWithSource(path, init ?? {}, adminMongoSource),
+    [adminMongoSource],
+  );
+
   const toggleAccountActive = useCallback(
     async (project, userId, enabled) => {
       const key = `acct-${userId}`;
@@ -913,6 +931,10 @@ export function AdminCoreProvider({ children }) {
       setRewardSystem,
       securityActions,
       networkActions,
+      adminMongoSource,
+      adminMongoSourceRevision,
+      setAdminMongoSource,
+      adminApiFetch,
     }),
     [
       state,
@@ -958,6 +980,10 @@ export function AdminCoreProvider({ children }) {
       setRewardSystem,
       securityActions,
       networkActions,
+      adminMongoSource,
+      adminMongoSourceRevision,
+      setAdminMongoSource,
+      adminApiFetch,
     ],
   );
 
