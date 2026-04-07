@@ -3,6 +3,7 @@ import { Activity } from 'lucide-react';
 import { AdminSignalsLivePanel } from '../components/AdminSignalsLivePanel.jsx';
 import AdminSignalsProPanel from '../components/AdminSignalsProPanel.jsx';
 import { RawEventsPanel } from '../components/RawEventsPanel.jsx';
+import { SignalStreamDebugPanel } from '../components/SignalStreamDebugPanel.jsx';
 
 /**
  * Vista dedicada Señales · ruta `/admin/signals` (landing por defecto: `/admin/overview`).
@@ -23,6 +24,7 @@ function AdminSignalsPageInner() {
       <RawEventsPanel />
       <AdminSignalsProPanel compact={false} />
       <AdminSignalsLivePanel />
+      <SignalStreamDebugPanel />
     </div>
   );
 }

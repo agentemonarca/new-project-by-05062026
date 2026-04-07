@@ -13,6 +13,7 @@ import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext.jsx'
 import RequireAdminAuth from './components/RequireAdminAuth.jsx';
 import { AdminLoginPage } from './pages/AdminLoginPage.jsx';
 import { AdminSignalsPage } from './pages/AdminSignalsPage.jsx';
+import { SignalLabPage } from './pages/SignalLabPage.jsx';
 import { AdminCoreProvider, useAdminCore } from './context/AdminCoreContext.jsx';
 import { AdminHeader } from './components/AdminHeader.jsx';
 import { AdminSidebar } from './components/AdminSidebar.jsx';
@@ -133,6 +134,7 @@ function AdminShellLayout() {
   const mobileTabs = useMemo(
     () => [
       { id: 'signals', label: 'Sig' },
+      { id: 'signal-lab', label: 'Lab' },
       { id: 'overview', label: 'Ini' },
       { id: 'users', label: 'Usr' },
       { id: 'wallet', label: 'Wal' },
@@ -238,6 +240,7 @@ function AdminAppRoutes() {
       <Route path="/admin" element={<ProtectedAdminOutlet />}>
         <Route index element={<Navigate to="overview" replace />} />
         <Route path="signals" element={<AdminSignalsPage />} />
+        <Route path="signal-lab" element={<SignalLabPage />} />
         <Route path="overview" element={<GlobalOverviewModule />} />
         <Route path="users" element={<UsersModule />} />
         <Route path="wallet" element={<WalletModule />} />

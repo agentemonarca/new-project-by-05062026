@@ -1,4 +1,4 @@
-import mongoose, { type Connection } from 'mongoose';
+import mongoose, { type Connection, type ConnectOptions } from 'mongoose';
 import {
   getMongoConnectionUriGenesis,
   getMongoConnectionUriGpulse,
@@ -19,11 +19,19 @@ const pools: Record<MongoSource, Connection | null> = {
   gpulse: null,
 };
 
-const CONNECT_OPTS = {
+const CONNECT_BASE = {
   maxPoolSize: 10,
   serverSelectionTimeoutMS: 15_000,
   socketTimeoutMS: 45_000,
 } as const;
+
+function connectOptsFor(source: MongoSource): ConnectOptions {
+  const name = process.env.MONGO_DB_NAME?.trim();
+  if (source === 'genesis' && name) {
+    return { ...CONNECT_BASE, dbName: name };
+  }
+  return { ...CONNECT_BASE };
+}
 
 function logMongoConnectHints(message: string): void {
   const m = message || '';
@@ -39,7 +47,7 @@ function logMongoConnectHints(message: string): void {
 }
 
 async function openConnection(source: MongoSource, uri: string, logger: LoggerLike): Promise<void> {
-  const c = mongoose.createConnection(uri, CONNECT_OPTS);
+  const c = mongoose.createConnection(uri, connectOptsFor(source));
   c.on('error', (err: Error) => {
     logger.error(`mongo_${source}_driver_error`, { message: err?.message });
   });
@@ -52,9 +60,10 @@ async function openConnection(source: MongoSource, uri: string, logger: LoggerLi
     pools[source] = c;
     logger.info(`mongo_${source}_connected`, { name: c.name, host: c.host });
     console.log(`Mongo [${source}] connected — db:`, c.name);
+    if (source === 'genesis') console.log('🟢 MongoDB conectado');
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    console.warn(`Mongo [${source}] connect failed`, message);
+    console.error('❌ MongoDB error:', message);
     logMongoConnectHints(message);
     logger.warn(`mongo_${source}_connect_failed`, { message });
     await c.close().catch(() => {});

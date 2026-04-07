@@ -15,6 +15,8 @@ import {
   getAutoResponsePublicState,
   runSignalAutoResponse,
 } from './signalAutoResponseService.js';
+import { getSignalStreamInterpreter } from './signalStreamInterpreter.js';
+import { getSignalSessionTracker } from './signalSessionTracker.js';
 
 /**
  * @param {import('express').Request} req
@@ -241,6 +243,60 @@ export function adminSignalsApi({ processor, logger, configRateLimit, persistenc
       await persistence.resetMetricsInDb();
     }
     res.json({ ok: true });
+  });
+
+  /** Últimos frames interpretados (memoria) + contadores; alineado con Socket `signal_stream_frame`. */
+  r.get('/admin/signals/stream-debug', (req, res) => {
+    const interp = getSignalStreamInterpreter();
+    const limitRaw = Number(req.query.limit);
+    const lim = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 80;
+    res.json({
+      ok: true,
+      counters: interp.getCounters(),
+      recent: interp.getRecent(lim),
+    });
+  });
+
+  r.get('/admin/signals/signal-sessions', (req, res) => {
+    const tr = getSignalSessionTracker();
+    const limitRaw = Number(req.query.limit);
+    const lim = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, Math.floor(limitRaw))) : 50;
+    const latest = String(req.query.latest || '').trim() === '1';
+    if (latest) {
+      const completed = tr.getCompleted(1);
+      const signalSession = completed[0] ?? null;
+      return res.json({
+        ok: true,
+        signalSession,
+        active: tr.getActive(),
+      });
+    }
+    res.json({
+      ok: true,
+      completed: tr.getCompleted(lim),
+      active: tr.getActive(),
+    });
+  });
+
+  /** Última sesión cerrada en modelo canónico SignalSession (Signal Lab). */
+  r.get('/admin/signals/signal-lab/latest', (_req, res) => {
+    const tr = getSignalSessionTracker();
+    const completed = tr.getCompleted(1);
+    res.json({
+      ok: true,
+      session: completed[0] ?? null,
+      hasActive: tr.getActive().length > 0,
+    });
+  });
+
+  /** Modelo canónico forense (misma sesión que `getCompleted(1)`). */
+  r.get('/admin/signals/canonical/latest', (_req, res) => {
+    const tr = getSignalSessionTracker();
+    const completed = tr.getCompleted(1);
+    res.json({
+      ok: true,
+      session: completed[0] ?? null,
+    });
   });
 
   return r;

@@ -31,6 +31,7 @@ import { soundEnabled } from '../utils/adminSignalsSounds.js';
 import { normSide } from '../utils/signalFormatter.js';
 import { classifySignal } from '../utils/signalClassifier.js';
 import AdminSignalsHero from './AdminSignalsHero.jsx';
+import ResultCasinoScoreBlock from './ResultCasinoScoreBlock.jsx';
 
 const MAX_DEBUG_UI_LOGS = 100;
 const SCROLL_TOP_THRESHOLD_PX = 48;
@@ -350,6 +351,11 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
                   </span>
                   <VerdictBadge verdict={linked.verdict} outcome={linked.outcome} />
                 </div>
+                <ResultCasinoScoreBlock
+                  scoreDetail={linked.scoreDetail}
+                  ganador={linked.ganador ?? linked.winnerLabel}
+                  className="mt-2"
+                />
                 {linked.historial?.length ? (
                   <div className="mt-1.5">
                     <HistoryBeads cells={linked.historial} />
@@ -636,6 +642,9 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
                       {String(r.ganador ?? r.winnerLabel ?? '—')}
                     </span>
                   </p>
+                  <div className="mt-2">
+                    <ResultCasinoScoreBlock scoreDetail={r.scoreDetail} ganador={r.ganador} compact />
+                  </div>
                   {r.historial?.length ? (
                     <div className="mt-1.5 border-t border-white/[0.06] pt-1">
                       <HistoryBeads cells={r.historial} max={10} />
@@ -789,6 +798,7 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
                   <th className="px-3 py-2">Mesa</th>
                   <th className="px-3 py-2">Predicción</th>
                   <th className="px-3 py-2">Ganador</th>
+                  <th className="px-3 py-2">Mano</th>
                   <th className="px-3 py-2">Vs pred.</th>
                   <th className="px-3 py-2">Veredicto</th>
                   <th className="px-3 py-2">Tipo</th>
@@ -800,7 +810,7 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
               <tbody>
                 {results.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                    <td colSpan={10} className="px-3 py-8 text-center text-slate-500">
                       Sin resultados aún
                     </td>
                   </tr>
@@ -847,6 +857,9 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
                           }`}
                         >
                           {String(r.ganador ?? r.winnerLabel ?? '—')}
+                        </td>
+                        <td className="min-w-[148px] max-w-[220px] px-2 py-2 align-top">
+                          <ResultCasinoScoreBlock scoreDetail={r.scoreDetail} ganador={r.ganador} compact className="!bg-black/25" />
                         </td>
                         <td className="px-3 py-2">
                           <span

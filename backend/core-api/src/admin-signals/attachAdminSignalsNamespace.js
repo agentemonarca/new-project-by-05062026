@@ -12,21 +12,16 @@ export function attachAdminSignalsNamespace(io, { sessionMiddleware, logger }) {
 
   nsp.use((socket, next) => {
     const validKey = String(process.env.GENESIS_ADMIN_API_KEY || '').trim();
-    if (!validKey) {
-      console.warn('⚠️ GENESIS_ADMIN_API_KEY no definida');
-      return next(new Error('server_misconfigured'));
-    }
-    if (validKey.length < MIN_API_KEY_LEN) {
-      console.warn('⚠️ GENESIS_ADMIN_API_KEY demasiado corta');
-      return next(new Error('server_misconfigured'));
-    }
+    const keyConfigured = validKey.length >= MIN_API_KEY_LEN;
 
     const hdr = socket.handshake.headers;
     const headerKey = hdr['x-admin-api-key'];
-    const apiKey = String(socket.handshake.auth?.apiKey ?? headerKey ?? '').trim();
+    const apiKey = String(
+      socket.handshake.auth?.apiKey ?? socket.handshake.auth?.adminApiKey ?? headerKey ?? '',
+    ).trim();
 
     if (apiKey.length > 0) {
-      if (apiKey.length < MIN_API_KEY_LEN || apiKey !== validKey) {
+      if (!keyConfigured || apiKey !== validKey) {
         console.warn('❌ Unauthorized socket:', socket.id);
         return next(new Error('unauthorized'));
       }
@@ -40,8 +35,6 @@ export function attachAdminSignalsNamespace(io, { sessionMiddleware, logger }) {
       } catch {
         /* ignore */
       }
-      const got = String(socket.handshake.auth?.adminApiKey || '').trim();
-      if (got.length >= MIN_API_KEY_LEN && got === validKey) return next();
       logger?.warn?.('admin_signals_socket_reject', { reason: 'no_session_or_admin_key' });
       return next(new Error('unauthorized'));
     };

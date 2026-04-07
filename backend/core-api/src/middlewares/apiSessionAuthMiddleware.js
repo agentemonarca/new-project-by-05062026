@@ -11,10 +11,12 @@ export function createApiSessionAuthMiddleware({ authService }) {
     '/admin/auth/login',
     '/admin/auth/logout',
     '/admin/auth/me',
+    '/admin/login',
     /** Algunos despliegues exponen `req.path` con prefijo `/api`; aceptar ambas formas. */
     '/api/admin/auth/login',
     '/api/admin/auth/logout',
     '/api/admin/auth/me',
+    '/api/admin/login',
   ]);
 
   return function apiSessionAuth(req, res, next) {

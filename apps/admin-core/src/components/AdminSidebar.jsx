@@ -13,10 +13,12 @@ import {
   ScrollText,
   BarChart3,
   Zap,
+  FlaskConical,
 } from 'lucide-react';
 
 const ICONS = {
   signals: Zap,
+  'signal-lab': FlaskConical,
   overview: LayoutDashboard,
   users: Users,
   wallet: Wallet,
@@ -33,6 +35,7 @@ const ICONS = {
 function AdminSidebarInner() {
   const items = [
     { id: 'signals', label: 'Señales' },
+    { id: 'signal-lab', label: 'Signal Lab' },
     { id: 'overview', label: 'Overview' },
     { id: 'users', label: 'Usuarios' },
     { id: 'wallet', label: 'Wallet' },

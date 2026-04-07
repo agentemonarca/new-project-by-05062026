@@ -9,6 +9,8 @@ import {
 } from './signalFlowDebug.js';
 import { isWinxplayDebugStreamEnabled, tryWinxplayDashboardRelay } from '../services/winxplay-adapter.js';
 import { logRawProviderSampleOnce } from './rawProviderSampleLog.js';
+import { getSignalStreamInterpreter } from './signalStreamInterpreter.js';
+import { getSignalSessionTracker } from './signalSessionTracker.js';
 
 const EVENT_NEW_SIGNAL = 'NEW_SIGNAL';
 const EVENT_NEW_RESULT = 'NEW_RESULT';
@@ -110,65 +112,82 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
       console.error('❌ upstream reconnect_error:', err?.message || err);
     });
 
-    if (process.env.ADMIN_SIGNALS_LOG_UPSTREAM_EVENTS === '1') {
-      socket.onAny((event, ...args) => {
+    socket.onAny((eventName, ...args) => {
+      const payload = args.length ? args[0] : undefined;
+
+      if (process.env.ADMIN_SIGNALS_LOG_UPSTREAM_EVENTS === '1') {
         const preview =
           args.length && typeof args[0] === 'object'
             ? Object.keys(/** @type {object} */ (args[0]) || {}).slice(0, 8)
             : args.length;
-        console.log('[UPSTREAM EVENT]', event, preview);
-      });
-    }
-
-    socket.on(EVENT_NEW_SIGNAL, (payload) => {
-      logRawProviderSampleOnce('NEW_SIGNAL', payload);
-      adminSignalsFlowTrace(logger, 'upstream_recv_new_signal', { summary: summarizePayloadForFlow(payload) });
-      emitSafe(EVENT_NEW_SIGNAL, payload);
-    });
-    socket.on(EVENT_NEW_RESULT, (payload) => {
-      logRawProviderSampleOnce('NEW_RESULT', payload);
-      adminSignalsFlowTrace(logger, 'upstream_recv_new_result', { summary: summarizePayloadForFlow(payload) });
-      emitSafe(EVENT_NEW_RESULT, payload);
-    });
-
-    socket.on(EVENT_DASHBOARD_UPDATE, (payload) => {
-      logRawProviderSampleOnce('dashboardUpdate', payload);
-      adminSignalsFlowTrace(logger, 'upstream_recv_dashboard_update', {
-        ...summarizeDashboardUpdatePayloadSafe(payload),
-      });
+        console.log('[UPSTREAM EVENT]', eventName, preview);
+      }
 
       try {
-        const relayed = tryWinxplayDashboardRelay(payload);
-        if (relayed) {
-          const { type, data } = relayed;
-          console.log('[WINX]', type);
-          emitSafe(type, data);
-          if (io && isWinxplayDebugStreamEnabled()) {
-            try {
-              io.of('/admin-signals').emit('DEBUG_STREAM', payload);
-            } catch {
-              /* silent */
-            }
-          }
-          return;
-        }
-      } catch {
-        /* vacío: seguir con expand genérico */
+        getSignalStreamInterpreter().ingestProviderOnAny(String(eventName), payload);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        logger?.warn?.('signal_stream_interpreter_provider', { message: msg });
       }
 
-      const { signals, results } = expandDashboardUpdate(payload);
-      adminSignalsFlowTrace(logger, 'dashboard_update_expanded', {
-        newSignalRaws: signals.length,
-        newResultRaws: results.length,
-      });
-      if (signals.length + results.length > 0) {
-        logger?.info?.('admin_signals_dashboard_update', {
-          signals: signals.length,
-          results: results.length,
-        });
+      try {
+        getSignalSessionTracker().ingestProviderEvent(String(eventName), payload);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        logger?.warn?.('signal_session_tracker', { message: msg });
       }
-      for (const raw of signals) emitSafe(EVENT_NEW_SIGNAL, raw);
-      for (const raw of results) emitSafe(EVENT_NEW_RESULT, raw);
+
+      if (eventName === EVENT_NEW_SIGNAL) {
+        logRawProviderSampleOnce('NEW_SIGNAL', payload);
+        adminSignalsFlowTrace(logger, 'upstream_recv_new_signal', { summary: summarizePayloadForFlow(payload) });
+        emitSafe(EVENT_NEW_SIGNAL, payload);
+        return;
+      }
+      if (eventName === EVENT_NEW_RESULT) {
+        logRawProviderSampleOnce('NEW_RESULT', payload);
+        adminSignalsFlowTrace(logger, 'upstream_recv_new_result', { summary: summarizePayloadForFlow(payload) });
+        emitSafe(EVENT_NEW_RESULT, payload);
+        return;
+      }
+      if (eventName === EVENT_DASHBOARD_UPDATE) {
+        logRawProviderSampleOnce('dashboardUpdate', payload);
+        adminSignalsFlowTrace(logger, 'upstream_recv_dashboard_update', {
+          ...summarizeDashboardUpdatePayloadSafe(payload),
+        });
+
+        try {
+          const relayed = tryWinxplayDashboardRelay(payload);
+          if (relayed) {
+            const { type, data } = relayed;
+            console.log('[WINX]', type);
+            emitSafe(type, data);
+            if (io && isWinxplayDebugStreamEnabled()) {
+              try {
+                io.of('/admin-signals').emit('DEBUG_STREAM', payload);
+              } catch {
+                /* silent */
+              }
+            }
+            return;
+          }
+        } catch {
+          /* vacío: seguir con expand genérico */
+        }
+
+        const { signals, results } = expandDashboardUpdate(payload);
+        adminSignalsFlowTrace(logger, 'dashboard_update_expanded', {
+          newSignalRaws: signals.length,
+          newResultRaws: results.length,
+        });
+        if (signals.length + results.length > 0) {
+          logger?.info?.('admin_signals_dashboard_update', {
+            signals: signals.length,
+            results: results.length,
+          });
+        }
+        for (const raw of signals) emitSafe(EVENT_NEW_SIGNAL, raw);
+        for (const raw of results) emitSafe(EVENT_NEW_RESULT, raw);
+      }
     });
   }
 

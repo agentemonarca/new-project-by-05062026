@@ -73,7 +73,13 @@ export function formatSignal(signal) {
  * @param {PredLabel | string | null | undefined} predictedLabel — última predicción (PLAYER/BANKER)
  */
 export function formatResult(result, predictedLabel) {
-  const winnerNorm = normSide(result.ganador ?? result.resultado ?? result.result);
+  const sdRaw = result.scoreDetail != null && typeof result.scoreDetail === 'object' ? result.scoreDetail : null;
+  const winnerNorm = normSide(
+    (sdRaw && 'ganador' in sdRaw && sdRaw.ganador != null ? sdRaw.ganador : null) ??
+      result.ganador ??
+      result.resultado ??
+      result.result,
+  );
   const pred =
     predictedLabel === 'PLAYER' || predictedLabel === 'BANKER' ? predictedLabel : null;
 
@@ -121,6 +127,17 @@ export function formatResult(result, predictedLabel) {
 
   const outcome = classifyResultOutcome(verdict);
 
+  /** @type {{ puntaje_player: string | null, puntaje_banker: string | null, cartas_player: string[] | null, cartas_banker: string[] | null, ganador: string | null } | null} */
+  const scoreDetail = sdRaw
+    ? {
+        puntaje_player: sdRaw.puntaje_player != null ? String(sdRaw.puntaje_player) : null,
+        puntaje_banker: sdRaw.puntaje_banker != null ? String(sdRaw.puntaje_banker) : null,
+        cartas_player: Array.isArray(sdRaw.cartas_player) ? sdRaw.cartas_player.map((x) => String(x)) : null,
+        cartas_banker: Array.isArray(sdRaw.cartas_banker) ? sdRaw.cartas_banker.map((x) => String(x)) : null,
+        ganador: sdRaw.ganador != null ? normSide(sdRaw.ganador) : null,
+      }
+    : null;
+
   return {
     mesa: result.mesa || 'N/A',
     ganador: winnerNorm,
@@ -143,5 +160,6 @@ export function formatResult(result, predictedLabel) {
         return '—';
       }
     })(),
+    scoreDetail,
   };
 }

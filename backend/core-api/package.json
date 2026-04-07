@@ -17,7 +17,11 @@
     "worker:tx": "node src/workers/txWorker.js",
     "typecheck:compensation": "tsc -p tsconfig.compensation.json --noEmit",
     "test:payout": "npm run build:compensation && node --test tests/payoutIdempotency.test.js",
-    "mongo:inspect": "node scripts/mongo-inspect.mjs"
+    "mongo:inspect": "node scripts/mongo-inspect.mjs",
+    "analyze:provider-stream": "node provider-stream-analyze-120s.mjs",
+    "capture:one-signal-session": "node capture-one-signal-session.mjs",
+    "capture:sequential-sessions": "node capture-sequential-signal-sessions.mjs",
+    "capture:mesa-radiograph": "node mesa-session-radiograph.mjs"
   },
   "devDependencies": {
     "@types/express": "^4.17.25",

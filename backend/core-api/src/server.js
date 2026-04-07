@@ -1,12 +1,13 @@
+import 'dotenv/config';
 import { createServer } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { Worker } from 'bullmq';
 
 import { createLogger } from './utils/logger.js';
-import { connectMongoIfConfigured, getMongoHealthSummary } from '../dist/db/connect.js';
+import { getMongoHealthSummary, isGenesisMongoReady } from '../dist/db/connect.js';
+import { connectMongo } from './db/mongo.js';
 import { depositRoutes } from './routes/depositRoutes.js';
 import { withdrawRoutes } from './routes/withdrawRoutes.js';
 import { authRoutes } from './routes/authRoutes.js';
@@ -40,14 +41,14 @@ import { createDepositCompensationBridge } from './services/depositCompensationB
 import session from 'express-session';
 import { siweAuthRoutes } from './routes/siweAuthRoutes.js';
 import { createApiSessionAuthMiddleware } from './middlewares/apiSessionAuthMiddleware.js';
-import { adminAuthRoutes } from './routes/adminAuthRoutes.js';
+import { adminAuthRoutes, adminLoginHandler } from './routes/adminAuthRoutes.js';
 import { registerAdminSignalsApiRoutes, attachAdminSignalsIo } from './admin-signals/index.js';
 import { startSignalMetricsDailyAggregation } from './admin-signals/signalMetricsDailyJob.js';
 import { startSignalAutoResponseScheduler } from './admin-signals/signalAutoResponseService.js';
 import { runMongoStartupVerify } from './db/mongoStartupVerify.js';
 import { runAdminSignalsHttpSmoke } from './db/adminSignalsHttpSmoke.js';
 
-dotenv.config();
+console.log('🧠 Mongo URI loaded:', !!process.env.MONGO_URI);
 
 const logger = createLogger();
 
@@ -80,7 +81,7 @@ process.on('uncaughtException', (err) => {
 });
 
 async function main() {
-  await connectMongoIfConfigured(logger);
+  await connectMongo(logger);
 
   const app = express();
 
@@ -127,10 +128,12 @@ async function main() {
   });
 
   app.get('/health', (_req, res) => {
-    const mongo = getMongoHealthSummary();
+    const summary = getMongoHealthSummary();
     const body = { ok: true };
-    if (mongo.configured) {
-      body.mongo = mongo.ready ? 'connected' : 'disconnected';
+    if (summary.configured && summary.sources?.genesis?.uriConfigured) {
+      body.mongo = isGenesisMongoReady() ? 'connected' : 'disconnected';
+    } else if (summary.configured) {
+      body.mongo = summary.ready ? 'connected' : 'disconnected';
     }
     res.json(body);
   });
@@ -259,6 +262,9 @@ async function main() {
 
   app.use(express.json({ limit: '1mb' }));
 
+  /** POST /admin/login (sin prefijo /api) — mismo handler que POST /api/admin/auth/login. */
+  app.post('/admin/login', adminLoginHandler);
+
   const IS_DEV_API = process.env.NODE_ENV !== 'production';
 
   /**
@@ -270,7 +276,9 @@ async function main() {
   /** Rutas que no deben consumir el cubo “API general” (tienen cubo propio o van desacopladas). */
   function shouldSkipGeneralApiRateLimit(req) {
     const path = String(req.originalUrl || req.url || '').split('?')[0] || '';
+    if (path === '/admin/login' || path.startsWith('/admin/login/')) return true;
     if (path === '/api/admin/auth' || path.startsWith('/api/admin/auth/')) return true;
+    if (path === '/api/admin/login' || path.startsWith('/api/admin/login/')) return true;
     if (path === '/api/admin/session' || path.startsWith('/api/admin/session/')) return true;
     if (path === '/api/admin/signals' || path.startsWith('/api/admin/signals/')) return true;
     return false;

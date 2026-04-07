@@ -12,3 +12,4 @@ export {
   tryGetDbConnection,
   winxDb,
 } from '../../dist/db/connect.js';
+export { connectMongo } from './mongo.js';

@@ -2,6 +2,8 @@ import { createSignalsProcessor } from './processorState.js';
 import { createUpstreamBridge } from './upstreamBridge.js';
 import { adminSignalsApi } from './adminSignalsApi.js';
 import { attachAdminSignalsNamespace } from './attachAdminSignalsNamespace.js';
+import { setSignalStreamInterpreterIo } from './signalStreamInterpreter.js';
+import { setSignalSessionTrackerIo } from './signalSessionTracker.js';
 import { createSignalPersistence } from './signalPersistenceService.js';
 import { adminSignalsFlowTrace } from './signalFlowDebug.js';
 import { relayAdminSignalsToClients, resolveTestEmitIntervalMs } from './relayAdminSignalsToClients.js';
@@ -60,6 +62,8 @@ export async function registerAdminSignalsApiRoutes({ app, logger, configRateLim
  * }} ctx
  */
 export function attachAdminSignalsIo({ io, processor, logger, sessionMiddleware }) {
+  setSignalStreamInterpreterIo(io);
+  setSignalSessionTrackerIo(io);
   attachAdminSignalsNamespace(io, { sessionMiddleware, logger });
 
   const upstreamUrl =

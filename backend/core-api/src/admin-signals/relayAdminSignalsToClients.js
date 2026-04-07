@@ -1,6 +1,8 @@
 import { buildAdminSignalsClientPayload } from './buildAdminSignalsClientPayload.js';
 import { assertAdminSignalPayloadSize, prepareAdminSignalsClientEmit } from './signalPayloadValidate.js';
 import { adminSignalsFlowTrace, summarizePayloadForFlow } from './signalFlowDebug.js';
+import { getSignalStreamInterpreter } from './signalStreamInterpreter.js';
+import { getSignalSessionTracker } from './signalSessionTracker.js';
 
 /**
  * Ingest + emite a `/admin-signals` (mismo camino que relay upstream).
@@ -77,6 +79,23 @@ export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
   nsp.emit('admin_signal_frame', { type, payload: out, ts: Date.now() });
   if (source === 'test_emit') {
     console.log('🔥 TEST SIGNAL EMIT → enviado al panel');
+  }
+  try {
+    getSignalStreamInterpreter().ingestRelay(type, out, {
+      source,
+      fromUpstream: source === 'upstream',
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger?.warn?.('signal_stream_interpreter_relay', { message: msg, source, type });
+  }
+  if (source === 'test_emit') {
+    try {
+      getSignalSessionTracker().ingestNormalized(type, out);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger?.warn?.('signal_session_tracker_relay', { message: msg, type });
+    }
   }
   return { ok: true, clientCount };
 }
