@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
   Eye, Trophy, Target as TargetIcon, Wallet, Server, Circle, Fingerprint, 
@@ -44,6 +44,7 @@ import { useSynchronization } from './hooks/useSynchronization.js';
 import { runDiagnostics } from './domain/diagnostics/index.js';
 import { executeAIFlow } from './domain/orchestrator/executeAIFlow.js';
 import { connectWallet as connectInjectedWallet } from './utils/connectWallet.js';
+import { getInjectedEthereum } from './utils/ethereumProvider.js';
 import { isWeb3MockMode } from './utils/web3Mode.js';
 import {
   applyIaRealStakeDebit,
@@ -88,7 +89,7 @@ import {
   computeWalletSplit,
 } from './domain/ledger/index.js';
 import { computeGPulse } from './core/gpulse/gpulseEngine.js';
-import { unlockAudio } from './utils/audioUnlock.js';
+import { unlockAudio, subscribeAudioUnlock, getAudioUnlockEpoch, isAudioUnlocked } from './utils/audioUnlock.js';
 
 // --- CONFIGURACIÓN DE SISTEMA ---
 /** Plan de usuario para reglas de voz G_Pulse (alinear con Access / backend cuando exista). */
@@ -1147,14 +1148,15 @@ const WalletSlidePanel = React.memo(function WalletSlidePanel({
       setWalletNativeBalance(null);
       return undefined;
     }
-    if (!userWalletAddress || typeof window === 'undefined' || !window?.ethereum) {
+    const injected = getInjectedEthereum();
+    if (!userWalletAddress || typeof window === 'undefined' || !injected) {
       setWalletNativeBalance(null);
       return undefined;
     }
     let cancelled = false;
     const readBal = async () => {
       try {
-        const provider = new BrowserProvider(window?.ethereum);
+        const provider = new BrowserProvider(injected);
         const bal = await provider.getBalance(userWalletAddress);
         if (!cancelled) setWalletNativeBalance(formatEther(bal));
       } catch {
@@ -1165,18 +1167,25 @@ const WalletSlidePanel = React.memo(function WalletSlidePanel({
     const chainListener = () => {
       readBal();
     };
-    try {
-      window?.ethereum?.on?.('chainChanged', chainListener);
-    } catch {
-      /* ignore */
-    }
-    return () => {
-      cancelled = true;
+    let unsubChain = () => {};
+    if (typeof injected.on === 'function') {
       try {
-        window?.ethereum?.removeListener?.('chainChanged', chainListener);
+        injected.on('chainChanged', chainListener);
+        unsubChain = () => {
+          try {
+            if (typeof injected.removeListener === 'function') injected.removeListener('chainChanged', chainListener);
+            else if (typeof injected.off === 'function') injected.off('chainChanged', chainListener);
+          } catch {
+            /* ignore */
+          }
+        };
       } catch {
         /* ignore */
       }
+    }
+    return () => {
+      cancelled = true;
+      unsubChain();
     };
   }, [userWalletAddress]);
 
@@ -1316,13 +1325,14 @@ const WalletSlidePanel = React.memo(function WalletSlidePanel({
 
   async function realDeposit(amount, userAddress) {
     if (isWeb3MockMode()) throw new Error('No Web3 wallet');
-    if (typeof window === 'undefined' || !window?.ethereum) throw new Error('No Web3 wallet');
+    const injected = typeof window !== 'undefined' ? getInjectedEthereum() : null;
+    if (!injected) throw new Error('No Web3 wallet');
     if (!userWalletAddress) {
       console.warn('Deposit attempted without wallet');
       throw new Error('Wallet not connected');
     }
 
-    const provider = new BrowserProvider(window?.ethereum);
+    const provider = new BrowserProvider(injected);
     const network = await provider.getNetwork();
     if (network?.chainId !== 1n) {
       console.warn('Invalid network:', network?.chainId);
@@ -1555,7 +1565,9 @@ const WalletSlidePanel = React.memo(function WalletSlidePanel({
         const message = String(msgPayload.message);
 
         setTxFlow((s) => ({ ...s, state: TX_FLOW_STATE.SIGNING }));
-        const provider = new BrowserProvider(window.ethereum);
+        const injected = getInjectedEthereum();
+        if (!injected) throw new Error('No Web3 wallet');
+        const provider = new BrowserProvider(injected);
         const signer = await provider.getSigner();
         const signature = await signer.signMessage(message);
 
@@ -1734,7 +1746,7 @@ const WalletSlidePanel = React.memo(function WalletSlidePanel({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {typeof window !== 'undefined' && !isWeb3MockMode() && window?.ethereum && onConnectWallet ? (
+            {typeof window !== 'undefined' && !isWeb3MockMode() && getInjectedEthereum() && onConnectWallet ? (
               <WalletConnectButton
                 isLight={isLight}
                 address={userWalletAddress}
@@ -3053,6 +3065,7 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLightMode, setIsLightMode] = useState(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
+  const audioUnlockEpoch = useSyncExternalStore(subscribeAudioUnlock, getAudioUnlockEpoch, getAudioUnlockEpoch);
   const [isGoPulseActive, setIsGoPulseActive] = useState(false);
   const [fase, setFase] = useState(FASES.STANDBY);
   const [isRunning, setIsRunning] = useState(false);
@@ -3146,8 +3159,8 @@ export default function App() {
 
   useEffect(() => {
     if (isWeb3MockMode()) return undefined;
-    const eth = typeof window !== 'undefined' ? window?.ethereum : null;
-    if (!eth?.on) return undefined;
+    const eth = getInjectedEthereum();
+    if (!eth || typeof eth.on !== 'function') return undefined;
 
     const handleAccountsChanged = (accounts) => {
       try {
@@ -3156,22 +3169,27 @@ export default function App() {
           const normalized = getAddress(next);
           userWalletSessionRef.current = { provider: null, signer: null };
           setUserWalletAddress(normalized);
-          console.info('Wallet changed:', normalized);
         } else {
           userWalletSessionRef.current = { provider: null, signer: null };
           setUserWalletAddress(null);
-          console.info('Wallet changed: disconnected');
         }
       } catch (e) {
-        console.error('Wallet accountsChanged handler failed:', e);
+        if (import.meta.env.DEV) console.error('Wallet accountsChanged handler failed:', e);
       }
     };
 
-    eth.on('accountsChanged', handleAccountsChanged);
+    try {
+      eth.on('accountsChanged', handleAccountsChanged);
+    } catch {
+      return undefined;
+    }
     return () => {
       try {
-        eth.removeListener?.('accountsChanged', handleAccountsChanged);
-      } catch (e) {}
+        if (typeof eth.removeListener === 'function') eth.removeListener('accountsChanged', handleAccountsChanged);
+        else if (typeof eth.off === 'function') eth.off('accountsChanged', handleAccountsChanged);
+      } catch {
+        /* ignore */
+      }
     };
   }, []);
   const [igniteDenyAnim, setIgniteDenyAnim] = useState(false);
@@ -4438,6 +4456,7 @@ export default function App() {
         SoundEngine.setRollingLayer(false);
         return;
       }
+      if (!isAudioUnlocked()) return;
       await SoundEngine.init();
       if (!cancelled) {
         SoundEngine.setAmbientProfile('off');
@@ -4445,7 +4464,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [isSoundEnabled]);
+  }, [isSoundEnabled, audioUnlockEpoch]);
 
   useEffect(() => {
     if (!SoundEngine.isInitialized) return;

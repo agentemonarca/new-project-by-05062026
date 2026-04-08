@@ -12,6 +12,7 @@
     "build:compensation": "tsc -p tsconfig.compensation.json",
     "prestart": "npm run build:db && npm run build:compensation",
     "dev": "npm run build:db && npm run build:compensation && node --watch src/server.js",
+    "dev:multi": "npm run build:db && npm run build:compensation && node src/server.js",
     "dev:clean": "sh -c 'for pid in $(lsof -ti :5050 2>/dev/null); do kill -9 \"$pid\" 2>/dev/null || true; done'",
     "start": "node src/server.js",
     "worker:tx": "node src/workers/txWorker.js",
@@ -21,7 +22,8 @@
     "analyze:provider-stream": "node provider-stream-analyze-120s.mjs",
     "capture:one-signal-session": "node capture-one-signal-session.mjs",
     "capture:sequential-sessions": "node capture-sequential-signal-sessions.mjs",
-    "capture:mesa-radiograph": "node mesa-session-radiograph.mjs"
+    "capture:mesa-radiograph": "node mesa-session-radiograph.mjs",
+    "capture:3-sessions-forensic": "node capture-3-sessions-forensic.mjs"
   },
   "devDependencies": {
     "@types/express": "^4.17.25",

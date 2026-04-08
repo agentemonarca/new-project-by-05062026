@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
+import { formatAdminDebugLogLine } from '../realtime/adminSignalsDebugTypes.js';
 import {
   adminSignalsPushDebugLog,
   getAdminSignalsLiveServerSnapshot,
@@ -251,6 +252,12 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
     const linked = findLinkedResult(s);
     const predEmoji = s.predictionLabel === 'PLAYER' ? '🔵' : s.predictionLabel === 'BANKER' ? '🔴' : '🎯';
     const cls = s.classification ?? classifySignal(s);
+    const entryLabel =
+      cls?.type === 'RECOVERY'
+        ? 'RECUPERACIÓN'
+        : cls?.type === 'HIGH_RISK'
+          ? 'RIESGO ALTO'
+          : 'ENTRADA DIRECTA';
 
     return (
       <motion.div
@@ -285,7 +292,7 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
                 className={`signal-type inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${classificationChipClass(cls.color)}`}
               >
                 <span aria-hidden>{cls.icon}</span>
-                <span>{cls.label}</span>
+                <span>{entryLabel}</span>
               </div>
               <div className="signal-direction text-[11px] font-semibold tracking-tight text-slate-200">
                 {cls.direction}
@@ -478,10 +485,10 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
               Payloads
             </button>
             <Link
-              to="/admin/signals"
+              to="/admin"
               className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:border-cyan-400/55 hover:bg-cyan-500/15"
             >
-              Ver panel completo
+              Ir al panel
             </Link>
           </div>
         </motion.div>
@@ -973,7 +980,7 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
                   ) : (
                     logsUi.map((line, i) => (
                       <div key={i} className="border-b border-white/[0.03] py-1 last:border-0">
-                        {line}
+                        {formatAdminDebugLogLine(line)}
                       </div>
                     ))
                   )}

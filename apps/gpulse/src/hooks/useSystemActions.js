@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useGpulseSystem } from '../context/GpulseContext.jsx';
 import { computeSystemMode } from '../system/decisionEngine.js';
 import { computeRecentTxStats } from '../system/txStats.js';
@@ -12,6 +12,11 @@ import {
   computeStrategyConfidence,
 } from '../system/systemMetaConfidence.js';
 
+function sameAvgConfirmation(a, b) {
+  if (Number.isNaN(a) && Number.isNaN(b)) return true;
+  return a === b;
+}
+
 /**
  * Adaptive config from the decision engine + light stress prediction.
  * Non-blocking; safe to call from any component under GpulseProvider.
@@ -23,6 +28,7 @@ import {
  */
 export function useSystemActions({ transactions = [], queueBacklog = 0, queueWaiting } = {}) {
   const { systemHealth } = useGpulseSystem();
+  const lastTrendSampleRef = useRef(null);
 
   return useMemo(() => {
     const safeTx = Array.isArray(transactions) ? transactions : [];
@@ -36,12 +42,23 @@ export function useSystemActions({ transactions = [], queueBacklog = 0, queueWai
       systemHealth,
     });
 
-    const trendBuf = getSharedTrendBuffer();
-    trendBuf.push({
+    const sample = {
       queueWaiting: qw,
       failureRate: recentTxStats.failureRate,
       avgConfirmationTime: recentTxStats.avgConfirmationTime,
-    });
+    };
+    const prev = lastTrendSampleRef.current;
+    const unchanged =
+      prev &&
+      prev.queueWaiting === sample.queueWaiting &&
+      prev.failureRate === sample.failureRate &&
+      sameAvgConfirmation(prev.avgConfirmationTime, sample.avgConfirmationTime);
+
+    const trendBuf = getSharedTrendBuffer();
+    if (!unchanged) {
+      lastTrendSampleRef.current = sample;
+      trendBuf.push(sample);
+    }
     const trend = trendBuf.getTrend();
 
     const { mode, actions, confidence: confOut } = computeSystemMode({

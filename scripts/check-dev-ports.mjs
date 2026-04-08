@@ -4,11 +4,13 @@
  */
 import { createServer } from 'node:net';
 
-const mode = process.argv[2] === 'main' ? 'main' : 'all';
+const arg = String(process.argv[2] ?? '').trim().toLowerCase();
+const mode = arg === 'main' ? 'main' : arg === 'full' ? 'full' : 'all';
 
 const PORTS_MAIN = [5050, 5174];
 const PORTS_ALL = [5050, 5174, 5190];
-const ports = mode === 'main' ? PORTS_MAIN : PORTS_ALL;
+const PORTS_FULL = [4000, 5050, 5052, 5174, 5180, 5190];
+const ports = mode === 'main' ? PORTS_MAIN : mode === 'full' ? PORTS_FULL : PORTS_ALL;
 
 function isPortFree(port) {
   return new Promise((resolve, reject) => {

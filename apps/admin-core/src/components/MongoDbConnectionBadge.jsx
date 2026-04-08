@@ -141,7 +141,7 @@ function MongoDbConnectionBadgeInner() {
           <span className="text-emerald-400" aria-hidden>
             ✔{' '}
           </span>
-          Connected
+          Mongo conectado
         </span>
       );
     }
@@ -150,7 +150,7 @@ function MongoDbConnectionBadgeInner() {
         <span className="text-rose-400" aria-hidden>
           ❌{' '}
         </span>
-        Disconnected
+        Mongo desconectado
       </span>
     );
   })();
@@ -159,12 +159,12 @@ function MongoDbConnectionBadgeInner() {
     latencyMs != null && !fetchErr ? latencyTone(latencyMs) : null;
 
   const ariaLabel = fetchErr
-    ? `Base ${theme.label}: error al comprobar Mongo`
+    ? `Origen ${theme.label}: error al comprobar Mongo`
     : mongoReady === true
-      ? `Connected to ${theme.label}, Mongo conectado${latencyMs != null ? `, latencia ${latencyMs} milisegundos` : ''}`
+      ? `Origen API ${theme.label}, Mongo conectado${latencyMs != null ? `, latencia API ${latencyMs} milisegundos` : ''}`
       : mongoReady === false
-        ? `Connected to ${theme.label}, Mongo desconectado${latencyMs != null ? `, latencia ${latencyMs} milisegundos` : ''}`
-        : `Connected to ${theme.label}, comprobando`;
+        ? `Origen API ${theme.label}, Mongo desconectado${latencyMs != null ? `, latencia API ${latencyMs} milisegundos` : ''}`
+        : `Origen API ${theme.label}, comprobando Mongo`;
 
   return (
     <div
@@ -175,7 +175,9 @@ function MongoDbConnectionBadgeInner() {
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <Database className={`h-3.5 w-3.5 shrink-0 ${theme.iconClass}`} aria-hidden />
-        <span className="text-[11px] font-medium text-slate-400">Connected to:</span>
+        <span className="text-[11px] font-medium text-slate-400" title="Origen de datos admin (no es el socket VistaLab)">
+          Origen API:
+        </span>
         <span className={`text-[11px] ${theme.nameClass}`}>{theme.label}</span>
         {busy && mongoReady !== null ? (
           <Loader2

@@ -1,10 +1,33 @@
 /**
- * Centralized AudioContext unlock for Tone.js (and coordinated “audio ready” for UX).
- * Uses `window.Tone` — same instance as SoundEngine (CDN) — never a second bundled context.
+ * Centralized AudioContext unlock for Tone.js (single CDN instance; no second bundled context).
  */
 
 let isUnlocked = false;
 let inFlight = null;
+
+const unlockListeners = new Set();
+let unlockEpoch = 0;
+
+function notifyUnlockSubscribers() {
+  unlockEpoch += 1;
+  unlockListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+/** @param {() => void} listener */
+export function subscribeAudioUnlock(listener) {
+  unlockListeners.add(listener);
+  return () => unlockListeners.delete(listener);
+}
+
+export function getAudioUnlockEpoch() {
+  return unlockEpoch;
+}
 
 function getWindowTone() {
   if (typeof window === 'undefined') return null;
@@ -12,7 +35,6 @@ function getWindowTone() {
 }
 
 /**
- * Wait briefly for CDN Tone to attach (script is async in App).
  * @param {number} [maxMs]
  */
 async function resolveTone(maxMs = 5000) {
@@ -31,16 +53,15 @@ async function runUnlock() {
   try {
     const Tone = await resolveTone();
     if (!Tone || typeof Tone.start !== 'function') {
-      console.warn('Audio unlock failed: Tone.js not available');
       return false;
     }
     await Tone.start();
-    isUnlocked = true;
-    console.log('🔊 Audio unlocked successfully');
-    console.log('🔊 Audio system ready');
+    if (!isUnlocked) {
+      isUnlocked = true;
+      notifyUnlockSubscribers();
+    }
     return true;
-  } catch (error) {
-    console.warn('Audio unlock failed:', error);
+  } catch {
     return false;
   } finally {
     inFlight = null;
@@ -61,4 +82,12 @@ export async function unlockAudio() {
 
 export function isAudioUnlocked() {
   return isUnlocked;
+}
+
+/**
+ * Idempotent: call from click handlers to ensure the audio graph can start after unlockAudio().
+ * @returns {Promise<boolean>}
+ */
+export async function resumeAudioFromUserGesture() {
+  return unlockAudio();
 }

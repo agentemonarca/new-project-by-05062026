@@ -1,58 +1,22 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo } from 'react';
-import {
-  BrowserRouter,
-  Navigate,
-  NavLink,
-  Outlet,
-  Route,
-  Routes,
-  useLocation,
-} from 'react-router-dom';
+import React, { Suspense, useCallback, useEffect } from 'react';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext.jsx';
 import RequireAdminAuth from './components/RequireAdminAuth.jsx';
 import { AdminLoginPage } from './pages/AdminLoginPage.jsx';
-import { AdminSignalsPage } from './pages/AdminSignalsPage.jsx';
-import { SignalLabPage } from './pages/SignalLabPage.jsx';
+import { AdminPanel } from './pages/AdminPanel.jsx';
 import { AdminCoreProvider, useAdminCore } from './context/AdminCoreContext.jsx';
 import { AdminHeader } from './components/AdminHeader.jsx';
-import { AdminSidebar } from './components/AdminSidebar.jsx';
 import { ProjectSwitchSkeleton } from './components/ProjectSwitchSkeleton.jsx';
 import { Loader2 } from 'lucide-react';
 
-const GlobalOverviewModule = lazy(() =>
-  import('./modules/global/GlobalOverviewModule.jsx').then((m) => ({ default: m.GlobalOverviewModule })),
-);
-const UsersModule = lazy(() =>
-  import('./modules/users/UsersModule.jsx').then((m) => ({ default: m.UsersModule })),
-);
-const WalletModule = lazy(() =>
-  import('./modules/wallet/WalletModule.jsx').then((m) => ({ default: m.WalletModule })),
-);
-const RewardsModule = lazy(() =>
-  import('./modules/rewards/RewardsModule.jsx').then((m) => ({ default: m.RewardsModule })),
-);
-const P2PModule = lazy(() =>
-  import('./modules/p2p/P2PModule.jsx').then((m) => ({ default: m.P2PModule })),
-);
-const SettingsModule = lazy(() =>
-  import('./modules/settings/SettingsModule.jsx').then((m) => ({ default: m.SettingsModule })),
-);
-const EconomyModule = lazy(() =>
-  import('./modules/economy/EconomyModule.jsx').then((m) => ({ default: m.EconomyModule })),
-);
-const SecurityModule = lazy(() =>
-  import('./modules/security/SecurityModule.jsx').then((m) => ({ default: m.SecurityModule })),
-);
-const AnalyticsModule = lazy(() =>
-  import('./modules/analytics/AnalyticsModule.jsx').then((m) => ({ default: m.AnalyticsModule })),
-);
-const NetworkModule = lazy(() =>
-  import('./modules/network/NetworkModule.jsx').then((m) => ({ default: m.NetworkModule })),
-);
-const SecurityLogsPage = lazy(() =>
-  import('./modules/audit/SecurityLogsPage.jsx').then((m) => ({ default: m.SecurityLogsPage })),
-);
+/* ─── Rutas legacy desactivadas (no borrar archivos; solo se dejan de importar) ───
+import { AdminSignalsPage } from './pages/AdminSignalsPage.jsx';
+import { SignalLabPage } from './pages/SignalLabPage.jsx';
+const GlobalOverviewModule = lazy(() => import('./modules/global/GlobalOverviewModule.jsx')...);
+const UsersModule = lazy(() => import('./modules/users/UsersModule.jsx')...);
+// …wallet, rewards, p2p, settings, economy, security, analytics, network, audit
+*/
 
 function SessionLoader() {
   return (
@@ -65,7 +29,6 @@ function SessionLoader() {
   );
 }
 
-/** Tras comprobar cookie `/me`, sin sesión → redirección forzada a login (sin UI de “no autorizado”). */
 function ProtectedAdminOutlet() {
   return (
     <RequireAdminAuth>
@@ -82,7 +45,7 @@ function LoginRoute() {
     return <SessionLoader />;
   }
   if (admin) {
-    return <Navigate to="/admin/overview" replace />;
+    return <Navigate to="/admin" replace />;
   }
   return <AdminLoginPage />;
 }
@@ -93,7 +56,7 @@ function RootRedirect() {
     return <SessionLoader />;
   }
   if (admin) {
-    return <Navigate to="/admin/overview" replace />;
+    return <Navigate to="/admin" replace />;
   }
   return <Navigate to="/admin/login" replace />;
 }
@@ -118,36 +81,12 @@ function AdminShellLayout() {
     }
   }, [location.pathname]);
 
-  const active = useMemo(() => {
-    const seg = location.pathname.replace(/^\/admin\/?/, '').split('/')[0] || 'overview';
-    return seg;
-  }, [location.pathname]);
-
   const onProjectChange = useCallback(
     (id) => {
       if (!id) return;
       setCurrentProject(id);
     },
     [setCurrentProject],
-  );
-
-  const mobileTabs = useMemo(
-    () => [
-      { id: 'signals', label: 'Sig' },
-      { id: 'signal-lab', label: 'Lab' },
-      { id: 'overview', label: 'Ini' },
-      { id: 'users', label: 'Usr' },
-      { id: 'wallet', label: 'Wal' },
-      { id: 'rewards', label: 'Rew' },
-      { id: 'p2p', label: 'P2P' },
-      { id: 'network', label: 'Net' },
-      { id: 'economy', label: 'Eco' },
-      { id: 'settings', label: 'Cfg' },
-      { id: 'security', label: 'Sec' },
-      { id: 'auditLogs', label: 'Log' },
-      { id: 'analytics', label: 'KPI' },
-    ],
-    [],
   );
 
   return (
@@ -164,28 +103,10 @@ function AdminShellLayout() {
         onAdminMongoSourceChange={setAdminMongoSource}
       />
 
-      <div className="flex min-h-0 flex-1">
-        <AdminSidebar />
-
-        <main className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
-          <nav className="custom-scrollbar mb-4 flex gap-1 overflow-x-auto pb-1 lg:hidden" aria-label="Secciones">
-            {mobileTabs.map((t) => (
-              <NavLink
-                key={t.id}
-                to={`/admin/${t.id}`}
-                className={({ isActive }) =>
-                  `shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                    isActive ? 'bg-cyan-500/20 text-cyan-100' : 'bg-white/5 text-slate-400'
-                  }`
-                }
-              >
-                {t.label}
-              </NavLink>
-            ))}
-          </nav>
-
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {!currentProject ? (
-            <p className="text-sm text-amber-200/90">Selecciona un proyecto válido arriba.</p>
+            <p className="p-4 text-sm text-amber-200/90 lg:p-6">Selecciona un proyecto válido arriba.</p>
           ) : isSwitchingProject ? (
             <motion.div
               key="switching"
@@ -193,7 +114,7 @@ function AdminShellLayout() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0.45 }}
               transition={{ duration: 0.2 }}
-              className="rounded-2xl border border-white/[0.06] bg-slate-950/40 p-6"
+              className="m-4 rounded-2xl border border-white/[0.06] bg-slate-950/40 p-6 lg:m-6"
             >
               <p className="mb-4 text-xs font-medium uppercase tracking-wider text-cyan-500/80">
                 Cambiando de proyecto
@@ -203,17 +124,18 @@ function AdminShellLayout() {
           ) : (
             <AnimatePresence mode="wait">
               <motion.div
-                key={`${currentProject}-${active}`}
+                key={currentProject}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.18 }}
+                className="flex min-h-0 min-w-0 flex-1 flex-col"
               >
                 <Suspense
                   fallback={
                     <div className="flex items-center gap-2 py-12 text-sm text-slate-400">
                       <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
-                      Cargando módulo…
+                      Cargando…
                     </div>
                   }
                 >
@@ -238,21 +160,8 @@ function AdminAppRoutes() {
       <Route path="/" element={<RootRedirect />} />
       <Route path="/admin/login" element={<LoginRoute />} />
       <Route path="/admin" element={<ProtectedAdminOutlet />}>
-        <Route index element={<Navigate to="overview" replace />} />
-        <Route path="signals" element={<AdminSignalsPage />} />
-        <Route path="signal-lab" element={<SignalLabPage />} />
-        <Route path="overview" element={<GlobalOverviewModule />} />
-        <Route path="users" element={<UsersModule />} />
-        <Route path="wallet" element={<WalletModule />} />
-        <Route path="rewards" element={<RewardsModule />} />
-        <Route path="p2p" element={<P2PModule />} />
-        <Route path="network" element={<NetworkModule />} />
-        <Route path="economy" element={<EconomyModule />} />
-        <Route path="settings" element={<SettingsModule />} />
-        <Route path="security" element={<SecurityModule />} />
-        <Route path="auditLogs" element={<SecurityLogsPage />} />
-        <Route path="analytics" element={<AnalyticsModule />} />
-        <Route path="*" element={<Navigate to="overview" replace />} />
+        <Route index element={<AdminPanel />} />
+        <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
       <Route path="*" element={<RootRedirect />} />
     </Routes>

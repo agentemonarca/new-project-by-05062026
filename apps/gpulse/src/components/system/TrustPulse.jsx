@@ -19,23 +19,40 @@ function flowProcessing(open, state) {
   return !TERMINAL_FLOW.has(state);
 }
 
+function trustPulsePropsEqual(prev, next) {
+  if (prev.isLight !== next.isLight) return false;
+  if (prev.successGlowUntil !== next.successGlowUntil) return false;
+  if (prev.pendingTxCount !== next.pendingTxCount) return false;
+  if (prev.lastConfirmedAt !== next.lastConfirmedAt) return false;
+  if (prev.enableHealthPing !== next.enableHealthPing) return false;
+  if (prev.walletRecentFailureCount !== next.walletRecentFailureCount) return false;
+  if (prev.systemMode !== next.systemMode) return false;
+  if (prev.queueWaiting !== next.queueWaiting) return false;
+  if (prev.systemStressScore !== next.systemStressScore) return false;
+  if (prev.congestionProbability !== next.congestionProbability) return false;
+
+  const a = prev.walletFlow;
+  const b = next.walletFlow;
+  if (a.open !== b.open || a.state !== b.state) return false;
+  const pa = prev.premiumFlow;
+  const pb = next.premiumFlow;
+  if (pa.open !== pb.open || pa.state !== pb.state) return false;
+
+  const h = prev.systemHealth;
+  const nh = next.systemHealth;
+  if (h === nh) return true;
+  if (!h || !nh) return false;
+  return (
+    h.network === nh.network &&
+    h.signer === nh.signer &&
+    h.mempool === nh.mempool &&
+    h.backend === nh.backend &&
+    h.riskLevel === nh.riskLevel
+  );
+}
+
 /**
- * Persistent trust / system-health indicator — subtle dot + heartbeat ring + hover detail.
- *
  * @param {object} props
- * @param {boolean} props.isLight
- * @param {{ open: boolean, state: string }} props.walletFlow
- * @param {{ open: boolean, state: string }} props.premiumFlow
- * @param {number} props.successGlowUntil — ms timestamp · green “memory” after success
- * @param {number} props.pendingTxCount
- * @param {number | null} props.lastConfirmedAt — ms epoch (`at` on wallet tx rows)
- * @param {boolean} [props.enableHealthPing]
- * @param {object} [props.systemHealth] — from GpulseContext (/system/health)
- * @param {number} [props.walletRecentFailureCount] — recent failed txs (bounded window)
- * @param {string} [props.systemMode] — decision engine output
- * @param {number} [props.queueWaiting] — server BullMQ waiting count (subtle UX pacing)
- * @param {number} [props.systemStressScore] — 0–100 confidence aggregate (optional)
- * @param {number} [props.congestionProbability] — 0–1 (optional)
  */
 function TrustPulse({
   isLight = false,
@@ -52,24 +69,28 @@ function TrustPulse({
   systemStressScore = 0,
   congestionProbability = 0,
 }) {
-  if (import.meta.env.DEV) {
-    console.log('Rendering TrustPulse', 'systemMode:', systemMode);
-  }
   const resolvedSystemMode = typeof systemMode === 'string' ? systemMode : DEFAULT_SYSTEM_MODE;
   const qw = Math.max(0, Number(queueWaiting) || 0);
   const cp = Math.min(1, Math.max(0, Number(congestionProbability) || 0));
   const ss = Math.min(100, Math.max(0, Number(systemStressScore) || 0));
-  /** Slightly slower motion when backlog or probabilistic stress rises (no modal). */
   const queuePace =
     (1 + Math.min(0.38, qw / 72)) * (1 + Math.min(0.1, cp * 0.12 + (ss / 100) * 0.08));
 
   const [, setTick] = useState(0);
   const [backendOk, setBackendOk] = useState(null);
 
+  const needsLiveClock =
+    pendingTxCount > 0 ||
+    lastConfirmedAt != null ||
+    (typeof successGlowUntil === 'number' && successGlowUntil > Date.now());
+
   useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    if (!needsLiveClock) return undefined;
+    const id = window.setInterval(() => {
+      setTick((t) => t + 1);
+    }, 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [needsLiveClock]);
 
   useEffect(() => {
     if (!enableHealthPing || typeof window === 'undefined') return undefined;
@@ -111,14 +132,15 @@ function TrustPulse({
     return TRUST_LAYER_MODE.HEALTHY;
   }, [walletFlow.open, walletFlow.state, premiumFlow.open, premiumFlow.state, pendingTxCount]);
 
-  const inSuccessMemory = typeof successGlowUntil === 'number' && Date.now() < successGlowUntil;
+  const now = Date.now();
+  const inSuccessMemory = typeof successGlowUntil === 'number' && now < successGlowUntil;
   const healthyBoost = mode === TRUST_LAYER_MODE.HEALTHY && inSuccessMemory;
 
   const secondsSinceConfirm =
-    lastConfirmedAt != null ? Math.max(0, Math.floor((Date.now() - lastConfirmedAt) / 1000)) : null;
+    lastConfirmedAt != null ? Math.max(0, Math.floor((now - lastConfirmedAt) / 1000)) : null;
 
   const confirmationSlow =
-    pendingTxCount > 0 && lastConfirmedAt != null && Date.now() - lastConfirmedAt > 90_000;
+    pendingTxCount > 0 && lastConfirmedAt != null && now - lastConfirmedAt > 90_000;
 
   const consciousnessDetail = useMemo(() => {
     const parts = [];
@@ -280,7 +302,7 @@ function TrustPulse({
   );
 }
 
-const TrustPulseMemo = React.memo(TrustPulse);
+const TrustPulseMemo = React.memo(TrustPulse, trustPulsePropsEqual);
 export default TrustPulseMemo;
 
 /**

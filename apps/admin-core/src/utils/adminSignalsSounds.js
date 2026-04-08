@@ -4,13 +4,29 @@ export const soundEnabled = true;
 /** @type {AudioContext | null} */
 let ctxRef = null;
 
-function getAudioContext() {
-  if (typeof window === 'undefined') return null;
-  if (!ctxRef) {
+/** Evita crear AudioContext antes de un gesto del usuario (Chrome no muestra entonces el warning repetido). */
+let unlockScheduled = false;
+
+function ensureAudioContextAfterUserGesture() {
+  if (typeof window === 'undefined' || unlockScheduled) return;
+  unlockScheduled = true;
+  const unlock = () => {
+    if (ctxRef) {
+      if (ctxRef.state === 'suspended') void ctxRef.resume().catch(() => {});
+      return;
+    }
     const AC = window.AudioContext || /** @type {typeof AudioContext | undefined} */ (window.webkitAudioContext);
-    if (!AC) return null;
+    if (!AC) return;
     ctxRef = new AC();
-  }
+    if (ctxRef.state === 'suspended') void ctxRef.resume().catch(() => {});
+  };
+  window.addEventListener('pointerdown', unlock, { once: true, passive: true });
+  window.addEventListener('keydown', unlock, { once: true, passive: true });
+}
+
+ensureAudioContextAfterUserGesture();
+
+function getAudioContext() {
   return ctxRef;
 }
 

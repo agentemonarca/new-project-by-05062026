@@ -23,7 +23,7 @@ function AdminLoginPageInner() {
         } catch {
           /* ignore */
         }
-        navigate('/admin/overview', { replace: true });
+        navigate('/admin', { replace: true });
       } catch (err) {
         const code = err?.code || err?.message;
         if (code === 'admin_login_not_configured') {

@@ -36,6 +36,52 @@ function PingRoute() {
   return <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 font-mono text-base text-emerald-400">Frontend running 🚀</div>;
 }
 
+/** Evita pantalla en blanco si el árbol principal lanza antes de montar (muestra mensaje + enlaces útiles). */
+class RootErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { err: null };
+  }
+
+  static getDerivedStateFromError(err) {
+    return { err };
+  }
+
+  componentDidCatch(err, info) {
+    console.error('[gpulse:root]', err, info?.componentStack);
+  }
+
+  render() {
+    if (this.state.err) {
+      const msg = String(this.state.err?.message || this.state.err);
+      return (
+        <div
+          className="min-h-[100dvh] bg-[#020008] px-6 py-10 font-sans text-rose-200"
+          style={{ fontFamily: 'system-ui, sans-serif' }}
+        >
+          <h1 className="text-lg font-semibold text-white">Error al cargar G-Pulse</h1>
+          <pre className="mt-4 max-w-2xl whitespace-pre-wrap break-words text-sm text-slate-400">{msg}</pre>
+          <p className="mt-6 text-sm text-slate-500">
+            Revisa la consola (F12). Rutas de prueba:{' '}
+            <a className="text-cyan-400 underline" href="/ping">
+              /ping
+            </a>
+            {' · '}
+            <a className="text-cyan-400 underline" href="/dashboard">
+              /dashboard
+            </a>
+            {' · '}
+            <a className="text-cyan-400 underline" href="/gpulse">
+              /gpulse
+            </a>
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function MainShell() {
   const genesisUi = import.meta.env.VITE_GENESIS_UI === '1';
   return (
@@ -251,6 +297,8 @@ function AppRoutes() {
       <Route path="/register" element={<RegisterPreviewShell />} />
       <Route path="/onboarding" element={<OnboardingInviteShell />} />
       <Route path="/dashboard" element={<GenesisDashboardShell />} />
+      {/* Explícito: en algunos despliegues el comodín `*` no dejaba resuelta la raíz correctamente. */}
+      <Route path="/" element={<MainShell />} />
       <Route path="*" element={<MainShell />} />
     </Routes>
   );
@@ -278,6 +326,8 @@ if (!container) {
 
 ReactDOM.createRoot(container).render(
   <React.StrictMode>
-    <Root />
+    <RootErrorBoundary>
+      <Root />
+    </RootErrorBoundary>
   </React.StrictMode>,
 );

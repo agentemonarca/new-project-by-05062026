@@ -1,5 +1,6 @@
 import { BrowserProvider, parseEther } from 'ethers';
 import { isWeb3MockMode } from '../../utils/web3Mode.js';
+import { getInjectedEthereum } from '../../utils/ethereumProvider.js';
 import { getApiBaseUrl, getMasterWalletAddress } from './genesisConfig.js';
 
 /**
@@ -13,8 +14,9 @@ export async function executeNativeDeposit({ userAddress, amountEther, expectedC
   if (!master) throw new Error('VITE_MASTER_WALLET_ADDRESS is not set');
 
   if (isWeb3MockMode()) throw new Error('No injected wallet');
-  if (!window?.ethereum) throw new Error('No injected wallet');
-  const provider = new BrowserProvider(window?.ethereum);
+  const injected = typeof window !== 'undefined' ? getInjectedEthereum() : null;
+  if (!injected) throw new Error('No injected wallet');
+  const provider = new BrowserProvider(injected);
   const network = await provider.getNetwork();
   if (expectedChainId != null && network.chainId !== expectedChainId) {
     throw new Error(`Wrong network: expected ${expectedChainId}, got ${network.chainId}`);

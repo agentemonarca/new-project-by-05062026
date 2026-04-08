@@ -4,6 +4,25 @@ import { adminSignalsFlowTrace, summarizePayloadForFlow } from './signalFlowDebu
 import { getSignalStreamInterpreter } from './signalStreamInterpreter.js';
 import { getSignalSessionTracker } from './signalSessionTracker.js';
 
+/** Último NEW_RESULT (solo meta) para alinear señales de prueba. */
+let _lastClientResultMeta = /** @type {null | { mesa?: string, round?: string | number, correlationKey?: string }} */ (null);
+/** Último NEW_RESULT payload completo emitido al cliente (para replay). */
+let _lastClientResultPayload = /** @type {null | any} */ (null);
+/** Último NEW_SIGNAL emitido al cliente (para replay al conectar tarde). */
+let _lastClientSignal = /** @type {null | any} */ (null);
+
+export function getLastClientSignalForReplay() {
+  return _lastClientSignal;
+}
+
+export function getLastClientResultForReplay() {
+  return _lastClientResultPayload;
+}
+
+export function getLastClientResultForTest() {
+  return _lastClientResultMeta;
+}
+
 /**
  * Ingest + emite a `/admin-signals` (mismo camino que relay upstream).
  *
@@ -20,6 +39,7 @@ export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
   const { io, processor, logger } = ctx;
   const ts = Date.now();
   const source = meta.source || 'relay';
+  const traceOn = String(process.env.ADMIN_SIGNALS_TRACE ?? '').trim() === '1';
 
   adminSignalsFlowTrace(logger, 'relay_on_admin_event', {
     type,
@@ -68,6 +88,11 @@ export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
   const clientCount =
     nsp.sockets && typeof nsp.sockets.size === 'number' ? nsp.sockets.size : /** @type {any} */ (nsp).length || 0;
 
+  if (traceOn) {
+    console.log('TRACE: EMIT TO SOCKET', type);
+    console.log('TRACE: CLIENTS CONNECTED', clientCount);
+  }
+
   console.log('[EMIT CHECK]', { clients: clientCount });
 
   if (clientCount === 0) {
@@ -75,8 +100,35 @@ export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
   }
 
   const out = clientEmit.payload;
+  if (type === 'NEW_SIGNAL') {
+    _lastClientSignal = out;
+  }
+  if (type === 'NEW_RESULT') {
+    try {
+      console.log('EMITTING RESULT:', out);
+    } catch {
+      /* ignore */
+    }
+    _lastClientResultPayload = out;
+    _lastClientResultMeta = {
+      mesa: out.mesa != null ? String(out.mesa) : undefined,
+      round: out.round,
+      correlationKey: out.correlationKey != null ? String(out.correlationKey) : undefined,
+    };
+  }
+
+  if (clientCount === 0) {
+    console.log('NO CLIENTS — storing only');
+    return { ok: true, clientCount: 0, storedOnly: true };
+  }
+
   nsp.emit(type, out);
   nsp.emit('admin_signal_frame', { type, payload: out, ts: Date.now() });
+  // Debug mirror: algunos clientes escuchan `dashboardUpdate` (shape tipo { type, payload }).
+  // No sustituye los eventos NEW_SIGNAL/NEW_RESULT; solo visibilidad.
+  if (type === 'NEW_RESULT') {
+    nsp.emit('dashboardUpdate', { type, payload: out, ts: Date.now() });
+  }
   if (source === 'test_emit') {
     console.log('🔥 TEST SIGNAL EMIT → enviado al panel');
   }

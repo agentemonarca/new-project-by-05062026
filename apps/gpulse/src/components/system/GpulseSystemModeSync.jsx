@@ -10,7 +10,7 @@ export default function GpulseSystemModeSync({ transactions = [], queueWaiting =
   const systemMode = useSystemMode({ transactions, queueWaiting });
 
   useEffect(() => {
-    setSystemMode(systemMode);
+    setSystemMode((prev) => (prev === systemMode ? prev : systemMode));
   }, [systemMode, setSystemMode]);
 
   return null;

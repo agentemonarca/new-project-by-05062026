@@ -1,11 +1,12 @@
 import { BrowserProvider } from 'ethers';
 import { isWeb3MockMode } from './web3Mode.js';
+import { getInjectedEthereum } from './ethereumProvider.js';
 
 export async function connectWallet() {
   if (isWeb3MockMode()) {
     throw new Error('NO_INJECTED_WALLET');
   }
-  const eth = typeof window !== 'undefined' ? window.ethereum : null;
+  const eth = getInjectedEthereum();
   if (!eth) throw new Error('NO_INJECTED_WALLET');
 
   const provider = new BrowserProvider(eth);
@@ -15,4 +16,3 @@ export async function connectWallet() {
 
   return { provider, signer, address };
 }
-

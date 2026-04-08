@@ -5,6 +5,8 @@
  * @param {import('socket.io').Server} io
  * @param {{ sessionMiddleware: import('express').RequestHandler, logger?: object }} ctx
  */
+import { getLastClientResultForReplay, getLastClientSignalForReplay } from './relayAdminSignalsToClients.js';
+
 const MIN_API_KEY_LEN = 16;
 
 export function attachAdminSignalsNamespace(io, { sessionMiddleware, logger }) {
@@ -50,6 +52,33 @@ export function attachAdminSignalsNamespace(io, { sessionMiddleware, logger }) {
     console.log('🟢 ADMIN CONNECTED:', socket.id);
     logger?.info?.('admin_signals_client_connected', { id: socket.id });
     socket.emit('ready', { ns: '/admin-signals' });
+
+    try {
+      console.log('REPLAY TO NEW CLIENT');
+      const lastSignal = getLastClientSignalForReplay();
+      const lastResult = getLastClientResultForReplay();
+
+      if (lastSignal) {
+        socket.emit('admin_signal_frame', {
+          type: 'NEW_SIGNAL',
+          payload: lastSignal,
+          replay: true,
+          ts: Date.now(),
+        });
+      }
+
+      if (lastResult) {
+        socket.emit('dashboardUpdate', {
+          type: 'NEW_RESULT',
+          payload: lastResult,
+          replay: true,
+          ts: Date.now(),
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+
     socket.on('disconnect', () => {
       logger?.info?.('admin_signals_client_disconnected', { id: socket.id });
     });

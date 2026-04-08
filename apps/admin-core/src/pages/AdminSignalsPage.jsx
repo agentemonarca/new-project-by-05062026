@@ -6,7 +6,7 @@ import { RawEventsPanel } from '../components/RawEventsPanel.jsx';
 import { SignalStreamDebugPanel } from '../components/SignalStreamDebugPanel.jsx';
 
 /**
- * Vista dedicada Señales · ruta `/admin/signals` (landing por defecto: `/admin/overview`).
+ * Vista señales legacy — el router ya no monta esta página; el panel único es `AdminPanel` en `/admin`.
  */
 function AdminSignalsPageInner() {
   return (

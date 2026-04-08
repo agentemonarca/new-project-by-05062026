@@ -112,6 +112,7 @@ function SignalLabPageInner() {
   const meta = session?.meta;
   const sig = session?.signal;
   const rst = session?.result;
+  const eng = session?.engine;
 
   const ganador = rst?.ganador != null ? String(rst.ganador) : '—';
   const ganadorColor =

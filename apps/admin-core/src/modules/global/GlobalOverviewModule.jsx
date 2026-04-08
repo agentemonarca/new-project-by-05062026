@@ -54,10 +54,10 @@ function GlobalOverviewModuleInner() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-bold tracking-tight text-white">⚡ Señales en Vivo</h2>
           <Link
-            to="/admin/signals"
+            to="/admin"
             className="text-xs font-semibold uppercase tracking-wide text-cyan-300/90 transition hover:text-cyan-200"
           >
-            Panel completo →
+            Panel principal →
           </Link>
         </div>
         <AdminSignalsProPanel compact compactMaxSignals={8} />

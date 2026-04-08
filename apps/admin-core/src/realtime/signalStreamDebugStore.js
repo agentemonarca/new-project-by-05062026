@@ -11,19 +11,32 @@ let rev = 0;
 /** @type {Set<() => void>} */
 const listeners = new Set();
 
+/** @type {{ frames: unknown[]; latestCounters: Record<string, unknown> | null; rev: number } | null} */
+let snapCache = null;
+let snapRev = -1;
+
 function bump() {
   rev += 1;
+  snapCache = null;
+  snapRev = -1;
   listeners.forEach((l) => l());
 }
 
-/** @returns {{ frames: unknown[], latestCounters: Record<string, unknown> | null, rev: number }} */
+/**
+ * Misma referencia mientras `rev` no cambie — requisito de useSyncExternalStore (evita maximum update depth).
+ * @returns {{ frames: unknown[], latestCounters: Record<string, unknown> | null, rev: number }}
+ */
 export function getSignalStreamDebugSnapshot() {
   ensureSignalStreamDebugBridge();
-  return {
-    frames: frames.slice(),
-    latestCounters,
-    rev,
-  };
+  if (snapRev !== rev) {
+    snapRev = rev;
+    snapCache = {
+      frames: frames.slice(),
+      latestCounters,
+      rev,
+    };
+  }
+  return snapCache;
 }
 
 export function subscribeSignalStreamDebug(cb) {

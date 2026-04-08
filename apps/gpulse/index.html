@@ -9,7 +9,22 @@
     <link rel="apple-touch-icon" href="/logo-icon.png" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div
+        style="
+          min-height: 100dvh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #020008;
+          color: #64748b;
+          font-family: system-ui, sans-serif;
+          font-size: 14px;
+        "
+      >
+        Cargando G-Pulse…
+      </div>
+    </div>
     <!-- Runs before main: mock-mode Tron global shield (reduces TronLink / injected.js noise on localhost) -->
     <script type="module" src="/src/tronShieldEntry.js"></script>
     <script type="module" src="/src/main.jsx"></script>

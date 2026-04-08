@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserProvider, formatEther, getAddress } from 'ethers';
 import { isWeb3MockMode } from '../utils/web3Mode.js';
+import { getInjectedEthereum } from '../utils/ethereumProvider.js';
 
 /**
  * Lightweight injected-wallet hook (ethers v6) for UI modules that should not depend on WalletContext.
@@ -19,10 +20,11 @@ export function useWallet() {
       if (isWeb3MockMode()) {
         throw new Error('No Web3 wallet');
       }
-      if (typeof window === 'undefined' || !window?.ethereum) {
+      const injected = typeof window !== 'undefined' ? getInjectedEthereum() : null;
+      if (!injected) {
         throw new Error('No Web3 wallet');
       }
-      const provider = new BrowserProvider(window?.ethereum);
+      const provider = new BrowserProvider(injected);
       await provider.send('eth_requestAccounts', []);
       const signer = await provider.getSigner();
       const addr = getAddress(await signer.getAddress());
@@ -41,8 +43,9 @@ export function useWallet() {
 
   const refreshBalance = useCallback(async () => {
     if (isWeb3MockMode()) return null;
-    if (typeof window === 'undefined' || !window?.ethereum || !address) return null;
-    const provider = new BrowserProvider(window?.ethereum);
+    const injected = typeof window !== 'undefined' ? getInjectedEthereum() : null;
+    if (!injected || !address) return null;
+    const provider = new BrowserProvider(injected);
     const balWei = await provider.getBalance(address);
     const f = formatEther(balWei);
     setBalance(f);
@@ -60,8 +63,8 @@ export function useWallet() {
 
   useEffect(() => {
     if (isWeb3MockMode()) return undefined;
-    const eth = typeof window !== 'undefined' ? window?.ethereum : null;
-    if (!eth?.on) return undefined;
+    const eth = getInjectedEthereum();
+    if (!eth || typeof eth.on !== 'function') return undefined;
     const onAccounts = (accounts) => {
       if (!accounts?.length) {
         disconnectWallet();
@@ -73,10 +76,15 @@ export function useWallet() {
         disconnectWallet();
       }
     };
-    eth.on('accountsChanged', onAccounts);
+    try {
+      eth.on('accountsChanged', onAccounts);
+    } catch {
+      return undefined;
+    }
     return () => {
       try {
-        eth.removeListener?.('accountsChanged', onAccounts);
+        if (typeof eth.removeListener === 'function') eth.removeListener('accountsChanged', onAccounts);
+        else if (typeof eth.off === 'function') eth.off('accountsChanged', onAccounts);
       } catch {
         /* ignore */
       }

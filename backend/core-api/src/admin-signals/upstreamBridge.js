@@ -30,6 +30,7 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
   /** @type {import('socket.io-client').Socket | null} */
   let socket = null;
   let stopped = false;
+  const upstreamTraceOn = String(process.env.ADMIN_SIGNALS_UPSTREAM_TRACE ?? '').trim() === '1';
 
   function shouldForward(type, payload) {
     if (!adminSignalsRuntime.upstreamEnabled) return false;
@@ -84,13 +85,57 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
       timeout: 25_000,
     });
 
+    // RAW upstream tap (no engine, no filters, no classification): print everything.
+    socket.onAny((event, data) => {
+      try {
+        console.log('🔥 UPSTREAM RAW:', event);
+        try {
+          console.log(JSON.stringify(data, null, 2));
+        } catch {
+          console.log(String(data));
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+    // Some providers send unnamed messages.
+    socket.on('message', (data) => {
+      try {
+        console.log('🔥 UPSTREAM MESSAGE:', data);
+      } catch {
+        /* ignore */
+      }
+    });
+
     socket.on('connect', () => {
       console.log('🟢 upstream_ws_connected', { id: socket?.id, transport: socket?.io?.engine?.transport?.name });
+      console.log('🟢 UPSTREAM CONNECTED', socket?.id);
+      if (upstreamTraceOn) console.log('UPSTREAM CONNECTED');
       adminSignalsFlowTrace(logger, 'upstream_ws_connected', {
         socketId: socket?.id,
         transport: socket?.io?.engine?.transport?.name,
       });
       logger?.info?.('admin_signals_upstream_connected', { url: url.replace(/:\/\/[^@]+@/, '://***@') });
+
+      // Optional subscription probe (env-gated). Does not change engine/relay behavior.
+      if (String(process.env.ADMIN_SIGNALS_UPSTREAM_SUBSCRIBE ?? '').trim() === '1') {
+        const payloadRaw = String(process.env.ADMIN_SIGNALS_UPSTREAM_SUBSCRIBE_PAYLOAD ?? '').trim();
+        /** @type {unknown} */
+        let subPayload = { tables: 'ALL' };
+        if (payloadRaw) {
+          try {
+            subPayload = JSON.parse(payloadRaw);
+          } catch {
+            subPayload = payloadRaw;
+          }
+        }
+        try {
+          console.log('UPSTREAM SUBSCRIBE → emit subscribe', subPayload);
+          socket?.emit?.('subscribe', subPayload);
+        } catch (e) {
+          console.warn('UPSTREAM SUBSCRIBE failed', e instanceof Error ? e.message : String(e));
+        }
+      }
     });
     socket.on('connect_error', (err) => {
       const msg = err?.message || String(err);
@@ -114,6 +159,20 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
 
     socket.onAny((eventName, ...args) => {
       const payload = args.length ? args[0] : undefined;
+
+      if (upstreamTraceOn) {
+        try {
+          console.log('TRACE: RAW UPSTREAM EVENT', JSON.stringify({ eventName, payload }, null, 2));
+        } catch {
+          console.log('TRACE: RAW UPSTREAM EVENT', '[non-serializable]');
+        }
+        const pObj = payload && typeof payload === 'object' ? /** @type {any} */ (payload) : null;
+        console.log(
+          'TRACE: UPSTREAM TYPE',
+          (pObj && (pObj.type || pObj.eventName)) ? String(pObj.type || pObj.eventName) : 'UNKNOWN',
+        );
+        console.log('TRACE: BEFORE ENGINE', { eventName: String(eventName), payload });
+      }
 
       if (process.env.ADMIN_SIGNALS_LOG_UPSTREAM_EVENTS === '1') {
         const preview =
@@ -157,6 +216,13 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
 
         try {
           const relayed = tryWinxplayDashboardRelay(payload);
+          if (upstreamTraceOn) {
+            console.log('TRACE: ENGINE CLASSIFICATION', {
+              isSignal: Boolean(relayed && relayed.type === 'NEW_SIGNAL'),
+              isResult: Boolean(relayed && relayed.type === 'NEW_RESULT'),
+              data: relayed,
+            });
+          }
           if (relayed) {
             const { type, data } = relayed;
             console.log('[WINX]', type);
@@ -175,6 +241,13 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
         }
 
         const { signals, results } = expandDashboardUpdate(payload);
+        if (upstreamTraceOn) {
+          console.log('TRACE: ENGINE CLASSIFICATION', {
+            isSignal: signals.length > 0,
+            isResult: results.length > 0,
+            data: { signalsCount: signals.length, resultsCount: results.length },
+          });
+        }
         adminSignalsFlowTrace(logger, 'dashboard_update_expanded', {
           newSignalRaws: signals.length,
           newResultRaws: results.length,

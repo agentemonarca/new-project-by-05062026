@@ -1,4 +1,8 @@
-import { normalizeNewSignalPayload, normalizeNewResultPayload } from './signalNormalize.js';
+import {
+  normalizeNewSignalPayload,
+  normalizeNewResultPayload,
+  readNestedDataSignal,
+} from './signalNormalize.js';
 import { extractMesaInfoFromPayload } from './signalSessionCanonical.js';
 
 /**
@@ -31,7 +35,13 @@ function extractScoreDetailFromNested(rawPayload) {
 export function buildAdminSignalsClientPayload(type, rawPayload) {
   if (type === 'NEW_SIGNAL') {
     const n = normalizeNewSignalPayload(rawPayload);
-    return {
+    const r =
+      rawPayload != null && typeof rawPayload === 'object' && !Array.isArray(rawPayload)
+        ? /** @type {Record<string, unknown>} */ (rawPayload)
+        : {};
+    const { sig } = readNestedDataSignal(r);
+    /** @type {Record<string, unknown>} */
+    const out = {
       mesa: n.mesa,
       round: n.round,
       martingale: n.martingale,
@@ -39,6 +49,13 @@ export function buildAdminSignalsClientPayload(type, rawPayload) {
       correlationKey: n.correlationKey,
       id: n.providerSignalId,
     };
+    if (sig?.nombre_algoritmo != null && String(sig.nombre_algoritmo).trim() !== '') {
+      out.nombre_algoritmo = String(sig.nombre_algoritmo).trim();
+    }
+    if (Array.isArray(sig?.vector_forecast) && sig.vector_forecast.length > 0) {
+      out.vector_forecast = sig.vector_forecast;
+    }
+    return out;
   }
   if (type === 'NEW_RESULT') {
     const n = normalizeNewResultPayload(rawPayload);
