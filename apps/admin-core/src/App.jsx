@@ -4,11 +4,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext.jsx';
 import RequireAdminAuth from './components/RequireAdminAuth.jsx';
 import { AdminLoginPage } from './pages/AdminLoginPage.jsx';
+import { AdminGpulseLabPage } from './pages/AdminGpulseLabPage.jsx';
 import { AdminPanel } from './pages/AdminPanel.jsx';
 import { AdminCoreProvider, useAdminCore } from './context/AdminCoreContext.jsx';
 import { AdminHeader } from './components/AdminHeader.jsx';
 import { ProjectSwitchSkeleton } from './components/ProjectSwitchSkeleton.jsx';
 import { Loader2 } from 'lucide-react';
+import GPulseLab from './gpulse-lab/GPulseLab.jsx';
 
 /* ─── Rutas legacy desactivadas (no borrar archivos; solo se dejan de importar) ───
 import { AdminSignalsPage } from './pages/AdminSignalsPage.jsx';
@@ -159,8 +161,17 @@ function AdminAppRoutes() {
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/admin/login" element={<LoginRoute />} />
+      <Route
+        path="/gpulse-lab"
+        element={
+          <RequireAdminAuth>
+            <GPulseLab />
+          </RequireAdminAuth>
+        }
+      />
       <Route path="/admin" element={<ProtectedAdminOutlet />}>
         <Route index element={<AdminPanel />} />
+        <Route path="gpulse-lab" element={<AdminGpulseLabPage />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Route>
       <Route path="*" element={<RootRedirect />} />

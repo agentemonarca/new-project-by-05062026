@@ -179,6 +179,10 @@ export function createSignalsProcessor({ logger, hooks } = {}) {
   return {
     ingestNewSignal,
     ingestNewResult,
+    /** Señales aún sin resultado (para hidratar GPulse Lab al conectar). */
+    getPendingSignals() {
+      return activeSignals.filter((x) => x.status === 'pending').map((s) => ({ ...s }));
+    },
     getSnapshot() {
       const t = stats.wins + stats.losses;
       const winRate = t > 0 ? Math.round((stats.wins / t) * 1000) / 10 : null;

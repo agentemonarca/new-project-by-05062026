@@ -9,6 +9,7 @@ const VIEW_META = {
   vistalab: { label: 'VistaLab', hint: 'Ciclo automático · fases · cooldown 4s' },
   analytics: { label: 'Analytics', hint: 'KPI agregados y Mongo' },
   debug: { label: 'Debug', hint: 'Raw events · Signal stream' },
+  'gpulse-lab': { label: 'GPulse Lab', hint: 'Laboratorio de señales · multi-mesa · validación' },
 };
 
 /**

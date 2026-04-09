@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * GPulse Lab — z-index map (single source of truth)
+ * --z-bg: 0  — base fills
+ * --z-layout: 10  — page chrome
+ * --z-surface: 20  — panels / scroll surfaces
+ * --z-table: 30  — felt / table frame, intelligence strip (below cards)
+ * --z-effects: 50  — particles, non-interactive VFX (below --z-hud)
+ * --z-cards: 40  — card rails, result pill, dealing layer
+ * --z-hud: 60  — headers, footers, scores chrome (does not cover card stage when laid out in column)
+ * --z-overlay: 100  — modals
+ * --z-alert: 200  — toasts / alerts
+ *
+ * Ambient VFX stay BELOW --z-table (calc(var(--z-table) - 1) in components).
+ */
+:root {
+  --z-bg: 0;
+  --z-layout: 10;
+  --z-surface: 20;
+  --z-table: 30;
+  --z-effects: 50;
+  --z-cards: 40;
+  --z-hud: 60;
+  --z-overlay: 100;
+  --z-alert: 200;
+}
+
+/** GPulse Lab — mesa stage width cap (center column); fluid with viewport */
+.gpulse-lab-root {
+  --gpulse-stage-max-w: min(1400px, 96vw);
+}
+
 html,
 body,
 #root {

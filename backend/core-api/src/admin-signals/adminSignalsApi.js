@@ -17,6 +17,7 @@ import {
 } from './signalAutoResponseService.js';
 import { getSignalStreamInterpreter } from './signalStreamInterpreter.js';
 import { getSignalSessionTracker } from './signalSessionTracker.js';
+import { buildGpulseLabCurrentStateResponse } from './gpulseLabCurrentState.js';
 
 /**
  * @param {import('express').Request} req
@@ -93,6 +94,18 @@ export function adminSignalsApi({ processor, logger, configRateLimit, persistenc
   /** Snapshot en memoria del procesador (sesión API). */
   r.get('/admin/signals/stats', (_req, res) => {
     res.json({ ok: true, ...processor.getSnapshot() });
+  });
+
+  /**
+   * Estado vivo para hidratar GPulse Lab al conectar (señal pendiente en processor + últimos payloads emitidos).
+   * GET /api/admin/signals/current-state
+   */
+  r.get('/admin/signals/current-state', (_req, res) => {
+    try {
+      res.json(buildGpulseLabCurrentStateResponse(processor));
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
   });
 
   /** Analytics sobre `signal_events` (histórico). `?source=genesis|winx|gpulse` */

@@ -1,7 +1,9 @@
 import React, { memo, useCallback } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
+  Brain,
   Bug,
   ChevronLeft,
   ChevronRight,
@@ -22,6 +24,7 @@ const NAV_ITEMS = [
   { id: 'vistalab', label: 'VistaLab', icon: FlaskConical },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'debug', label: 'Debug', icon: Bug },
+  { id: 'gpulse-lab', label: '🧠 GPulse Lab', icon: Brain, to: '/admin/gpulse-lab' },
 ];
 
 /**
@@ -34,6 +37,7 @@ const NAV_ITEMS = [
  * }} props
  */
 function AdminSidebarInner({ view, onViewChange, collapsed, onToggleCollapsed }) {
+  const location = useLocation();
   const width = collapsed ? 70 : 220;
 
   const onKeyNav = useCallback(
@@ -71,7 +75,35 @@ function AdminSidebarInner({ view, onViewChange, collapsed, onToggleCollapsed })
       <nav className="custom-scrollbar flex-1 space-y-0.5 overflow-y-auto p-2">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const active = view === item.id;
+          const isLink = typeof item.to === 'string' && item.to.length > 0;
+          const active = isLink
+            ? location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+            : view === item.id;
+          const className = `flex w-full items-center gap-3 rounded-lg py-2.5 pl-3 pr-2 text-left transition-colors duration-200 ${
+            active
+              ? 'bg-[rgba(252,213,53,0.08)] text-[#FCD535]'
+              : 'text-[#B7BDC6] hover:bg-white/[0.05]'
+          }`;
+          const iconCls = `h-[18px] w-[18px] shrink-0 ${active ? 'text-[#FCD535]' : 'text-[#848E9C]'}`;
+          const labelCls = `truncate text-[13px] font-medium transition-opacity duration-200 ${
+            collapsed ? 'pointer-events-none w-0 opacity-0' : 'opacity-100'
+          }`;
+
+          if (isLink) {
+            return (
+              <Link
+                key={item.id}
+                to={item.to}
+                title={collapsed ? item.label : undefined}
+                aria-current={active ? 'page' : undefined}
+                className={className}
+              >
+                <Icon className={iconCls} strokeWidth={2} aria-hidden />
+                <span className={labelCls}>{item.label}</span>
+              </Link>
+            );
+          }
+
           return (
             <button
               key={item.id}
@@ -80,24 +112,10 @@ function AdminSidebarInner({ view, onViewChange, collapsed, onToggleCollapsed })
               aria-current={active ? 'page' : undefined}
               onClick={() => onViewChange(item.id)}
               onKeyDown={(e) => onKeyNav(e, item.id)}
-              className={`flex w-full items-center gap-3 rounded-lg py-2.5 pl-3 pr-2 text-left transition-colors duration-200 ${
-                active
-                  ? 'bg-[rgba(252,213,53,0.08)] text-[#FCD535]'
-                  : 'text-[#B7BDC6] hover:bg-white/[0.05]'
-              }`}
+              className={className}
             >
-              <Icon
-                className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-[#FCD535]' : 'text-[#848E9C]'}`}
-                strokeWidth={2}
-                aria-hidden
-              />
-              <span
-                className={`truncate text-[13px] font-medium transition-opacity duration-200 ${
-                  collapsed ? 'pointer-events-none w-0 opacity-0' : 'opacity-100'
-                }`}
-              >
-                {item.label}
-              </span>
+              <Icon className={iconCls} strokeWidth={2} aria-hidden />
+              <span className={labelCls}>{item.label}</span>
             </button>
           );
         })}

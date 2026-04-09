@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AdminSidebar } from '../components/AdminSidebar.jsx';
 import { AdminTopBar } from '../components/AdminTopBar.jsx';
@@ -21,6 +22,8 @@ import { vistaLabForecastCellStyle } from '@/lab/vistaLabForecastCellStyle.js';
 import { isAdminRawMode } from '@/utils/adminRawMode.js';
 import { displayRoundOrIdHintForLiveRow } from '@/utils/signalFormatter.js';
 import { resultMatchesSignal } from '@/utils/vistaLabCycle.js';
+
+const VALID_ADMIN_VIEWS = new Set(['signals', 'live', 'results', 'martingale', 'vistalab', 'analytics', 'debug']);
 
 /**
  * Mismo pipeline que el store + VistaLab (sin bifurcar). Referencias enlazan el bundle de producción.
@@ -157,6 +160,7 @@ function AdminVistaLabEngineStrip() {
  * Un solo `useVistaLabCycle` alimenta la tira de motor y la pestaña VistaLab (sin segunda máquina de estados).
  */
 function AdminPanelInner() {
+  const location = useLocation();
   const snap = useAdminSignalsLiveStore();
   const { signals, results, debugLogs, connected, rev } = snap;
   const cycle = useVistaLabCycle({
@@ -172,6 +176,13 @@ function AdminPanelInner() {
   const [collapsed, setCollapsed] = useState(false);
 
   const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);
+
+  useEffect(() => {
+    const id = location.state?.adminView;
+    if (typeof id === 'string' && VALID_ADMIN_VIEWS.has(id)) {
+      setView(id);
+    }
+  }, [location.pathname, location.state]);
 
   useEffect(() => {
     console.log('SIGNALS:', signals);
