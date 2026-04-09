@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { formatResult, formatSignal } from './signalFormatter.js';
-import { validateResult, validateSignal } from './adminSignalPayloadValidators.js';
+import {
+  computeResultRowIncomplete,
+  computeSignalRowIncomplete,
+  validateResult,
+  validateSignal,
+} from './adminSignalPayloadValidators.js';
 
 describe('validateSignal', () => {
-  it('acepta fila formatSignal válida', () => {
+  it('siempre ok: true; fila formatSignal válida sin warns críticos', () => {
     const s = formatSignal({
       mesa: 'M1',
       round: '5',
@@ -14,29 +19,77 @@ describe('validateSignal', () => {
     expect(validateSignal(s)).toEqual({ ok: true });
   });
 
-  it('rechaza con razón NOT_OBJECT / INVALID_MESA / INVALID_ROUND / INVALID_FORECAST6', () => {
-    expect(validateSignal(null)).toEqual({ ok: false, reason: 'NOT_OBJECT' });
+  it('incompletos: ok true y warn etiquetado (no rechazo)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(validateSignal(null)).toEqual({ ok: true });
+    expect(warn).toHaveBeenCalledWith('[INCOMPLETE_SIGNAL_NOT_OBJECT]', null);
+
+    warn.mockClear();
     expect(
       validateSignal({
         mesa: 'UNKNOWN',
         round: 1,
         forecast6: ['P', 'B', '—', '—', '—', '—'],
       }),
-    ).toEqual({ ok: false, reason: 'INVALID_MESA' });
+    ).toEqual({ ok: true });
+    expect(warn).toHaveBeenCalledWith('[INCOMPLETE_SIGNAL_INVALID_MESA]', expect.any(Object));
+
+    warn.mockClear();
     expect(
       validateSignal({
         mesa: 'Baccarat 1',
         round: null,
         forecast6: ['P', 'B', '—', '—', '—', '—'],
       }),
-    ).toEqual({ ok: false, reason: 'INVALID_ROUND' });
+    ).toEqual({ ok: true });
+    expect(warn).toHaveBeenCalledWith('[INCOMPLETE_SIGNAL_NO_ROUND]', expect.any(Object));
+
+    warn.mockClear();
+    expect(
+      validateSignal({
+        mesa: 'Baccarat 1',
+        round: null,
+        correlationKey: 'id:provider-stable-id',
+        forecast6: ['P', 'B', '—', '—', '—', '—'],
+      }),
+    ).toEqual({ ok: true });
+    expect(warn).not.toHaveBeenCalledWith('[INCOMPLETE_SIGNAL_NO_ROUND]', expect.any(Object));
+
+    warn.mockClear();
+    expect(
+      validateSignal({
+        mesa: 'Baccarat 1',
+        round: null,
+        correlationKey: 'id:1775677483956',
+        forecast6: ['P', 'B', '—', '—', '—', '—'],
+      }),
+    ).toEqual({ ok: true });
+    expect(warn).toHaveBeenCalledWith('[INCOMPLETE_SIGNAL_NO_ROUND]', expect.any(Object));
+
+    warn.mockClear();
     expect(
       validateSignal({
         mesa: 'Baccarat 1',
         round: 3,
         forecast6: ['P', 'B'],
       }),
-    ).toEqual({ ok: false, reason: 'INVALID_FORECAST6' });
+    ).toEqual({ ok: true });
+    expect(warn).toHaveBeenCalledWith('[INCOMPLETE_SIGNAL_FORECAST6]', expect.any(Object));
+
+    warn.mockRestore();
+  });
+});
+
+describe('computeSignalRowIncomplete', () => {
+  it('detecta falta de ronda correlacionable o dirección', () => {
+    expect(computeSignalRowIncomplete({ mesa: 'A', round: 1, recommendation: 'PLAYER' })).toBe(false);
+    expect(computeSignalRowIncomplete({ mesa: 'A', correlationKey: 'id:x', recommendation: 'PLAYER' })).toBe(false);
+    expect(
+      computeSignalRowIncomplete({ mesa: 'A', correlationKey: 'id:1775677483956', recommendation: 'PLAYER' }),
+    ).toBe(true);
+    expect(computeSignalRowIncomplete({ mesa: 'A', round: null, recommendation: 'PLAYER' })).toBe(true);
+    expect(computeSignalRowIncomplete({ mesa: 'A', round: 1, recommendation: 'UNKNOWN' })).toBe(true);
   });
 });
 
@@ -59,7 +112,8 @@ describe('validateResult', () => {
     expect(validateResult(r)).toEqual({ ok: true });
   });
 
-  it('rechaza sin mesa_info o ganador vacío', () => {
+  it('incompleto: ok true y warn (no rechazo)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const r = formatResult(
       {
         mesa: 'T1',
@@ -68,6 +122,15 @@ describe('validateResult', () => {
       },
       null,
     );
-    expect(validateResult(r)).toEqual({ ok: false, reason: 'NO_MESA_INFO' });
+    expect(validateResult(r)).toEqual({ ok: true });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe('computeResultRowIncomplete', () => {
+  it('sin mesa_info o ganador útil → incomplete', () => {
+    expect(computeResultRowIncomplete({ mesa: 'A', round: 1, mesa_info: { cartas_player: [], cartas_banker: [], ganador: 'BANKER' } })).toBe(false);
+    expect(computeResultRowIncomplete({ mesa: 'A', round: 1 })).toBe(true);
   });
 });

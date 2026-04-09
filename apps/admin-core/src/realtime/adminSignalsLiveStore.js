@@ -1,7 +1,13 @@
 import getAdminSignalsSocket from '../services/socket-admin.js';
+import { logPhaseActiveOnce } from '@/utils/canonicalFlowFlags.js';
+import { applyCanonicalModeToPayload } from '@/utils/extractCanonicalFields.js';
 import { addRawEvent } from '../store/rawEventsStore.js';
 import { playLossSound, playNewSignalSound, playWinSound, soundEnabled } from '../utils/adminSignalsSounds.js';
+import { unwrapLiveFrameMessage } from './adminSignalFrameUnwrap.js';
+import { normalizeCorrelationKeyInRecord } from './correlationKeyNormalize.js';
 import { createLiveResultEntry, createLiveSignalEntry } from './adminSignalsLiveIngest.js';
+import { recordCorrelationKeyObservation } from './correlationKeyStats.js';
+import { mergeMesaInfoFromNestedIntoRow } from '@/utils/vistaLabProviderExtras.js';
 
 /**
  * @typedef {{ type: string, ts: number, reason?: string, payload?: unknown }} AdminDebugLogEntry
@@ -42,6 +48,161 @@ export const adminSignalsPredictionByMesa = /** @type {Map<string, string>} */ (
 
 function nextRecvId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Rellena `vector_forecast`, `nombre_algoritmo`, `round`/`ronda` desde `data.data.signal` | `data.signal` | `signal`.
+ * El proveedor real envía la señal ahí aunque el envelope tenga otra forma.
+ * @param {Record<string, unknown>} row
+ */
+function harvestSignalFieldsFromNestedData(row) {
+  const d = row.data != null && typeof row.data === 'object' && !Array.isArray(row.data) ? /** @type {Record<string, unknown>} */ (row.data) : null;
+  const dInner =
+    d?.data != null && typeof d.data === 'object' && !Array.isArray(d.data)
+      ? /** @type {Record<string, unknown>} */ (d.data)
+      : null;
+  const sigDeep =
+    dInner?.signal != null && typeof dInner.signal === 'object' && !Array.isArray(dInner.signal)
+      ? /** @type {Record<string, unknown>} */ (dInner.signal)
+      : null;
+  const sigShallow =
+    d?.signal != null && typeof d.signal === 'object' && !Array.isArray(d.signal)
+      ? /** @type {Record<string, unknown>} */ (d.signal)
+      : null;
+  const sigRoot =
+    row.signal != null && typeof row.signal === 'object' && !Array.isArray(row.signal)
+      ? /** @type {Record<string, unknown>} */ (row.signal)
+      : null;
+  const sig = sigDeep ?? sigShallow ?? sigRoot;
+  if (!sig) return;
+
+  const vf = row.vector_forecast;
+  const vfMissing = !Array.isArray(vf) || vf.length === 0;
+  if (vfMissing && Array.isArray(sig.vector_forecast) && sig.vector_forecast.length > 0) {
+    row.vector_forecast = sig.vector_forecast;
+  }
+  if (
+    (row.nombre_algoritmo == null || String(row.nombre_algoritmo).trim() === '') &&
+    sig.nombre_algoritmo != null &&
+    String(sig.nombre_algoritmo).trim() !== ''
+  ) {
+    row.nombre_algoritmo = sig.nombre_algoritmo;
+  }
+  const hasRound =
+    row.round != null ||
+    row.ronda != null ||
+    row.ronda_actual != null ||
+    row.roundId != null ||
+    row.Ronda != null;
+  if (!hasRound) {
+    const r =
+      sig.ronda_actual ??
+      sig.ronda_objetivo ??
+      sig.Ronda ??
+      sig.ronda ??
+      sig.gameRound ??
+      sig.round ??
+      dInner?.ronda ??
+      d?.ronda ??
+      null;
+    if (r != null && String(r).trim() !== '') {
+      row.round = typeof r === 'number' ? r : Number(r) || r;
+    }
+  }
+}
+
+/**
+ * Desanidar `payload` / `data` sin tirar mesa, round ni correlationKey del envelope (muy habitual en relay).
+ * @param {unknown} msg
+ * @param {number} [depth]
+ */
+function extractLiveRowFromSocketMsg(msg, depth = 0) {
+  if (depth > 4 || !msg || typeof msg !== 'object' || Array.isArray(msg)) return {};
+  const m = /** @type {Record<string, unknown>} */ (msg);
+
+  const fromPayload =
+    'payload' in m && m.payload != null && typeof m.payload === 'object' && !Array.isArray(m.payload)
+      ? /** @type {Record<string, unknown>} */ (m.payload)
+      : null;
+  const fromData =
+    'data' in m && m.data != null && typeof m.data === 'object' && !Array.isArray(m.data)
+      ? /** @type {Record<string, unknown>} */ (m.data)
+      : null;
+
+  const base = fromPayload ?? fromData;
+
+  const hoistKeys = [
+    'mesa',
+    'round',
+    'roundId',
+    'ronda',
+    'ronda_actual',
+    'ronda_objetivo',
+    'Ronda',
+    'correlationKey',
+    'id',
+    'signalId',
+    'serverTs',
+    'recommendation',
+    'winStatus',
+    'martingale',
+    'nombre_algoritmo',
+    'vector_forecast',
+    'scoreDetail',
+    'ganador',
+    'historial',
+    'history',
+  ];
+  const hoist = {};
+  for (const k of hoistKeys) {
+    if (!(k in m)) continue;
+    const v = m[k];
+    if (v === undefined || v === null) continue;
+    if (typeof v === 'string' && v.trim() === '') continue;
+    hoist[k] = v;
+  }
+
+  /** @param {Record<string, unknown>} row */
+  function rowMissingRoundLike(row) {
+    const has =
+      row.round != null ||
+      row.roundId != null ||
+      row.ronda != null ||
+      row.ronda_actual != null ||
+      row.ronda_objetivo != null ||
+      row.Ronda != null ||
+      (row.correlationKey != null &&
+        String(row.correlationKey).includes('|') &&
+        !String(row.correlationKey).toLowerCase().trim().startsWith('id:'));
+    return !has;
+  }
+
+  if (base) {
+    /** @type {Record<string, unknown>} */
+    let row = { ...base, ...hoist };
+    const innerData = base.data;
+    if (innerData != null && typeof innerData === 'object' && !Array.isArray(innerData) && rowMissingRoundLike(row)) {
+      const filled = extractLiveRowFromSocketMsg(innerData, depth + 1);
+      for (const [k, v] of Object.entries(filled)) {
+        if (k === 'data') continue;
+        if (v === undefined || v === null) continue;
+        if (typeof v === 'string' && v.trim() === '') continue;
+        const cur = row[k];
+        const curEmpty = cur === undefined || cur === null || (typeof cur === 'string' && cur.trim() === '');
+        if (curEmpty) row[k] = v;
+      }
+    }
+    /** Winxplay / proveedor: `data.data.signal` o `data.signal` — asegurar `vector_forecast` y ronda si solo venían anidados. */
+    harvestSignalFieldsFromNestedData(row);
+    mergeMesaInfoFromNestedIntoRow(row);
+    normalizeCorrelationKeyInRecord(row);
+    return row;
+  }
+  const flat = { ...m };
+  harvestSignalFieldsFromNestedData(flat);
+  mergeMesaInfoFromNestedIntoRow(flat);
+  normalizeCorrelationKeyInRecord(flat);
+  return flat;
 }
 
 function bump() {
@@ -121,16 +282,15 @@ function ensureAdminSignalsBridge() {
     bump();
   };
 
-  const onSignal = (data) => {
+  /**
+   * @param {unknown} data
+   * @param {string} [source] — trazabilidad id vs mesa|round (ver correlationKeyStats)
+   */
+  const onSignal = (data, source = 'socket:NEW_SIGNAL') => {
+    logPhaseActiveOnce();
     const msg = data && typeof data === 'object' ? /** @type {Record<string, unknown>} */ (data) : {};
-    // SAFE PARSE: soporta wrappers tipo { payload } o { data }.
-    const payload =
-      msg && typeof msg === 'object' && 'payload' in msg && msg.payload && typeof msg.payload === 'object'
-        ? /** @type {Record<string, unknown>} */ (msg.payload)
-        : msg && typeof msg === 'object' && 'data' in msg && msg.data && typeof msg.data === 'object'
-          ? /** @type {Record<string, unknown>} */ (msg.data)
-          : msg;
-    const row = payload && typeof payload === 'object' ? /** @type {Record<string, unknown>} */ (payload) : {};
+    const row0 = extractLiveRowFromSocketMsg(msg);
+    const { payload: row } = applyCanonicalModeToPayload(row0);
     const { formatted, strictOk, rejectReason } = createLiveSignalEntry(row, nextRecvId());
     if (!strictOk) {
       console.warn('SIGNAL INVALIDA', rejectReason ?? 'UNKNOWN', row);
@@ -147,6 +307,7 @@ function ensureAdminSignalsBridge() {
       bump();
       return;
     }
+    recordCorrelationKeyObservation('signal', formatted, { source });
     adminSignalsPredictionByMesa.set(String(formatted.mesa), formatted.predictionLabel);
     signals = [formatted, ...signals].slice(0, MAX_ITEMS);
     debugLastSignal = { raw: row, formatted };
@@ -156,16 +317,15 @@ function ensureAdminSignalsBridge() {
   };
 
   /** NEW_RESULT: mismo criterio que `resultsBuffer.unshift(formatResult(payload))` (más reciente primero). */
-  const onResult = (data) => {
+  /**
+   * @param {unknown} data
+   * @param {string} [source]
+   */
+  const onResult = (data, source = 'socket:NEW_RESULT') => {
+    logPhaseActiveOnce();
     const msg = data && typeof data === 'object' ? /** @type {Record<string, unknown>} */ (data) : {};
-    // SAFE PARSE: soporta wrappers tipo { payload } o { data }.
-    const payload =
-      msg && typeof msg === 'object' && 'payload' in msg && msg.payload && typeof msg.payload === 'object'
-        ? /** @type {Record<string, unknown>} */ (msg.payload)
-        : msg && typeof msg === 'object' && 'data' in msg && msg.data && typeof msg.data === 'object'
-          ? /** @type {Record<string, unknown>} */ (msg.data)
-          : msg;
-    const row = payload && typeof payload === 'object' ? /** @type {Record<string, unknown>} */ (payload) : {};
+    const row0 = extractLiveRowFromSocketMsg(msg);
+    const { payload: row } = applyCanonicalModeToPayload(row0);
     const mesaKey = String(row.mesa ?? 'N/A');
     const predicted = adminSignalsPredictionByMesa.get(mesaKey) ?? null;
     const { formatted, strictOk, rejectReason } = createLiveResultEntry(row, predicted, nextRecvId());
@@ -189,6 +349,7 @@ function ensureAdminSignalsBridge() {
       bump();
       return;
     }
+    recordCorrelationKeyObservation('result', formatted, { source });
     results = [formatted, ...results].slice(0, MAX_ITEMS);
     debugLastResult = { raw: row, formatted };
     debugLogs = [`NEW_RESULT mesa=${mesaKey} verdict=${formatted.verdict} vs=${formatted.versus}`, ...debugLogs].slice(0, MAX_DEBUG_LOGS);
@@ -202,16 +363,16 @@ function ensureAdminSignalsBridge() {
   socket.on('connect', onConnect);
   socket.on('disconnect', onDisconnect);
   socket.on('connect_error', onConnectError);
-  socket.on('NEW_SIGNAL', onSignal);
-  socket.on('NEW_RESULT', onResult);
+  socket.on('NEW_SIGNAL', (d) => onSignal(d, 'socket:NEW_SIGNAL'));
+  socket.on('NEW_RESULT', (d) => onResult(d, 'socket:NEW_RESULT'));
   socket.on('admin_signal_frame', (msg) => {
     try {
       console.log('SIGNAL FRAME:', msg);
-      const payload = msg?.payload ?? null;
-      if (!payload) return;
-      const t = msg?.type != null ? String(msg.type) : '';
-      if (t === 'NEW_SIGNAL') onSignal(payload);
-      if (t === 'NEW_RESULT') onResult(payload);
+      const { eventType, row } = unwrapLiveFrameMessage(msg);
+      if (!row || Object.keys(row).length === 0) return;
+      const et = eventType.toUpperCase();
+      if (et === 'NEW_SIGNAL') onSignal(row, 'socket:admin_signal_frame');
+      if (et === 'NEW_RESULT') onResult(row, 'socket:admin_signal_frame');
     } catch (err) {
       console.warn('admin_signal_frame handler error', err);
     }
@@ -219,8 +380,19 @@ function ensureAdminSignalsBridge() {
   socket.on('dashboardUpdate', (msg) => {
     try {
       const raw = msg && typeof msg === 'object' ? /** @type {Record<string, unknown>} */ (msg) : null;
-      const type = raw && 'type' in raw ? String(/** @type {any} */ (raw).type) : 'dashboardUpdate';
       const payload = raw?.payload ?? raw?.data ?? null;
+      const fromEnvelope = raw != null ? String(raw.type ?? raw.eventName ?? '').trim() : '';
+      const fromPayload =
+        payload != null && typeof payload === 'object' && !Array.isArray(payload)
+          ? String(/** @type {Record<string, unknown>} */ (payload).type ?? /** @type {Record<string, unknown>} */ (payload).eventName ?? '').trim()
+          : '';
+      const eventType = (fromEnvelope || fromPayload || '').toUpperCase();
+      const displayType =
+        raw && 'type' in raw && raw.type != null
+          ? String(raw.type)
+          : raw && 'eventName' in raw && raw.eventName != null
+            ? String(raw.eventName)
+            : 'dashboardUpdate';
 
       console.log('RAW EVENT:', raw);
       console.log('PARSED PAYLOAD:', payload);
@@ -232,22 +404,36 @@ function ensureAdminSignalsBridge() {
         return;
       }
 
-      if (type === 'NEW_RESULT') {
-        // Soportar forma proveedor: { type:'NEW_RESULT', data:{ mesa, data:{ results:{ mesa_info }}}}
-        if (
-          payload &&
-          typeof payload === 'object' &&
-          !Array.isArray(payload) &&
-          'data' in payload &&
-          payload.data &&
-          typeof payload.data === 'object' &&
-          !Array.isArray(payload.data) &&
-          'results' in /** @type {any} */ (payload.data)
-        ) {
+      if (eventType === 'NEW_RESULT') {
+        // Soportar forma proveedor: data.results o data.data.results (mesa_info + ronda_objetivo)
+        const pAny = /** @type {any} */ (payload);
+        const hasResultsShallow =
+          pAny?.data &&
+          typeof pAny.data === 'object' &&
+          pAny.data.results &&
+          typeof pAny.data.results === 'object';
+        const hasResultsDeep =
+          pAny?.data?.data &&
+          typeof pAny.data.data === 'object' &&
+          pAny.data.data.results &&
+          typeof pAny.data.data.results === 'object';
+        if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'data' in payload && (hasResultsShallow || hasResultsDeep)) {
           const p = /** @type {any} */ (payload);
           const mesa = p?.mesa ?? p?.data?.mesa ?? null;
-          const mi = p?.data?.results?.mesa_info ?? null;
-          const round = mi?.ronda_objetivo ?? mi?.ronda_actual ?? p?.ronda ?? p?.round ?? null;
+          const mi =
+            p?.data?.data?.results?.mesa_info ??
+            p?.data?.results?.mesa_info ??
+            null;
+          const de = mi?.data_evento ?? mi?.data_event;
+          const round =
+            mi?.ronda_objetivo ??
+            de?.Ronda ??
+            de?.ronda ??
+            de?.round ??
+            mi?.ronda_actual ??
+            p?.ronda ??
+            p?.round ??
+            null;
           const scoreDetail = mi
             ? {
                 puntaje_player: mi.puntaje_player,
@@ -258,41 +444,77 @@ function ensureAdminSignalsBridge() {
                 tablero: mi.tablero,
               }
             : undefined;
-          onResult({ mesa, round, winStatus: raw?.winStatus, scoreDetail, ganador: mi?.ganador });
+          const ckWire =
+            p?.correlationKey ??
+            (p.data && typeof p.data === 'object' && !Array.isArray(p.data) ? p.data.correlationKey : undefined) ??
+            raw?.correlationKey;
+          const martingalaData =
+            p?.data && typeof p.data === 'object' && !Array.isArray(p.data) && 'martingalaData' in p.data
+              ? /** @type {Record<string, unknown>} */ (p.data).martingalaData
+              : raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) && 'martingalaData' in raw.data
+                ? /** @type {Record<string, unknown>} */ (raw.data).martingalaData
+                : undefined;
+          onResult(
+            {
+              mesa,
+              round,
+              winStatus: raw?.winStatus,
+              mesa_info: mi,
+              scoreDetail,
+              ganador: mi?.ganador,
+              correlationKey: ckWire,
+              ...(martingalaData != null && typeof martingalaData === 'object' && !Array.isArray(martingalaData)
+                ? { martingalaData }
+                : {}),
+            },
+            'socket:dashboardUpdate:NEW_RESULT',
+          );
         } else {
-          onResult(payload);
+          onResult(payload, 'socket:dashboardUpdate:NEW_RESULT');
         }
         return;
       }
-      if (type === 'NEW_SIGNAL') {
-        // Soportar forma proveedor: { type:'NEW_SIGNAL', data:{ mesa, data:{ signal:{...}}}}
-        if (
-          payload &&
-          typeof payload === 'object' &&
-          !Array.isArray(payload) &&
-          'data' in payload &&
-          payload.data &&
-          typeof payload.data === 'object' &&
-          !Array.isArray(payload.data) &&
-          'signal' in /** @type {any} */ (payload.data)
-        ) {
-          const p = /** @type {any} */ (payload);
-          const mesa = p?.mesa ?? p?.data?.signal?.nombre_mesa ?? null;
-          const sig = p?.data?.signal ?? null;
-          onSignal({
-            mesa,
-            round: sig?.ronda_actual ?? p?.ronda ?? p?.round ?? null,
-            vector_forecast: sig?.vector_forecast,
-            nombre_algoritmo: sig?.nombre_algoritmo,
-            recommendation: sig?.forecast ?? sig?.recommendation ?? null,
-          });
+      if (eventType === 'NEW_SIGNAL') {
+        const p = /** @type {any} */ (payload);
+        const sigDeep = p?.data?.data?.signal && typeof p.data.data.signal === 'object' ? p.data.data.signal : null;
+        const sigShallow = p?.data?.signal && typeof p.data.signal === 'object' ? p.data.signal : null;
+        const hasSignal = Boolean(sigDeep ?? sigShallow);
+        if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'data' in payload && hasSignal) {
+          const sig = sigDeep ?? sigShallow;
+          const mesa = p?.mesa ?? sig?.nombre_mesa ?? p?.data?.mesa ?? p?.data?.data?.mesa ?? null;
+          const dataRonda = p?.data?.data?.ronda ?? p?.data?.ronda;
+          const roundFromSig =
+            sig?.ronda_actual ??
+            sig?.Ronda ??
+            sig?.ronda ??
+            sig?.ronda_objetivo ??
+            sig?.gameRound ??
+            sig?.round ??
+            null;
+          onSignal(
+            {
+              mesa,
+              data: p.data,
+              round: roundFromSig ?? dataRonda ?? p?.ronda ?? p?.round ?? p?.ronda_actual ?? p?.Ronda ?? p?.ronda_objetivo ?? null,
+              vector_forecast: sig?.vector_forecast,
+              nombre_algoritmo: sig?.nombre_algoritmo,
+              recommendation: sig?.forecast ?? sig?.recommendation ?? null,
+              correlationKey:
+                p?.correlationKey ??
+                (p?.data && typeof p.data === 'object' && !Array.isArray(p.data) ? p.data.correlationKey : undefined) ??
+                raw?.correlationKey,
+              id: p?.id ?? sig?.id ?? sig?.signalId ?? raw?.id,
+              signalId: p?.signalId ?? raw?.signalId,
+            },
+            'socket:dashboardUpdate:NEW_SIGNAL',
+          );
         } else {
-          onSignal(payload);
+          onSignal(payload, 'socket:dashboardUpdate:NEW_SIGNAL');
         }
         return;
       }
 
-      console.log('SOCKET EVENT:', type);
+      console.log('SOCKET EVENT:', displayType);
       pushStructuredDebug({ type: 'DASHBOARD_UPDATE', payload: raw });
       bump();
     } catch (err) {

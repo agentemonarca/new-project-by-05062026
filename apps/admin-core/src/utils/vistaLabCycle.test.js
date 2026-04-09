@@ -15,16 +15,38 @@ describe('resultMatchesSignal', () => {
     expect(resultMatchesSignal(sig, res)).toBe(true);
   });
 
-  it('no empareja si correlationKey distinto aunque mesa coincida', () => {
-    const sig = { correlationKey: 'a', mesa: '1', round: '1' };
-    const res = { correlationKey: 'b', mesa: '1', round: '1' };
-    expect(resultMatchesSignal(sig, res)).toBe(false);
+  it('mesa+round iguales → match aunque correlationKey distinto (ronda objetivo alineada)', () => {
+    const sig = { correlationKey: 'a', mesa: '1', round: '1', isIncomplete: false };
+    const res = { correlationKey: 'b', mesa: '1', round: '1', isIncomplete: false };
+    expect(resultMatchesSignal(sig, res)).toBe(true);
   });
 
-  it('si solo uno trae correlationKey → false (no mezclar con mesa/round)', () => {
+  it('CK distintos + misma mesa + señal incompleta → match (flujo visual)', () => {
+    const sig = { correlationKey: 'a', mesa: 'M1', round: '5', isIncomplete: true };
+    const res = { correlationKey: 'b', mesa: 'M1', round: '9', isIncomplete: false };
+    expect(resultMatchesSignal(sig, res)).toBe(true);
+  });
+
+  it('CK id: en señal y mesa|round en resultado: match por id ↔ signalId', () => {
+    const sig = {
+      correlationKey: 'id:1775677483956',
+      id: '1775677483956',
+      mesa: 'Baccarat 1',
+      round: null,
+    };
+    const res = {
+      correlationKey: 'Baccarat 1|51',
+      signalId: '1775677483956',
+      mesa: 'Baccarat 1',
+      round: 51,
+    };
+    expect(resultMatchesSignal(sig, res)).toBe(true);
+  });
+
+  it('mesa+round iguales → match aunque solo un lado tenga correlationKey', () => {
     const sig = { correlationKey: 'only-here', mesa: '1', round: '1' };
     const res = { mesa: '1', round: '1' };
-    expect(resultMatchesSignal(sig, res)).toBe(false);
+    expect(resultMatchesSignal(sig, res)).toBe(true);
   });
 
   it('empareja por signalId ↔ id cuando no hay correlationKey', () => {

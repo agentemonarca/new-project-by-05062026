@@ -1,5 +1,6 @@
 const MAX_ADMIN_SIGNAL_JSON_BYTES = 48_000;
-const MAX_CLIENT_EMIT_BYTES = 10_000;
+/** Incluye `providerPayload` (snapshot proveedor) + campos normalizados + serverTs. */
+const MAX_CLIENT_EMIT_BYTES = 16_384;
 
 /**
  * Copia liviana para Socket.IO clientes: serverTs + validación de campos y tamaño &lt; 10KB.

@@ -73,7 +73,7 @@ function RawEventsPanelInner() {
       </div>
 
       <p className="mt-1 text-[11px] text-slate-500">
-        Todos los eventos del socket (sin filtrar). Últimos {EVENT_ROWS} en lista; buffer interno 50.
+        Todos los eventos del socket (sin filtrar). Últimos {EVENT_ROWS} en lista; buffer interno 100.
       </p>
 
       <div className="mt-3">
@@ -119,7 +119,7 @@ function RawEventsPanelInner() {
                 const a = typeAccent(row.type);
                 return (
                   <li
-                    key={`${row.eventName}-${idx}-${row.type}`}
+                    key={`${row.receivedAt ?? 0}-${row.eventName}-${idx}-${row.type}`}
                     className="flex gap-3 px-3 py-2.5 text-[11px]"
                     style={{ borderLeft: `3px solid ${a.border}` }}
                   >

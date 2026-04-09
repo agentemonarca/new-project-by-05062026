@@ -82,7 +82,7 @@ export default function AdminSignalsHero({ signal, compact = false }) {
             <span className="font-mono font-semibold text-slate-300">{signal.martingale}</span>
             <span className="text-slate-600">·</span>
             <span>
-              Ronda <span className="font-mono text-slate-200">{signal.round}</span>
+              Ronda <span className="font-mono text-slate-200">{signal.round != null ? signal.round : '—'}</span>
             </span>
             <span className="text-slate-600">·</span>
             <span className="font-mono text-xs text-slate-500">{signal.timestamp}</span>

@@ -4,8 +4,49 @@ import { adminSignalsFlowTrace, summarizePayloadForFlow } from './signalFlowDebu
 import { getSignalStreamInterpreter } from './signalStreamInterpreter.js';
 import { getSignalSessionTracker } from './signalSessionTracker.js';
 
+/** JSON máximo del bloque `providerPayload` (clon del cuerpo antes del sobre Phase 3). */
+const MAX_PROVIDER_PAYLOAD_JSON_BYTES = 12_000;
+
+/**
+ * Clon JSON-safe del payload tal cual entró al relay (p. ej. `dashboardUpdate` anidado).
+ * Si excede el tope, devuelve metadatos + vista parcial UTF-8 segura.
+ * @param {unknown} raw
+ * @returns {Record<string, unknown> | null}
+ */
+export function snapshotProviderPayloadForClient(raw) {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  let clone;
+  try {
+    clone = JSON.parse(JSON.stringify(raw));
+  } catch {
+    return null;
+  }
+  let serialized = '';
+  try {
+    serialized = JSON.stringify(clone);
+  } catch {
+    return null;
+  }
+  const bytes = Buffer.byteLength(serialized, 'utf8');
+  if (bytes <= MAX_PROVIDER_PAYLOAD_JSON_BYTES) return /** @type {Record<string, unknown>} */ (clone);
+  const buf = Buffer.from(serialized, 'utf8');
+  let cut = Math.max(0, MAX_PROVIDER_PAYLOAD_JSON_BYTES - 96);
+  let slice = buf.subarray(0, cut);
+  while (slice.length > 0 && (slice[slice.length - 1] & 0xc0) === 0x80) {
+    slice = slice.subarray(0, slice.length - 1);
+  }
+  const preview = slice.toString('utf8');
+  return {
+    _providerPayloadFormat: 'json_truncated',
+    _providerPayloadBytes: bytes,
+    _providerPayloadIncludedBytes: slice.length,
+    _providerPayloadPreview: `${preview}\n…`,
+  };
+}
+
 /** Último NEW_RESULT (solo meta) para alinear señales de prueba. */
-let _lastClientResultMeta = /** @type {null | { mesa?: string, round?: string | number, correlationKey?: string }} */ (null);
+let _lastClientResultMeta =
+  /** @type {null | { mesa?: string, round?: string | number, correlationKey?: string, signalId?: string }} */ (null);
 /** Último NEW_RESULT payload completo emitido al cliente (para replay). */
 let _lastClientResultPayload = /** @type {null | any} */ (null);
 /** Último NEW_SIGNAL emitido al cliente (para replay al conectar tarde). */
@@ -33,7 +74,7 @@ export function getLastClientResultForTest() {
  * }} ctx
  * @param {'NEW_SIGNAL' | 'NEW_RESULT'} type
  * @param {unknown} payload
- * @param {{ source?: string }} [meta]
+ * @param {{ source?: string, providerSnapshot?: Record<string, unknown> | null }} [meta]
  */
 export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
   const { io, processor, logger } = ctx;
@@ -72,12 +113,31 @@ export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
   }
   adminSignalsFlowTrace(logger, 'processor_ingest_ok', { type, source });
 
-  const forClient = buildAdminSignalsClientPayload(type, payload);
-  if (!forClient) {
+  const baseClient = buildAdminSignalsClientPayload(type, payload);
+  if (!baseClient) {
     logger?.warn?.('admin_signals_client_build_skip', { type, source });
     return { ok: false, reason: 'client_payload_build_failed' };
   }
-  const clientEmit = prepareAdminSignalsClientEmit(type, forClient);
+  const snap = meta.providerSnapshot;
+  /** @type {Record<string, unknown>} */
+  let forClient = { ...baseClient };
+  if (snap != null && typeof snap === 'object') {
+    forClient.providerPayload = snap;
+  }
+  let clientEmit = prepareAdminSignalsClientEmit(type, forClient);
+  if (
+    !clientEmit.ok &&
+    snap != null &&
+    clientEmit.reason === 'client_emit_too_large'
+  ) {
+    adminSignalsFlowTrace(logger, 'relay_client_emit_retry_without_provider_payload', {
+      type,
+      source,
+      bytes: clientEmit.bytes,
+    });
+    forClient = { ...baseClient };
+    clientEmit = prepareAdminSignalsClientEmit(type, forClient);
+  }
   if (!clientEmit.ok) {
     logger?.warn?.('admin_signals_client_emit_skip', { type, reason: clientEmit.reason, source });
     adminSignalsFlowTrace(logger, 'relay_client_emit_skipped', { type, reason: clientEmit.reason, source });
@@ -114,6 +174,7 @@ export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
       mesa: out.mesa != null ? String(out.mesa) : undefined,
       round: out.round,
       correlationKey: out.correlationKey != null ? String(out.correlationKey) : undefined,
+      signalId: out.signalId != null ? String(out.signalId) : out.id != null ? String(out.id) : undefined,
     };
   }
 

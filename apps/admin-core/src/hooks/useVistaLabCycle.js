@@ -221,6 +221,9 @@ export function useVistaLabCycle(opts = {}) {
 
       const runShot = (i) => {
         if (!isRunningRef.current) return;
+        // Un solo NEW_RESULT suele emparejar toda la señal: no consumir recvId entre tiros,
+        // si no los tiros 2..N nunca encuentran fila en el buffer.
+        consumedResultRecvIdRef.current = null;
         setShotIndex(i);
         setPhase(LAB_PHASE.SIGNAL_DETECTED);
         stopBettingCountdown();

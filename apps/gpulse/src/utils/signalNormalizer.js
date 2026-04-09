@@ -30,6 +30,19 @@ function envelopeBody(ev) {
   return ev;
 }
 
+/** Prioridad proveedor (resultado): ronda_objetivo (cierra la señal) → data_evento → ronda_actual último. */
+function roundFromMesaInfoForensic(mi) {
+  if (mi == null || typeof mi !== 'object' || Array.isArray(mi)) return null;
+  const de = mi.data_evento ?? mi.data_event;
+  const rondaEvt =
+    de != null && typeof de === 'object' && !Array.isArray(de)
+      ? de.Ronda ?? de.ronda ?? de.round
+      : null;
+  const v = mi.ronda_objetivo ?? rondaEvt ?? mi.Ronda ?? mi.round ?? mi.ronda_actual;
+  if (v == null || String(v).trim() === '') return null;
+  return v;
+}
+
 /**
  * @param {unknown} cycle
  */
@@ -94,15 +107,23 @@ export function normalizeCycle(cycle) {
 
   const vf =
     signal?.vector_forecast ??
+    (Array.isArray(cycle.signalPayload?.vector_forecast) ? cycle.signalPayload.vector_forecast : null) ??
     (Array.isArray(cycle.signalPayload?.forecast) ? cycle.signalPayload.forecast : null);
   const forecast = Array.isArray(vf) ? vf.map((x) => String(x)) : [];
 
   return {
     mesa: signal?.nombre_mesa || mesaInfo?.data_evento?.mesa || cycle.mesa || cycle.signalPayload?.mesa || '—',
 
-    roundSignal: signal?.ronda_actual ?? cycle.round ?? cycle.signalPayload?.round ?? cycle.signalPayload?.roundId ?? '—',
+    roundSignal:
+      signal?.ronda_actual ??
+      sp?.data?.data?.ronda ??
+      sp?.data?.ronda ??
+      cycle.signalPayload?.round ??
+      cycle.signalPayload?.roundId ??
+      cycle.round ??
+      '—',
 
-    roundResult: mesaInfo?.ronda_actual ?? '—',
+    roundResult: roundFromMesaInfoForensic(mesaInfo) ?? '—',
 
     side,
 

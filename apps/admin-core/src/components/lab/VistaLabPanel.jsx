@@ -4,7 +4,10 @@ import { Pause, Play, FlaskConical } from 'lucide-react';
 import { useVistaLabAdmin } from '../../contexts/VistaLabAdminContext.jsx';
 import ResultCasinoScoreBlock from '../ResultCasinoScoreBlock.jsx';
 import VistaLabCardReveal from './VistaLabCardReveal.jsx';
+import VistaLabProviderBar from './VistaLabProviderBar.jsx';
+import { vistaLabForecastCellStyle } from '../../lab/vistaLabForecastCellStyle.js';
 import { LAB_PHASE, SIGNAL_DETECTED_TO_IN_PROGRESS_MS } from '../../lab/vistaLabSharedConstants.js';
+import { displayRoundOrIdHintForLiveRow } from '../../utils/signalFormatter.js';
 
 /**
  * Cuando todo el buffer visible es ✗, explica el caso típico “señal de prueba vs resultados reales”.
@@ -53,6 +56,22 @@ function VistaLabPanelInner() {
   const forecast6 =
     activeSignal && Array.isArray(activeSignal.forecast6) ? activeSignal.forecast6 : ['—', '—', '—', '—', '—', '—'];
 
+  const sigIncomplete = activeSignal?.isIncomplete === true;
+  const roundDisplayLabel = (() => {
+    if (!activeSignal) return '—';
+    const d = displayRoundOrIdHintForLiveRow(activeSignal);
+    if (d !== '—') return d;
+    return sigIncomplete ? 'Ronda desconocida' : '—';
+  })();
+  const predictionDisplayLabel = (() => {
+    if (!activeSignal) return '—';
+    const raw = String(activeSignal.predictionLabel ?? activeSignal.recommendation ?? '—');
+    if (sigIncomplete && (raw === '—' || raw === 'UNKNOWN')) return 'Dirección pendiente';
+    return raw;
+  })();
+
+  const resIncomplete = activeResult?.isIncomplete === true;
+
   const winnerSide = (() => {
     const sd = activeResult?.scoreDetail && typeof activeResult.scoreDetail === 'object' ? activeResult.scoreDetail : null;
     const raw = (sd && 'ganador' in sd ? /** @type {any} */ (sd).ganador : null) ?? activeResult?.ganador ?? null;
@@ -70,6 +89,15 @@ function VistaLabPanelInner() {
     return 'neutral';
   })();
 
+  const providerExtras =
+    activeResult?.vistaLabExtras ??
+    (snap.results[0] && typeof snap.results[0] === 'object' ? snap.results[0].vistaLabExtras : null);
+  const providerBarKey =
+    activeResult?.recvId != null
+      ? String(activeResult.recvId)
+      : snap.results[0]?.recvId != null
+        ? String(snap.results[0].recvId)
+        : '';
 
   return (
     <div className="space-y-6">
@@ -121,6 +149,10 @@ function VistaLabPanelInner() {
           </button>
         </div>
       </div>
+
+      {labMode !== 'phase1' ? (
+        <VistaLabProviderBar extras={providerExtras} resetKey={providerBarKey} />
+      ) : null}
 
       {labNotice ? (
         <p className="rounded-lg border border-cyan-500/25 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-100/95">{labNotice}</p>
@@ -221,8 +253,11 @@ function VistaLabPanelInner() {
             ) : null}
             {phase === LAB_PHASE.IN_PROGRESS ? (
               <p className="mt-2 border-t border-[#2B3139] pt-2 text-sm font-semibold text-[#FCD535]">
-                BETTING · tiro {Number(shotIndex) + 1}/6 ·{' '}
-                {bettingRemainingMs != null ? `${Math.ceil(bettingRemainingMs / 1000)}s` : '—'}
+                Ciclo VistaLab · BETTING · tiro {Number(shotIndex) + 1}/6 ·{' '}
+                {bettingRemainingMs != null ? `${Math.ceil(bettingRemainingMs / 1000)}s` : '—'}{' '}
+                <span className="block text-[10px] font-normal text-[#848E9C]">
+                  (temporizador del simulador; el tiempo del proveedor va en la barra «Datos proveedor · mesa_info» arriba)
+                </span>
               </p>
             ) : null}
             {phase === LAB_PHASE.LOCKED ? (
@@ -248,7 +283,7 @@ function VistaLabPanelInner() {
                   {' · '}
                   <span className="font-mono text-[#EAECEF]">ck={String(activeSignal.correlationKey ?? '—')}</span>
                   {' · '}
-                  <span className="font-mono text-[#EAECEF]">round={String(activeSignal.round ?? '—')}</span>
+                  <span className="font-mono text-[#EAECEF]">round={displayRoundOrIdHintForLiveRow(activeSignal)}</span>
                 </p>
                 {snap.results.length === 0 ? (
                   <p className="mt-2 text-amber-200/90">
@@ -265,7 +300,7 @@ function VistaLabPanelInner() {
                         <li key={rid} className={ok ? 'text-emerald-300/95' : ''}>
                           {ok ? '✓ match' : '✗ no match'} · {rid.slice(0, 24)}… · mesa {String(r?.mesa ?? '—')} · sid{' '}
                           {String(r?.signalId ?? '—')} · ck {String(r?.correlationKey ?? '—')} · round{' '}
-                          {String(r?.round ?? r?.roundId ?? '—')}
+                          {displayRoundOrIdHintForLiveRow(r && typeof r === 'object' ? /** @type {Record<string, unknown>} */ (r) : null)}
                         </li>
                       );
                     })}
@@ -308,7 +343,7 @@ function VistaLabPanelInner() {
                   {' · '}
                   <span className="font-mono text-[#EAECEF]">ck={String(activeSignal.correlationKey ?? '—')}</span>
                   {' · '}
-                  <span className="font-mono text-[#EAECEF]">round={String(activeSignal.round ?? '—')}</span>
+                  <span className="font-mono text-[#EAECEF]">round={displayRoundOrIdHintForLiveRow(activeSignal)}</span>
                 </p>
                 {snap.results.length === 0 ? (
                   <p className="mt-2 text-amber-200/90">
@@ -324,7 +359,7 @@ function VistaLabPanelInner() {
                           <li key={rid} className={ok ? 'text-emerald-300/95' : ''}>
                             {ok ? '✓ match' : '✗ no match'} · {rid.slice(0, 24)}… · mesa {String(r?.mesa ?? '—')} · sid{' '}
                             {String(r?.signalId ?? '—')} · ck {String(r?.correlationKey ?? '—')} · round{' '}
-                            {String(r?.round ?? r?.roundId ?? '—')}
+                            {displayRoundOrIdHintForLiveRow(r && typeof r === 'object' ? /** @type {Record<string, unknown>} */ (r) : null)}
                           </li>
                         );
                       })}
@@ -376,7 +411,7 @@ function VistaLabPanelInner() {
                   {' · '}
                   <span className="font-mono text-[#EAECEF]">ck={String(activeSignal.correlationKey ?? '—')}</span>
                   {' · '}
-                  <span className="font-mono text-[#EAECEF]">round={String(activeSignal.round ?? '—')}</span>
+                  <span className="font-mono text-[#EAECEF]">round={displayRoundOrIdHintForLiveRow(activeSignal)}</span>
                 </p>
                 {snap.results.length === 0 ? (
                   <p className="mt-2 text-amber-200/90">
@@ -393,7 +428,7 @@ function VistaLabPanelInner() {
                           <li key={rid} className={ok ? 'text-emerald-300/95' : ''}>
                             {ok ? '✓ match' : '✗ no match'} · {rid.slice(0, 24)}… · mesa {String(r?.mesa ?? '—')} · sid{' '}
                             {String(r?.signalId ?? '—')} · ck {String(r?.correlationKey ?? '—')} · round{' '}
-                            {String(r?.round ?? r?.roundId ?? '—')}
+                            {displayRoundOrIdHintForLiveRow(r && typeof r === 'object' ? /** @type {Record<string, unknown>} */ (r) : null)}
                           </li>
                         );
                       })}
@@ -447,7 +482,7 @@ function VistaLabPanelInner() {
                   {' · '}
                   <span className="font-mono text-[#EAECEF]">ck={String(activeSignal.correlationKey ?? '—')}</span>
                   {' · '}
-                  <span className="font-mono text-[#EAECEF]">round={String(activeSignal.round ?? '—')}</span>
+                  <span className="font-mono text-[#EAECEF]">round={displayRoundOrIdHintForLiveRow(activeSignal)}</span>
                 </p>
                 {snap.results.length === 0 ? (
                   <p className="mt-2 text-amber-200/90">
@@ -463,7 +498,7 @@ function VistaLabPanelInner() {
                         <li key={rid} className={ok ? 'text-emerald-300/95' : ''}>
                           {ok ? '✓ match' : '✗ no match'} · {rid.slice(0, 24)}… · mesa {String(r?.mesa ?? '—')} · sid{' '}
                           {String(r?.signalId ?? '—')} · ck {String(r?.correlationKey ?? '—')} · round{' '}
-                          {String(r?.round ?? r?.roundId ?? '—')}
+                          {displayRoundOrIdHintForLiveRow(r && typeof r === 'object' ? /** @type {Record<string, unknown>} */ (r) : null)}
                         </li>
                       );
                     })}
@@ -540,7 +575,8 @@ function VistaLabPanelInner() {
                       Recibido
                     </span>
                     <span className="font-mono text-[#EAECEF]">
-                      #{i + 1} · mesa {String(r?.mesa ?? '—')} · ronda {String(r?.round ?? r?.roundId ?? '—')} ·{' '}
+                      #{i + 1} · mesa {String(r?.mesa ?? '—')} · ronda{' '}
+                      {displayRoundOrIdHintForLiveRow(r && typeof r === 'object' ? /** @type {Record<string, unknown>} */ (r) : null)} ·{' '}
                       <span
                         className="font-bold"
                         style={{
@@ -571,6 +607,12 @@ function VistaLabPanelInner() {
           ) : null}
           {activeSignal ? (
             <div className="mt-3 space-y-4">
+              {sigIncomplete ? (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-950/25 px-2.5 py-1.5 text-[10px] leading-snug text-amber-100/95">
+                  Evento <span className="font-semibold">incompleto</span> del proveedor: se muestra lo disponible; revisa consola{' '}
+                  <span className="font-mono text-amber-200/90">[INCOMPLETE_*]</span> y <span className="font-mono">[EVENT_FLOW]</span>.
+                </p>
+              ) : null}
               <dl className="space-y-2 font-mono text-xs text-[#EAECEF]">
                 <div className="flex justify-between gap-2">
                   <dt className="text-[#848E9C]">Mesa</dt>
@@ -578,7 +620,7 @@ function VistaLabPanelInner() {
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-[#848E9C]">Ronda</dt>
-                  <dd>{String(activeSignal.round ?? '—')}</dd>
+                  <dd className={roundDisplayLabel === 'Ronda desconocida' ? 'text-amber-200/95' : ''}>{roundDisplayLabel}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-[#848E9C]">Algoritmo</dt>
@@ -596,11 +638,7 @@ function VistaLabPanelInner() {
                     <div
                       key={i}
                       className="flex aspect-square max-h-14 items-center justify-center rounded-lg border text-sm font-black tabular-nums"
-                      style={{
-                        borderColor: '#474D57',
-                        backgroundColor: 'rgba(252, 213, 53, 0.06)',
-                        color: '#FCD535',
-                      }}
+                      style={vistaLabForecastCellStyle(cell)}
                       title={`Tiro ${i + 1}`}
                     >
                       {cell}
@@ -612,7 +650,19 @@ function VistaLabPanelInner() {
                 <dl className="space-y-1 border-t border-[#2B3139] pt-3 font-mono text-xs text-[#EAECEF]">
                   <div className="flex justify-between gap-2">
                     <dt className="text-[#848E9C]">Predicción</dt>
-                    <dd>{String(activeSignal.predictionLabel ?? activeSignal.recommendation ?? '—')}</dd>
+                    <dd
+                      className={
+                        predictionDisplayLabel === 'Dirección pendiente'
+                          ? 'text-amber-200/95'
+                          : String(activeSignal.predictionColor ?? '').toLowerCase() === 'blue'
+                            ? 'font-semibold text-blue-400'
+                            : String(activeSignal.predictionColor ?? '').toLowerCase() === 'red'
+                              ? 'font-semibold text-rose-400'
+                              : ''
+                      }
+                    >
+                      {predictionDisplayLabel}
+                    </dd>
                   </div>
                   <div className="flex justify-between gap-2">
                     <dt className="text-[#848E9C]">Martingale</dt>
@@ -639,6 +689,11 @@ function VistaLabPanelInner() {
             ) : null}
             {activeResult ? (
               <div className="mt-3 space-y-2">
+                {resIncomplete ? (
+                  <p className="rounded-lg border border-amber-500/30 bg-amber-950/25 px-2.5 py-1.5 text-[10px] leading-snug text-amber-100/95">
+                    Resultado <span className="font-semibold">incompleto</span> (p. ej. sin <span className="font-mono">mesa_info</span> / ganador): se muestra lo que llegó.
+                  </p>
+                ) : null}
                 {labMode === 'phase4' ? (
                   <p className="text-xs font-semibold text-emerald-400">✓ Match identificado (orden CK → id/signalId → mesa+round)</p>
                 ) : null}

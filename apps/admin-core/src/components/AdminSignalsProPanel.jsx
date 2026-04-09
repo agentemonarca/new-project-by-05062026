@@ -308,7 +308,8 @@ export default function AdminSignalsProPanel({ compact = false, compactMaxSignal
                 🔁 <span className="martingale font-mono text-slate-200">{s.martingale}</span>
               </span>
               <span title="Ronda">
-                ⏱ Round <span className="round font-mono text-slate-200">R{s.round}</span>
+                ⏱ Round{' '}
+                <span className="round font-mono text-slate-200">{s.round != null ? `R${s.round}` : '—'}</span>
               </span>
               <span title="Hora">
                 <span className="time font-mono text-slate-500">{s.timestamp}</span>

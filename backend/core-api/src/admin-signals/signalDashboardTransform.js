@@ -125,7 +125,16 @@ function deriveWinStatusFromResult(o) {
  */
 function coerceToSignalRawFromFlat(o) {
   const mesa = o.mesa ?? o.table ?? o.desk ?? o.tableName ?? o.tableId ?? o.mesaName ?? o.room;
-  const round = o.round ?? o.gameRound ?? o.gameId ?? o.shoe ?? o.hand ?? o.roundId;
+  const round =
+    o.round ??
+    o.gameRound ??
+    o.gameId ??
+    o.shoe ??
+    o.hand ??
+    o.roundId ??
+    o.ronda ??
+    o.ronda_actual ??
+    o.Ronda;
   const id = o.id ?? o.signalId ?? o.betId ?? o.externalId ?? o.uid;
   const rec =
     o.recommendation ?? o.signal ?? o.side ?? o.prediction ?? o.bet ?? o.pick ?? o.forecast;
@@ -167,7 +176,8 @@ function coerceToResultRawFromFlat(o) {
 
   const id = o.signalId ?? o.id ?? o.betId ?? o.externalId;
   const mesa = o.mesa ?? o.table ?? o.desk ?? o.tableName ?? o.tableId ?? o.mesaName;
-  const round = o.round ?? o.gameRound ?? o.gameId ?? o.shoe ?? o.hand;
+  const round =
+    o.round ?? o.gameRound ?? o.gameId ?? o.shoe ?? o.hand ?? o.roundId ?? o.ronda ?? o.ronda_actual ?? o.Ronda;
 
   const out = { ...o, winStatus };
   if (id != null) {

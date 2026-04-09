@@ -31,6 +31,23 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
   let socket = null;
   let stopped = false;
   const upstreamTraceOn = String(process.env.ADMIN_SIGNALS_UPSTREAM_TRACE ?? '').trim() === '1';
+  /** Phase 2: frequency by top-level key signature at emitSafe (ADMIN_SIGNALS_SHAPE_AUDIT=1). */
+  const shapeCounts = new Map();
+
+  /** @param {unknown} payload */
+  function shapeKeyFromPayload(payload) {
+    if (payload == null) return 'null';
+    const t = typeof payload;
+    if (t !== 'object') return t;
+    if (Array.isArray(payload)) return 'array';
+    try {
+      return Object.keys(/** @type {Record<string, unknown>} */ (payload))
+        .sort()
+        .join(',');
+    } catch {
+      return 'object[keys_error]';
+    }
+  }
 
   function shouldForward(type, payload) {
     if (!adminSignalsRuntime.upstreamEnabled) return false;
@@ -55,7 +72,12 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
     }
   }
 
-  function emitSafe(type, payload) {
+  /**
+   * @param {string} type
+   * @param {unknown} payload
+   * @param {string} [shapeSource] — observability only (Phase 2); does not change relay data.
+   */
+  function emitSafe(type, payload, shapeSource = 'unknown') {
     const ts = Date.now();
     if (!adminSignalsRuntime.upstreamEnabled) {
       adminSignalsFlowTrace(logger, 'relay_blocked_upstream_disabled', { type });
@@ -68,6 +90,45 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
         filterWanted: String(adminSignalsRuntime.filters.mesa || '').trim(),
       });
       return;
+    }
+    // Phase 2 shape audit: ADMIN_SIGNALS_SHAPE_AUDIT=1
+    const shapeAuditOn = String(process.env.ADMIN_SIGNALS_SHAPE_AUDIT ?? '').trim() === '1';
+    if (shapeAuditOn && (type === EVENT_NEW_SIGNAL || type === EVENT_NEW_RESULT)) {
+      const shapeKey = shapeKeyFromPayload(payload);
+      const next = (shapeCounts.get(shapeKey) ?? 0) + 1;
+      shapeCounts.set(shapeKey, next);
+      console.log('[SHAPE_DETECTED]', shapeKey);
+      try {
+        console.log('[SHAPE_SAMPLE]', JSON.stringify(payload, null, 2));
+      } catch {
+        console.log('[SHAPE_SAMPLE]', String(payload));
+      }
+      console.log('[SHAPE_COUNT]', shapeKey, next);
+      console.log('[SHAPE_SOURCE]', { eventType: type, source: shapeSource, shapeKey });
+    }
+    // Phase 1 forensic input (pre-normalize): ADMIN_SIGNALS_PRENORMALIZE_LOG=1
+    const prenormalizeLog = String(process.env.ADMIN_SIGNALS_PRENORMALIZE_LOG ?? '').trim() === '1';
+    if (prenormalizeLog && (type === EVENT_NEW_SIGNAL || type === EVENT_NEW_RESULT)) {
+      let serialized = '';
+      try {
+        serialized = JSON.stringify(payload, null, 2);
+      } catch {
+        serialized = String(payload);
+      }
+      if (type === EVENT_NEW_SIGNAL) {
+        console.log('[RAW_SIGNAL]', serialized);
+        console.log('[TRACE_RAW_SIGNAL]', serialized);
+      } else {
+        console.log('[RAW_RESULT]', serialized);
+        console.log('[TRACE_RAW_RESULT]', serialized);
+      }
+      console.log('[TRACE_ROUND_PATHS]', {
+        mesa: payload?.data?.mesa,
+        round_direct: payload?.round,
+        ronda_root: payload?.data?.ronda,
+        ronda_nested: payload?.data?.data?.signal?.ronda_actual,
+        ronda_result: payload?.data?.data?.results?.mesa_info?.ronda_objetivo,
+      });
     }
     schedule({ type, payload, ts });
   }
@@ -199,13 +260,13 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
       if (eventName === EVENT_NEW_SIGNAL) {
         logRawProviderSampleOnce('NEW_SIGNAL', payload);
         adminSignalsFlowTrace(logger, 'upstream_recv_new_signal', { summary: summarizePayloadForFlow(payload) });
-        emitSafe(EVENT_NEW_SIGNAL, payload);
+        emitSafe(EVENT_NEW_SIGNAL, payload, 'provider_socket:NEW_SIGNAL');
         return;
       }
       if (eventName === EVENT_NEW_RESULT) {
         logRawProviderSampleOnce('NEW_RESULT', payload);
         adminSignalsFlowTrace(logger, 'upstream_recv_new_result', { summary: summarizePayloadForFlow(payload) });
-        emitSafe(EVENT_NEW_RESULT, payload);
+        emitSafe(EVENT_NEW_RESULT, payload, 'provider_socket:NEW_RESULT');
         return;
       }
       if (eventName === EVENT_DASHBOARD_UPDATE) {
@@ -226,7 +287,7 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
           if (relayed) {
             const { type, data } = relayed;
             console.log('[WINX]', type);
-            emitSafe(type, data);
+            emitSafe(type, data, 'winxplay_adapter:dashboardUpdate');
             if (io && isWinxplayDebugStreamEnabled()) {
               try {
                 io.of('/admin-signals').emit('DEBUG_STREAM', payload);
@@ -258,8 +319,8 @@ export function createUpstreamBridge({ logger, url, apiKey, onAdminEvent, io }) 
             results: results.length,
           });
         }
-        for (const raw of signals) emitSafe(EVENT_NEW_SIGNAL, raw);
-        for (const raw of results) emitSafe(EVENT_NEW_RESULT, raw);
+        for (const raw of signals) emitSafe(EVENT_NEW_SIGNAL, raw, 'dashboard_expand:signal');
+        for (const raw of results) emitSafe(EVENT_NEW_RESULT, raw, 'dashboard_expand:result');
       }
     });
   }

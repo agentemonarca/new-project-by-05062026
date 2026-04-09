@@ -1,0 +1,2440 @@
+{
+  "totalSessions": 3,
+  "sessions": [
+    {
+      "mesa": "Baccarat 7",
+      "round": "—",
+      "durationMs": 27413,
+      "eventCount": 1,
+      "inicio": {
+        "eventName": "dashboardUpdate",
+        "payloadType": "NEW_SIGNAL",
+        "payload": {
+          "type": "NEW_SIGNAL",
+          "data": {
+            "mesa": "Baccarat 7",
+            "data": {
+              "signal": {
+                "nombre_mesa": "Baccarat 7",
+                "vector_forecast": [
+                  "B",
+                  "B",
+                  "P",
+                  "B",
+                  "P",
+                  "B"
+                ],
+                "nombre_algoritmo": "SIMETRIA_DIRECTA",
+                "pattern": [
+                  "B",
+                  "B",
+                  "P",
+                  "P",
+                  "B",
+                  "B",
+                  "P",
+                  "P",
+                  "B",
+                  "B"
+                ],
+                "ronda_actual": 38,
+                "victorias": {
+                  "player": 18,
+                  "banker": 17,
+                  "tie": 3
+                }
+              }
+            },
+            "tipo": "SIGNAL",
+            "win": null,
+            "ronda": 38,
+            "isOpen": true,
+            "_id": "69d59089b913867762d71d49",
+            "createdAt": "2026-04-07T23:17:29.043Z",
+            "updatedAt": "2026-04-07T23:17:29.043Z",
+            "__v": 0
+          }
+        }
+      },
+      "eventos": [
+        {
+          "timestamp": 1775603876401,
+          "secondsFromStart": 27.413,
+          "eventName": "dashboardUpdate",
+          "payloadType": "NEW_RESULT",
+          "payloadFull": {
+            "type": "NEW_RESULT",
+            "data": {
+              "mesa": "Baccarat 7",
+              "data": {
+                "results": {
+                  "nombre_mesa": "Baccarat 7",
+                  "mesa_info": {
+                    "id_mesa": "13908921320",
+                    "ronda_actual": 39,
+                    "puntaje_player": "0",
+                    "puntaje_banker": "8",
+                    "cartas_player": [
+                      "2",
+                      "Q",
+                      "8"
+                    ],
+                    "cartas_banker": [
+                      "J",
+                      "2",
+                      "6"
+                    ],
+                    "apostar_pendiente": false,
+                    "lado_objetivo": "0",
+                    "ronda_objetivo": 38,
+                    "sesion": false,
+                    "pairs_bet": false,
+                    "apuesta_activa": false,
+                    "lado_apostado": null,
+                    "saldo_antes_apuesta": 0,
+                    "monto_apostado": 100,
+                    "data_evento": {
+                      "monto_apostado": 100,
+                      "mesa": "Baccarat 7",
+                      "tiempo_actual": "2026-04-07 19:17:28.340037-04:00",
+                      "Ronda": 38,
+                      "Apuesta": "PLAYER"
+                    },
+                    "cantidad_clics": 1,
+                    "valor_moneda": 100,
+                    "tablero": [
+                      "B",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "P",
+                      "B",
+                      "E",
+                      "B",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "E",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "P",
+                      "B",
+                      "P",
+                      "B",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "E",
+                      "P",
+                      "B",
+                      "B",
+                      "B"
+                    ],
+                    "Accion": "ORDEN DE FUEGO 1",
+                    "jugada_id": 239,
+                    "caption": "",
+                    "martingala": {
+                      "active": false,
+                      "vector_forecast": [
+                        "B",
+                        "B",
+                        "P",
+                        "B",
+                        "P",
+                        "B"
+                      ],
+                      "contador_martingala": 0,
+                      "vector_win": [
+                        "W"
+                      ],
+                      "vector_resultado": [
+                        "B"
+                      ],
+                      "nombre_patron": "SIMETRIA_DIRECTA"
+                    },
+                    "paroli": {
+                      "paroli_martingala": false,
+                      "active": false,
+                      "vector_forecast": null,
+                      "contador_paroli": 0,
+                      "vector_win": [],
+                      "vector_resultado": [],
+                      "nombre_patron": ""
+                    },
+                    "ganador": "BANKER",
+                    "victorias": {
+                      "player": 18,
+                      "banker": 18,
+                      "tie": 3
+                    }
+                  }
+                }
+              },
+              "tipo": "RESULT",
+              "win": true,
+              "isOpen": true,
+              "_id": "69d590a4b913867762d71d50",
+              "createdAt": "2026-04-07T23:17:56.352Z",
+              "updatedAt": "2026-04-07T23:17:56.352Z",
+              "__v": 0
+            },
+            "winStatus": true,
+            "martingalaData": {
+              "active": false,
+              "vector_forecast": [
+                "B",
+                "B",
+                "P",
+                "B",
+                "P",
+                "B"
+              ],
+              "contador_martingala": 0,
+              "vector_win": [
+                "W"
+              ],
+              "vector_resultado": [
+                "B"
+              ],
+              "nombre_patron": "SIMETRIA_DIRECTA"
+            }
+          }
+        }
+      ],
+      "final": {
+        "eventName": "dashboardUpdate",
+        "payloadType": "NEW_RESULT",
+        "payload": {
+          "type": "NEW_RESULT",
+          "data": {
+            "mesa": "Baccarat 7",
+            "data": {
+              "results": {
+                "nombre_mesa": "Baccarat 7",
+                "mesa_info": {
+                  "id_mesa": "13908921320",
+                  "ronda_actual": 39,
+                  "puntaje_player": "0",
+                  "puntaje_banker": "8",
+                  "cartas_player": [
+                    "2",
+                    "Q",
+                    "8"
+                  ],
+                  "cartas_banker": [
+                    "J",
+                    "2",
+                    "6"
+                  ],
+                  "apostar_pendiente": false,
+                  "lado_objetivo": "0",
+                  "ronda_objetivo": 38,
+                  "sesion": false,
+                  "pairs_bet": false,
+                  "apuesta_activa": false,
+                  "lado_apostado": null,
+                  "saldo_antes_apuesta": 0,
+                  "monto_apostado": 100,
+                  "data_evento": {
+                    "monto_apostado": 100,
+                    "mesa": "Baccarat 7",
+                    "tiempo_actual": "2026-04-07 19:17:28.340037-04:00",
+                    "Ronda": 38,
+                    "Apuesta": "PLAYER"
+                  },
+                  "cantidad_clics": 1,
+                  "valor_moneda": 100,
+                  "tablero": [
+                    "B",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "P",
+                    "B",
+                    "E",
+                    "B",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "E",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "P",
+                    "B",
+                    "P",
+                    "B",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "E",
+                    "P",
+                    "B",
+                    "B",
+                    "B"
+                  ],
+                  "Accion": "ORDEN DE FUEGO 1",
+                  "jugada_id": 239,
+                  "caption": "",
+                  "martingala": {
+                    "active": false,
+                    "vector_forecast": [
+                      "B",
+                      "B",
+                      "P",
+                      "B",
+                      "P",
+                      "B"
+                    ],
+                    "contador_martingala": 0,
+                    "vector_win": [
+                      "W"
+                    ],
+                    "vector_resultado": [
+                      "B"
+                    ],
+                    "nombre_patron": "SIMETRIA_DIRECTA"
+                  },
+                  "paroli": {
+                    "paroli_martingala": false,
+                    "active": false,
+                    "vector_forecast": null,
+                    "contador_paroli": 0,
+                    "vector_win": [],
+                    "vector_resultado": [],
+                    "nombre_patron": ""
+                  },
+                  "ganador": "BANKER",
+                  "victorias": {
+                    "player": 18,
+                    "banker": 18,
+                    "tie": 3
+                  }
+                }
+              }
+            },
+            "tipo": "RESULT",
+            "win": true,
+            "isOpen": true,
+            "_id": "69d590a4b913867762d71d50",
+            "createdAt": "2026-04-07T23:17:56.352Z",
+            "updatedAt": "2026-04-07T23:17:56.352Z",
+            "__v": 0
+          },
+          "winStatus": true,
+          "martingalaData": {
+            "active": false,
+            "vector_forecast": [
+              "B",
+              "B",
+              "P",
+              "B",
+              "P",
+              "B"
+            ],
+            "contador_martingala": 0,
+            "vector_win": [
+              "W"
+            ],
+            "vector_resultado": [
+              "B"
+            ],
+            "nombre_patron": "SIMETRIA_DIRECTA"
+          }
+        }
+      }
+    },
+    {
+      "mesa": "Baccarat 5",
+      "round": "—",
+      "durationMs": 32191,
+      "eventCount": 1,
+      "inicio": {
+        "eventName": "dashboardUpdate",
+        "payloadType": "NEW_SIGNAL",
+        "payload": {
+          "type": "NEW_SIGNAL",
+          "data": {
+            "mesa": "Baccarat 5",
+            "data": {
+              "signal": {
+                "nombre_mesa": "Baccarat 5",
+                "vector_forecast": [
+                  "B",
+                  "B",
+                  "B",
+                  "P",
+                  "P",
+                  "P"
+                ],
+                "nombre_algoritmo": "SIMETRIA_DIRECTA",
+                "pattern": [
+                  "B",
+                  "B",
+                  "P",
+                  "B",
+                  "B",
+                  "B",
+                  "P",
+                  "B",
+                  "B"
+                ],
+                "ronda_actual": 40,
+                "victorias": {
+                  "player": 15,
+                  "banker": 17,
+                  "tie": 8
+                }
+              }
+            },
+            "tipo": "SIGNAL",
+            "win": null,
+            "ronda": 40,
+            "isOpen": true,
+            "_id": "69d590c8b913867762d71d57",
+            "createdAt": "2026-04-07T23:18:32.428Z",
+            "updatedAt": "2026-04-07T23:18:32.428Z",
+            "__v": 0
+          }
+        }
+      },
+      "eventos": [
+        {
+          "timestamp": 1775603944643,
+          "secondsFromStart": 32.191,
+          "eventName": "dashboardUpdate",
+          "payloadType": "NEW_RESULT",
+          "payloadFull": {
+            "type": "NEW_RESULT",
+            "data": {
+              "mesa": "Baccarat 5",
+              "data": {
+                "results": {
+                  "nombre_mesa": "Baccarat 5",
+                  "mesa_info": {
+                    "id_mesa": "13908936220",
+                    "ronda_actual": 41,
+                    "puntaje_player": "1",
+                    "puntaje_banker": "5",
+                    "cartas_player": [
+                      "8",
+                      "3",
+                      "10"
+                    ],
+                    "cartas_banker": [
+                      "4",
+                      "A"
+                    ],
+                    "apostar_pendiente": false,
+                    "lado_objetivo": "0",
+                    "ronda_objetivo": 40,
+                    "sesion": false,
+                    "pairs_bet": false,
+                    "apuesta_activa": false,
+                    "lado_apostado": null,
+                    "saldo_antes_apuesta": 0,
+                    "monto_apostado": 100,
+                    "data_evento": {
+                      "mesa": "Baccarat 5",
+                      "tiempo_actual": "2026-04-07 19:18:31.739961-04:00",
+                      "Accion": "ORDEN DE FUEGO 1",
+                      "Ronda": 40,
+                      "Cartas_Restantes": 60,
+                      "Apuesta": "PLAYER",
+                      "Cartas": {
+                        "2": 3,
+                        "3": 1,
+                        "4": 4,
+                        "5": 7,
+                        "6": 6,
+                        "7": 6,
+                        "8": 4,
+                        "9": 3,
+                        "10": 5,
+                        "A": 3,
+                        "J": 6,
+                        "Q": 7,
+                        "K": 5
+                      }
+                    },
+                    "cantidad_clics": 1,
+                    "valor_moneda": 100,
+                    "tablero": [
+                      "P",
+                      "B",
+                      "P",
+                      "B",
+                      "P",
+                      "E",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "B",
+                      "E",
+                      "P",
+                      "E",
+                      "P",
+                      "E",
+                      "E",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "E",
+                      "B",
+                      "P",
+                      "E",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "B",
+                      "E",
+                      "B",
+                      "B",
+                      "P",
+                      "B",
+                      "B",
+                      "B"
+                    ],
+                    "Accion": "ORDEN DE FUEGO 1",
+                    "jugada_id": 240,
+                    "caption": "",
+                    "martingala": {
+                      "active": false,
+                      "vector_forecast": [
+                        "B",
+                        "B",
+                        "B",
+                        "P",
+                        "P",
+                        "P"
+                      ],
+                      "contador_martingala": 0,
+                      "vector_win": [
+                        "W"
+                      ],
+                      "vector_resultado": [
+                        "B"
+                      ],
+                      "nombre_patron": "SIMETRIA_DIRECTA"
+                    },
+                    "paroli": {
+                      "paroli_martingala": false,
+                      "active": false,
+                      "vector_forecast": null,
+                      "contador_paroli": 0,
+                      "vector_win": [],
+                      "vector_resultado": [],
+                      "nombre_patron": ""
+                    },
+                    "ganador": "BANKER",
+                    "victorias": {
+                      "player": 15,
+                      "banker": 18,
+                      "tie": 8
+                    }
+                  }
+                }
+              },
+              "tipo": "RESULT",
+              "win": true,
+              "isOpen": true,
+              "_id": "69d590e8b913867762d71d5c",
+              "createdAt": "2026-04-07T23:19:04.692Z",
+              "updatedAt": "2026-04-07T23:19:04.692Z",
+              "__v": 0
+            },
+            "winStatus": true,
+            "martingalaData": {
+              "active": false,
+              "vector_forecast": [
+                "B",
+                "B",
+                "B",
+                "P",
+                "P",
+                "P"
+              ],
+              "contador_martingala": 0,
+              "vector_win": [
+                "W"
+              ],
+              "vector_resultado": [
+                "B"
+              ],
+              "nombre_patron": "SIMETRIA_DIRECTA"
+            }
+          }
+        }
+      ],
+      "final": {
+        "eventName": "dashboardUpdate",
+        "payloadType": "NEW_RESULT",
+        "payload": {
+          "type": "NEW_RESULT",
+          "data": {
+            "mesa": "Baccarat 5",
+            "data": {
+              "results": {
+                "nombre_mesa": "Baccarat 5",
+                "mesa_info": {
+                  "id_mesa": "13908936220",
+                  "ronda_actual": 41,
+                  "puntaje_player": "1",
+                  "puntaje_banker": "5",
+                  "cartas_player": [
+                    "8",
+                    "3",
+                    "10"
+                  ],
+                  "cartas_banker": [
+                    "4",
+                    "A"
+                  ],
+                  "apostar_pendiente": false,
+                  "lado_objetivo": "0",
+                  "ronda_objetivo": 40,
+                  "sesion": false,
+                  "pairs_bet": false,
+                  "apuesta_activa": false,
+                  "lado_apostado": null,
+                  "saldo_antes_apuesta": 0,
+                  "monto_apostado": 100,
+                  "data_evento": {
+                    "mesa": "Baccarat 5",
+                    "tiempo_actual": "2026-04-07 19:18:31.739961-04:00",
+                    "Accion": "ORDEN DE FUEGO 1",
+                    "Ronda": 40,
+                    "Cartas_Restantes": 60,
+                    "Apuesta": "PLAYER",
+                    "Cartas": {
+                      "2": 3,
+                      "3": 1,
+                      "4": 4,
+                      "5": 7,
+                      "6": 6,
+                      "7": 6,
+                      "8": 4,
+                      "9": 3,
+                      "10": 5,
+                      "A": 3,
+                      "J": 6,
+                      "Q": 7,
+                      "K": 5
+                    }
+                  },
+                  "cantidad_clics": 1,
+                  "valor_moneda": 100,
+                  "tablero": [
+                    "P",
+                    "B",
+                    "P",
+                    "B",
+                    "P",
+                    "E",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "B",
+                    "E",
+                    "P",
+                    "E",
+                    "P",
+                    "E",
+                    "E",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "E",
+                    "B",
+                    "P",
+                    "E",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "B",
+                    "E",
+                    "B",
+                    "B",
+                    "P",
+                    "B",
+                    "B",
+                    "B"
+                  ],
+                  "Accion": "ORDEN DE FUEGO 1",
+                  "jugada_id": 240,
+                  "caption": "",
+                  "martingala": {
+                    "active": false,
+                    "vector_forecast": [
+                      "B",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "P"
+                    ],
+                    "contador_martingala": 0,
+                    "vector_win": [
+                      "W"
+                    ],
+                    "vector_resultado": [
+                      "B"
+                    ],
+                    "nombre_patron": "SIMETRIA_DIRECTA"
+                  },
+                  "paroli": {
+                    "paroli_martingala": false,
+                    "active": false,
+                    "vector_forecast": null,
+                    "contador_paroli": 0,
+                    "vector_win": [],
+                    "vector_resultado": [],
+                    "nombre_patron": ""
+                  },
+                  "ganador": "BANKER",
+                  "victorias": {
+                    "player": 15,
+                    "banker": 18,
+                    "tie": 8
+                  }
+                }
+              }
+            },
+            "tipo": "RESULT",
+            "win": true,
+            "isOpen": true,
+            "_id": "69d590e8b913867762d71d5c",
+            "createdAt": "2026-04-07T23:19:04.692Z",
+            "updatedAt": "2026-04-07T23:19:04.692Z",
+            "__v": 0
+          },
+          "winStatus": true,
+          "martingalaData": {
+            "active": false,
+            "vector_forecast": [
+              "B",
+              "B",
+              "B",
+              "P",
+              "P",
+              "P"
+            ],
+            "contador_martingala": 0,
+            "vector_win": [
+              "W"
+            ],
+            "vector_resultado": [
+              "B"
+            ],
+            "nombre_patron": "SIMETRIA_DIRECTA"
+          }
+        }
+      }
+    },
+    {
+      "mesa": "Baccarat 7",
+      "round": "—",
+      "durationMs": 28821,
+      "eventCount": 1,
+      "inicio": {
+        "eventName": "dashboardUpdate",
+        "payloadType": "NEW_SIGNAL",
+        "payload": {
+          "type": "NEW_SIGNAL",
+          "data": {
+            "mesa": "Baccarat 7",
+            "data": {
+              "signal": {
+                "nombre_mesa": "Baccarat 7",
+                "vector_forecast": [
+                  "P",
+                  "B",
+                  "B",
+                  "P",
+                  "P",
+                  "B"
+                ],
+                "nombre_algoritmo": "SIMETRIA_DIRECTA",
+                "pattern": [
+                  "B",
+                  "P",
+                  "P",
+                  "B",
+                  "B",
+                  "B",
+                  "P",
+                  "P",
+                  "B"
+                ],
+                "ronda_actual": 42,
+                "victorias": {
+                  "player": 20,
+                  "banker": 19,
+                  "tie": 3
+                }
+              }
+            },
+            "tipo": "SIGNAL",
+            "win": null,
+            "ronda": 42,
+            "isOpen": true,
+            "_id": "69d590fbb913867762d71d60",
+            "createdAt": "2026-04-07T23:19:23.108Z",
+            "updatedAt": "2026-04-07T23:19:23.108Z",
+            "__v": 0
+          }
+        }
+      },
+      "eventos": [
+        {
+          "timestamp": 1775603991869,
+          "secondsFromStart": 28.821,
+          "eventName": "dashboardUpdate",
+          "payloadType": "NEW_RESULT",
+          "payloadFull": {
+            "type": "NEW_RESULT",
+            "data": {
+              "mesa": "Baccarat 7",
+              "data": {
+                "results": {
+                  "nombre_mesa": "Baccarat 7",
+                  "mesa_info": {
+                    "id_mesa": "13908946620",
+                    "ronda_actual": 43,
+                    "puntaje_player": "5",
+                    "puntaje_banker": "6",
+                    "cartas_player": [
+                      "10",
+                      "5",
+                      "J"
+                    ],
+                    "cartas_banker": [
+                      "7",
+                      "9"
+                    ],
+                    "apostar_pendiente": false,
+                    "lado_objetivo": "0",
+                    "ronda_objetivo": 42,
+                    "sesion": false,
+                    "pairs_bet": false,
+                    "apuesta_activa": false,
+                    "lado_apostado": null,
+                    "saldo_antes_apuesta": 0,
+                    "monto_apostado": 100,
+                    "data_evento": {
+                      "monto_apostado": 100,
+                      "mesa": "Baccarat 7",
+                      "tiempo_actual": "2026-04-07 19:19:22.454040-04:00",
+                      "Ronda": 42,
+                      "Apuesta": "PLAYER"
+                    },
+                    "cantidad_clics": 1,
+                    "valor_moneda": 100,
+                    "tablero": [
+                      "B",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "P",
+                      "B",
+                      "E",
+                      "B",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "E",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "P",
+                      "B",
+                      "P",
+                      "B",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "E",
+                      "P",
+                      "B",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "B",
+                      "B"
+                    ],
+                    "Accion": "ORDEN DE FUEGO 1",
+                    "jugada_id": 241,
+                    "caption": "",
+                    "martingala": {
+                      "active": true,
+                      "vector_forecast": [
+                        "P",
+                        "B",
+                        "B",
+                        "P",
+                        "P",
+                        "B"
+                      ],
+                      "contador_martingala": 1,
+                      "vector_win": [
+                        "L"
+                      ],
+                      "vector_resultado": [
+                        "B"
+                      ],
+                      "nombre_patron": "SIMETRIA_DIRECTA"
+                    },
+                    "paroli": {
+                      "paroli_martingala": false,
+                      "active": false,
+                      "vector_forecast": null,
+                      "contador_paroli": 0,
+                      "vector_win": [],
+                      "vector_resultado": [],
+                      "nombre_patron": ""
+                    },
+                    "ganador": "BANKER",
+                    "victorias": {
+                      "player": 20,
+                      "banker": 20,
+                      "tie": 3
+                    }
+                  }
+                }
+              },
+              "tipo": "RESULT",
+              "win": null,
+              "isOpen": true,
+              "_id": "69d59117b913867762d71d63",
+              "createdAt": "2026-04-07T23:19:51.931Z",
+              "updatedAt": "2026-04-07T23:19:51.931Z",
+              "__v": 0
+            },
+            "winStatus": null,
+            "martingalaData": {
+              "active": true,
+              "vector_forecast": [
+                "P",
+                "B",
+                "B",
+                "P",
+                "P",
+                "B"
+              ],
+              "contador_martingala": 1,
+              "vector_win": [
+                "L"
+              ],
+              "vector_resultado": [
+                "B"
+              ],
+              "nombre_patron": "SIMETRIA_DIRECTA"
+            }
+          }
+        }
+      ],
+      "final": {
+        "eventName": "dashboardUpdate",
+        "payloadType": "NEW_RESULT",
+        "payload": {
+          "type": "NEW_RESULT",
+          "data": {
+            "mesa": "Baccarat 7",
+            "data": {
+              "results": {
+                "nombre_mesa": "Baccarat 7",
+                "mesa_info": {
+                  "id_mesa": "13908946620",
+                  "ronda_actual": 43,
+                  "puntaje_player": "5",
+                  "puntaje_banker": "6",
+                  "cartas_player": [
+                    "10",
+                    "5",
+                    "J"
+                  ],
+                  "cartas_banker": [
+                    "7",
+                    "9"
+                  ],
+                  "apostar_pendiente": false,
+                  "lado_objetivo": "0",
+                  "ronda_objetivo": 42,
+                  "sesion": false,
+                  "pairs_bet": false,
+                  "apuesta_activa": false,
+                  "lado_apostado": null,
+                  "saldo_antes_apuesta": 0,
+                  "monto_apostado": 100,
+                  "data_evento": {
+                    "monto_apostado": 100,
+                    "mesa": "Baccarat 7",
+                    "tiempo_actual": "2026-04-07 19:19:22.454040-04:00",
+                    "Ronda": 42,
+                    "Apuesta": "PLAYER"
+                  },
+                  "cantidad_clics": 1,
+                  "valor_moneda": 100,
+                  "tablero": [
+                    "B",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "P",
+                    "B",
+                    "E",
+                    "B",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "E",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "P",
+                    "B",
+                    "P",
+                    "B",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "B",
+                    "B",
+                    "P",
+                    "E",
+                    "P",
+                    "B",
+                    "B",
+                    "B",
+                    "P",
+                    "P",
+                    "B",
+                    "B"
+                  ],
+                  "Accion": "ORDEN DE FUEGO 1",
+                  "jugada_id": 241,
+                  "caption": "",
+                  "martingala": {
+                    "active": true,
+                    "vector_forecast": [
+                      "P",
+                      "B",
+                      "B",
+                      "P",
+                      "P",
+                      "B"
+                    ],
+                    "contador_martingala": 1,
+                    "vector_win": [
+                      "L"
+                    ],
+                    "vector_resultado": [
+                      "B"
+                    ],
+                    "nombre_patron": "SIMETRIA_DIRECTA"
+                  },
+                  "paroli": {
+                    "paroli_martingala": false,
+                    "active": false,
+                    "vector_forecast": null,
+                    "contador_paroli": 0,
+                    "vector_win": [],
+                    "vector_resultado": [],
+                    "nombre_patron": ""
+                  },
+                  "ganador": "BANKER",
+                  "victorias": {
+                    "player": 20,
+                    "banker": 20,
+                    "tie": 3
+                  }
+                }
+              }
+            },
+            "tipo": "RESULT",
+            "win": null,
+            "isOpen": true,
+            "_id": "69d59117b913867762d71d63",
+            "createdAt": "2026-04-07T23:19:51.931Z",
+            "updatedAt": "2026-04-07T23:19:51.931Z",
+            "__v": 0
+          },
+          "winStatus": null,
+          "martingalaData": {
+            "active": true,
+            "vector_forecast": [
+              "P",
+              "B",
+              "B",
+              "P",
+              "P",
+              "B"
+            ],
+            "contador_martingala": 1,
+            "vector_win": [
+              "L"
+            ],
+            "vector_resultado": [
+              "B"
+            ],
+            "nombre_patron": "SIMETRIA_DIRECTA"
+          }
+        }
+      }
+    }
+  ],
+  "forensicAnalysis": {
+    "note": "Rutas = recorrido de claves en payloads clonados; frecuencia acumulada en las 3 sesiones.",
+    "pathsRepeatedAcrossAllSessions": [
+      "eventos.payloadFull",
+      "eventos.payloadFull.data",
+      "eventos.payloadFull.data.__v",
+      "eventos.payloadFull.data._id",
+      "eventos.payloadFull.data.createdAt",
+      "eventos.payloadFull.data.data",
+      "eventos.payloadFull.data.data.results",
+      "eventos.payloadFull.data.data.results.mesa_info",
+      "eventos.payloadFull.data.data.results.mesa_info.Accion",
+      "eventos.payloadFull.data.data.results.mesa_info.apostar_pendiente",
+      "eventos.payloadFull.data.data.results.mesa_info.apuesta_activa",
+      "eventos.payloadFull.data.data.results.mesa_info.cantidad_clics",
+      "eventos.payloadFull.data.data.results.mesa_info.caption",
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_banker",
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_banker[0]",
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_banker[1]",
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_player",
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_player[0]",
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_player[1]",
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_player[2]",
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento",
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Apuesta",
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Ronda",
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.mesa",
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.tiempo_actual",
+      "eventos.payloadFull.data.data.results.mesa_info.ganador",
+      "eventos.payloadFull.data.data.results.mesa_info.id_mesa",
+      "eventos.payloadFull.data.data.results.mesa_info.jugada_id",
+      "eventos.payloadFull.data.data.results.mesa_info.lado_apostado",
+      "eventos.payloadFull.data.data.results.mesa_info.lado_objetivo",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.active",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.contador_martingala",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.nombre_patron",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_forecast",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_forecast[0]",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_forecast[1]",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_forecast[2]",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_forecast[3]",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_forecast[4]",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_forecast[5]",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_resultado",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_resultado[0]",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_win",
+      "eventos.payloadFull.data.data.results.mesa_info.martingala.vector_win[0]",
+      "eventos.payloadFull.data.data.results.mesa_info.monto_apostado",
+      "eventos.payloadFull.data.data.results.mesa_info.pairs_bet",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli.active",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli.contador_paroli",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli.nombre_patron",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli.paroli_martingala",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli.vector_forecast",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli.vector_resultado",
+      "eventos.payloadFull.data.data.results.mesa_info.paroli.vector_win",
+      "eventos.payloadFull.data.data.results.mesa_info.puntaje_banker",
+      "eventos.payloadFull.data.data.results.mesa_info.puntaje_player",
+      "eventos.payloadFull.data.data.results.mesa_info.ronda_actual",
+      "eventos.payloadFull.data.data.results.mesa_info.ronda_objetivo",
+      "eventos.payloadFull.data.data.results.mesa_info.saldo_antes_apuesta",
+      "eventos.payloadFull.data.data.results.mesa_info.sesion",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[0]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[10]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[11]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[12]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[13]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[14]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[15]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[16]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[17]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[18]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[19]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[1]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[20]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[21]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[22]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[23]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[24]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[25]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[26]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[27]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[28]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[29]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[2]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[30]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[31]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[32]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[33]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[34]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[35]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[36]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[37]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[38]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[3]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[4]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[5]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[6]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[7]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[8]",
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[9]",
+      "eventos.payloadFull.data.data.results.mesa_info.valor_moneda",
+      "eventos.payloadFull.data.data.results.mesa_info.victorias",
+      "eventos.payloadFull.data.data.results.mesa_info.victorias.banker",
+      "eventos.payloadFull.data.data.results.mesa_info.victorias.player",
+      "eventos.payloadFull.data.data.results.mesa_info.victorias.tie",
+      "eventos.payloadFull.data.data.results.nombre_mesa",
+      "eventos.payloadFull.data.isOpen",
+      "eventos.payloadFull.data.mesa",
+      "eventos.payloadFull.data.tipo",
+      "eventos.payloadFull.data.updatedAt",
+      "eventos.payloadFull.data.win",
+      "eventos.payloadFull.martingalaData",
+      "eventos.payloadFull.martingalaData.active",
+      "eventos.payloadFull.martingalaData.contador_martingala",
+      "eventos.payloadFull.martingalaData.nombre_patron",
+      "eventos.payloadFull.martingalaData.vector_forecast",
+      "eventos.payloadFull.martingalaData.vector_forecast[0]",
+      "eventos.payloadFull.martingalaData.vector_forecast[1]",
+      "eventos.payloadFull.martingalaData.vector_forecast[2]",
+      "eventos.payloadFull.martingalaData.vector_forecast[3]",
+      "eventos.payloadFull.martingalaData.vector_forecast[4]",
+      "eventos.payloadFull.martingalaData.vector_forecast[5]",
+      "eventos.payloadFull.martingalaData.vector_resultado",
+      "eventos.payloadFull.martingalaData.vector_resultado[0]",
+      "eventos.payloadFull.martingalaData.vector_win",
+      "eventos.payloadFull.martingalaData.vector_win[0]",
+      "eventos.payloadFull.type",
+      "eventos.payloadFull.winStatus",
+      "final.payload",
+      "final.payload.data",
+      "final.payload.data.__v",
+      "final.payload.data._id",
+      "final.payload.data.createdAt",
+      "final.payload.data.data",
+      "final.payload.data.data.results",
+      "final.payload.data.data.results.mesa_info",
+      "final.payload.data.data.results.mesa_info.Accion",
+      "final.payload.data.data.results.mesa_info.apostar_pendiente",
+      "final.payload.data.data.results.mesa_info.apuesta_activa",
+      "final.payload.data.data.results.mesa_info.cantidad_clics",
+      "final.payload.data.data.results.mesa_info.caption",
+      "final.payload.data.data.results.mesa_info.cartas_banker",
+      "final.payload.data.data.results.mesa_info.cartas_banker[0]",
+      "final.payload.data.data.results.mesa_info.cartas_banker[1]",
+      "final.payload.data.data.results.mesa_info.cartas_player",
+      "final.payload.data.data.results.mesa_info.cartas_player[0]",
+      "final.payload.data.data.results.mesa_info.cartas_player[1]",
+      "final.payload.data.data.results.mesa_info.cartas_player[2]",
+      "final.payload.data.data.results.mesa_info.data_evento",
+      "final.payload.data.data.results.mesa_info.data_evento.Apuesta",
+      "final.payload.data.data.results.mesa_info.data_evento.Ronda",
+      "final.payload.data.data.results.mesa_info.data_evento.mesa",
+      "final.payload.data.data.results.mesa_info.data_evento.tiempo_actual",
+      "final.payload.data.data.results.mesa_info.ganador",
+      "final.payload.data.data.results.mesa_info.id_mesa",
+      "final.payload.data.data.results.mesa_info.jugada_id",
+      "final.payload.data.data.results.mesa_info.lado_apostado",
+      "final.payload.data.data.results.mesa_info.lado_objetivo",
+      "final.payload.data.data.results.mesa_info.martingala",
+      "final.payload.data.data.results.mesa_info.martingala.active",
+      "final.payload.data.data.results.mesa_info.martingala.contador_martingala",
+      "final.payload.data.data.results.mesa_info.martingala.nombre_patron",
+      "final.payload.data.data.results.mesa_info.martingala.vector_forecast",
+      "final.payload.data.data.results.mesa_info.martingala.vector_forecast[0]",
+      "final.payload.data.data.results.mesa_info.martingala.vector_forecast[1]",
+      "final.payload.data.data.results.mesa_info.martingala.vector_forecast[2]",
+      "final.payload.data.data.results.mesa_info.martingala.vector_forecast[3]",
+      "final.payload.data.data.results.mesa_info.martingala.vector_forecast[4]",
+      "final.payload.data.data.results.mesa_info.martingala.vector_forecast[5]",
+      "final.payload.data.data.results.mesa_info.martingala.vector_resultado",
+      "final.payload.data.data.results.mesa_info.martingala.vector_resultado[0]",
+      "final.payload.data.data.results.mesa_info.martingala.vector_win",
+      "final.payload.data.data.results.mesa_info.martingala.vector_win[0]",
+      "final.payload.data.data.results.mesa_info.monto_apostado",
+      "final.payload.data.data.results.mesa_info.pairs_bet",
+      "final.payload.data.data.results.mesa_info.paroli",
+      "final.payload.data.data.results.mesa_info.paroli.active",
+      "final.payload.data.data.results.mesa_info.paroli.contador_paroli",
+      "final.payload.data.data.results.mesa_info.paroli.nombre_patron",
+      "final.payload.data.data.results.mesa_info.paroli.paroli_martingala",
+      "final.payload.data.data.results.mesa_info.paroli.vector_forecast",
+      "final.payload.data.data.results.mesa_info.paroli.vector_resultado",
+      "final.payload.data.data.results.mesa_info.paroli.vector_win",
+      "final.payload.data.data.results.mesa_info.puntaje_banker",
+      "final.payload.data.data.results.mesa_info.puntaje_player",
+      "final.payload.data.data.results.mesa_info.ronda_actual",
+      "final.payload.data.data.results.mesa_info.ronda_objetivo",
+      "final.payload.data.data.results.mesa_info.saldo_antes_apuesta",
+      "final.payload.data.data.results.mesa_info.sesion",
+      "final.payload.data.data.results.mesa_info.tablero",
+      "final.payload.data.data.results.mesa_info.tablero[0]",
+      "final.payload.data.data.results.mesa_info.tablero[10]",
+      "final.payload.data.data.results.mesa_info.tablero[11]",
+      "final.payload.data.data.results.mesa_info.tablero[12]",
+      "final.payload.data.data.results.mesa_info.tablero[13]",
+      "final.payload.data.data.results.mesa_info.tablero[14]",
+      "final.payload.data.data.results.mesa_info.tablero[15]",
+      "final.payload.data.data.results.mesa_info.tablero[16]",
+      "final.payload.data.data.results.mesa_info.tablero[17]",
+      "final.payload.data.data.results.mesa_info.tablero[18]",
+      "final.payload.data.data.results.mesa_info.tablero[19]",
+      "final.payload.data.data.results.mesa_info.tablero[1]",
+      "final.payload.data.data.results.mesa_info.tablero[20]",
+      "final.payload.data.data.results.mesa_info.tablero[21]",
+      "final.payload.data.data.results.mesa_info.tablero[22]",
+      "final.payload.data.data.results.mesa_info.tablero[23]",
+      "final.payload.data.data.results.mesa_info.tablero[24]",
+      "final.payload.data.data.results.mesa_info.tablero[25]",
+      "final.payload.data.data.results.mesa_info.tablero[26]",
+      "final.payload.data.data.results.mesa_info.tablero[27]",
+      "final.payload.data.data.results.mesa_info.tablero[28]",
+      "final.payload.data.data.results.mesa_info.tablero[29]",
+      "final.payload.data.data.results.mesa_info.tablero[2]",
+      "final.payload.data.data.results.mesa_info.tablero[30]",
+      "final.payload.data.data.results.mesa_info.tablero[31]",
+      "final.payload.data.data.results.mesa_info.tablero[32]",
+      "final.payload.data.data.results.mesa_info.tablero[33]",
+      "final.payload.data.data.results.mesa_info.tablero[34]",
+      "final.payload.data.data.results.mesa_info.tablero[35]",
+      "final.payload.data.data.results.mesa_info.tablero[36]",
+      "final.payload.data.data.results.mesa_info.tablero[37]",
+      "final.payload.data.data.results.mesa_info.tablero[38]",
+      "final.payload.data.data.results.mesa_info.tablero[3]",
+      "final.payload.data.data.results.mesa_info.tablero[4]",
+      "final.payload.data.data.results.mesa_info.tablero[5]",
+      "final.payload.data.data.results.mesa_info.tablero[6]",
+      "final.payload.data.data.results.mesa_info.tablero[7]",
+      "final.payload.data.data.results.mesa_info.tablero[8]",
+      "final.payload.data.data.results.mesa_info.tablero[9]",
+      "final.payload.data.data.results.mesa_info.valor_moneda",
+      "final.payload.data.data.results.mesa_info.victorias",
+      "final.payload.data.data.results.mesa_info.victorias.banker",
+      "final.payload.data.data.results.mesa_info.victorias.player",
+      "final.payload.data.data.results.mesa_info.victorias.tie",
+      "final.payload.data.data.results.nombre_mesa",
+      "final.payload.data.isOpen",
+      "final.payload.data.mesa",
+      "final.payload.data.tipo",
+      "final.payload.data.updatedAt",
+      "final.payload.data.win",
+      "final.payload.martingalaData",
+      "final.payload.martingalaData.active",
+      "final.payload.martingalaData.contador_martingala",
+      "final.payload.martingalaData.nombre_patron",
+      "final.payload.martingalaData.vector_forecast",
+      "final.payload.martingalaData.vector_forecast[0]",
+      "final.payload.martingalaData.vector_forecast[1]",
+      "final.payload.martingalaData.vector_forecast[2]",
+      "final.payload.martingalaData.vector_forecast[3]",
+      "final.payload.martingalaData.vector_forecast[4]",
+      "final.payload.martingalaData.vector_forecast[5]",
+      "final.payload.martingalaData.vector_resultado",
+      "final.payload.martingalaData.vector_resultado[0]",
+      "final.payload.martingalaData.vector_win",
+      "final.payload.martingalaData.vector_win[0]",
+      "final.payload.type",
+      "final.payload.winStatus",
+      "inicio.payload",
+      "inicio.payload.data",
+      "inicio.payload.data.__v",
+      "inicio.payload.data._id",
+      "inicio.payload.data.createdAt",
+      "inicio.payload.data.data",
+      "inicio.payload.data.data.signal",
+      "inicio.payload.data.data.signal.nombre_algoritmo",
+      "inicio.payload.data.data.signal.nombre_mesa",
+      "inicio.payload.data.data.signal.pattern",
+      "inicio.payload.data.data.signal.pattern[0]",
+      "inicio.payload.data.data.signal.pattern[1]",
+      "inicio.payload.data.data.signal.pattern[2]",
+      "inicio.payload.data.data.signal.pattern[3]",
+      "inicio.payload.data.data.signal.pattern[4]",
+      "inicio.payload.data.data.signal.pattern[5]",
+      "inicio.payload.data.data.signal.pattern[6]",
+      "inicio.payload.data.data.signal.pattern[7]",
+      "inicio.payload.data.data.signal.pattern[8]",
+      "inicio.payload.data.data.signal.ronda_actual",
+      "inicio.payload.data.data.signal.vector_forecast",
+      "inicio.payload.data.data.signal.vector_forecast[0]",
+      "inicio.payload.data.data.signal.vector_forecast[1]",
+      "inicio.payload.data.data.signal.vector_forecast[2]",
+      "inicio.payload.data.data.signal.vector_forecast[3]",
+      "inicio.payload.data.data.signal.vector_forecast[4]",
+      "inicio.payload.data.data.signal.vector_forecast[5]",
+      "inicio.payload.data.data.signal.victorias",
+      "inicio.payload.data.data.signal.victorias.banker",
+      "inicio.payload.data.data.signal.victorias.player",
+      "inicio.payload.data.data.signal.victorias.tie",
+      "inicio.payload.data.isOpen",
+      "inicio.payload.data.mesa",
+      "inicio.payload.data.ronda",
+      "inicio.payload.data.tipo",
+      "inicio.payload.data.updatedAt",
+      "inicio.payload.data.win",
+      "inicio.payload.type"
+    ],
+    "topPathsByFrequency": [
+      {
+        "path": "inicio.payload",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.type",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.mesa",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.nombre_mesa",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.vector_forecast",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.vector_forecast[0]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.vector_forecast[1]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.vector_forecast[2]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.vector_forecast[3]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.vector_forecast[4]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.vector_forecast[5]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.nombre_algoritmo",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[0]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[1]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[2]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[3]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[4]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[5]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[6]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[7]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.pattern[8]",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.ronda_actual",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.victorias",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.victorias.player",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.victorias.banker",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.data.signal.victorias.tie",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.tipo",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.win",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.ronda",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.isOpen",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data._id",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.createdAt",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.updatedAt",
+        "count": 3
+      },
+      {
+        "path": "inicio.payload.data.__v",
+        "count": 3
+      },
+      {
+        "path": "final.payload",
+        "count": 3
+      },
+      {
+        "path": "final.payload.type",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.mesa",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.nombre_mesa",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.id_mesa",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.ronda_actual",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.puntaje_player",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.puntaje_banker",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cartas_player",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cartas_player[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cartas_player[1]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cartas_player[2]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cartas_banker",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cartas_banker[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cartas_banker[1]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.apostar_pendiente",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.lado_objetivo",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.ronda_objetivo",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.sesion",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.pairs_bet",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.apuesta_activa",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.lado_apostado",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.saldo_antes_apuesta",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.monto_apostado",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.data_evento",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.data_evento.mesa",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.data_evento.tiempo_actual",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.data_evento.Ronda",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.data_evento.Apuesta",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.cantidad_clics",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.valor_moneda",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[1]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[2]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[3]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[4]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[5]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[6]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[7]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[8]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[9]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[10]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[11]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[12]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[13]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[14]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[15]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[16]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[17]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[18]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[19]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[20]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[21]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[22]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[23]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[24]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[25]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[26]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[27]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[28]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[29]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[30]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[31]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[32]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[33]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[34]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[35]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[36]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[37]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.tablero[38]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.Accion",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.jugada_id",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.caption",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.active",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_forecast",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_forecast[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_forecast[1]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_forecast[2]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_forecast[3]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_forecast[4]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_forecast[5]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.contador_martingala",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_win",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_win[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_resultado",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.vector_resultado[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.martingala.nombre_patron",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli.paroli_martingala",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli.active",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli.vector_forecast",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli.contador_paroli",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli.vector_win",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli.vector_resultado",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.paroli.nombre_patron",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.ganador",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.victorias",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.victorias.player",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.victorias.banker",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.data.results.mesa_info.victorias.tie",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.tipo",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.win",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.isOpen",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data._id",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.createdAt",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.updatedAt",
+        "count": 3
+      },
+      {
+        "path": "final.payload.data.__v",
+        "count": 3
+      },
+      {
+        "path": "final.payload.winStatus",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.active",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_forecast",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_forecast[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_forecast[1]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_forecast[2]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_forecast[3]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_forecast[4]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_forecast[5]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.contador_martingala",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_win",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_win[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_resultado",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.vector_resultado[0]",
+        "count": 3
+      },
+      {
+        "path": "final.payload.martingalaData.nombre_patron",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.type",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.mesa",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.nombre_mesa",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.id_mesa",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.ronda_actual",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.puntaje_player",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.puntaje_banker",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.cartas_player",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.cartas_player[0]",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.cartas_player[1]",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.cartas_player[2]",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.cartas_banker",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.cartas_banker[0]",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.cartas_banker[1]",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.apostar_pendiente",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.lado_objetivo",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.ronda_objetivo",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.sesion",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.pairs_bet",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.apuesta_activa",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.lado_apostado",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.saldo_antes_apuesta",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.monto_apostado",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.data_evento",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.data_evento.mesa",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.data_evento.tiempo_actual",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.data_evento.Ronda",
+        "count": 3
+      },
+      {
+        "path": "eventos.payloadFull.data.data.results.mesa_info.data_evento.Apuesta",
+        "count": 3
+      }
+    ],
+    "pathsPresentOnlyInSomeSessions": {
+      "inicio.payload.data.data.signal.pattern[9]": [
+        "S1"
+      ],
+      "final.payload.data.data.results.mesa_info.cartas_banker[2]": [
+        "S1"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.monto_apostado": [
+        "S1",
+        "S3"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.cartas_banker[2]": [
+        "S1"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.monto_apostado": [
+        "S1",
+        "S3"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Accion": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas_Restantes": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.2": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.3": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.4": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.5": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.6": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.7": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.8": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.9": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.10": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.A": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.J": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.Q": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.data_evento.Cartas.K": [
+        "S2"
+      ],
+      "final.payload.data.data.results.mesa_info.tablero[39]": [
+        "S2",
+        "S3"
+      ],
+      "final.payload.data.data.results.mesa_info.tablero[40]": [
+        "S2",
+        "S3"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Accion": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas_Restantes": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.2": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.3": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.4": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.5": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.6": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.7": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.8": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.9": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.10": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.A": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.J": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.Q": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.data_evento.Cartas.K": [
+        "S2"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[39]": [
+        "S2",
+        "S3"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[40]": [
+        "S2",
+        "S3"
+      ],
+      "final.payload.data.data.results.mesa_info.tablero[41]": [
+        "S3"
+      ],
+      "final.payload.data.data.results.mesa_info.tablero[42]": [
+        "S3"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[41]": [
+        "S3"
+      ],
+      "eventos.payloadFull.data.data.results.mesa_info.tablero[42]": [
+        "S3"
+      ]
+    },
+    "sessionPayloadShapeSummary": [
+      {
+        "index": 1,
+        "mesa": "Baccarat 7",
+        "round": "—",
+        "topLevelKeysInicio": [
+          "data",
+          "type"
+        ],
+        "topLevelKeysFinal": [
+          "data",
+          "martingalaData",
+          "type",
+          "winStatus"
+        ]
+      },
+      {
+        "index": 2,
+        "mesa": "Baccarat 5",
+        "round": "—",
+        "topLevelKeysInicio": [
+          "data",
+          "type"
+        ],
+        "topLevelKeysFinal": [
+          "data",
+          "martingalaData",
+          "type",
+          "winStatus"
+        ]
+      },
+      {
+        "index": 3,
+        "mesa": "Baccarat 7",
+        "round": "—",
+        "topLevelKeysInicio": [
+          "data",
+          "type"
+        ],
+        "topLevelKeysFinal": [
+          "data",
+          "martingalaData",
+          "type",
+          "winStatus"
+        ]
+      }
+    ]
+  }
+}

@@ -1,7 +1,8 @@
 /** @type {Record<string, number>} */
 let counters = {};
-/** @type {Array<{ eventName: string, type: string, payload: unknown }>} */
+/** @type {Array<{ eventName: string, type: string, payload: unknown, receivedAt: number }>} */
 let events = [];
+const MAX_EVENTS = 100;
 /** @type {Array<() => void>} */
 let listeners = [];
 
@@ -12,12 +13,17 @@ let listeners = [];
 export function addRawEvent(eventName, payload) {
   counters[eventName] = (counters[eventName] || 0) + 1;
 
+  const p = /** @type {any} */ (payload);
   const type =
-    /** @type {any} */ (payload)?.type != null
-      ? String(/** @type {any} */ (payload).type)
-      : /** @type {any} */ (payload)?.data?.type != null
-        ? String(/** @type {any} */ (payload).data.type)
-        : 'UNKNOWN';
+    p?.type != null
+      ? String(p.type)
+      : p?.eventName != null
+        ? String(p.eventName)
+        : p?.data?.type != null
+          ? String(p.data.type)
+          : p?.data?.eventName != null
+            ? String(p.data.eventName)
+            : 'UNKNOWN';
 
   counters[type] = (counters[type] || 0) + 1;
 
@@ -25,9 +31,10 @@ export function addRawEvent(eventName, payload) {
     eventName,
     type,
     payload,
+    receivedAt: Date.now(),
   });
 
-  events = events.slice(0, 50);
+  events = events.slice(0, MAX_EVENTS);
 
   listeners.forEach((fn) => fn());
 }

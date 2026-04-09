@@ -1,41 +1,129 @@
+import { isAdminRawMode } from './adminRawMode.js';
+import { isMatchV2Enabled } from '@/utils/canonicalFlowFlags.js';
+import { logCanonicalAudit } from '@/utils/extractCanonicalFields.js';
+import { isSignalAuditEnabled } from './signalAuditEnv.js';
+
 /**
  * Lógica pura del ciclo VistaLab (tests y panel comparten criterio).
  *
- * Orden de match (FASE 4):
- * 1) correlationKey — si alguno trae CK no vacío, solo se decide por CK (ambos presentes e iguales);
- *    si solo uno trae CK → false (no mezclar con id ni mesa/round).
- * 2) id ↔ signalId — si coinciden; si ambas mesas vienen informadas deben ser la misma.
- * 3) mesa + round — misma mesa y ambos rounds no vacíos e iguales.
+ * Prioridad (proveedor real): **mesa + round** iguales — round del resultado = `mesa_info.ronda_objetivo`
+ * (la señal usa `signal.ronda_actual`). Luego CK `mesa|ronda` o id estable; no `id:` epoch como correlación.
  */
 
 /** @param {Record<string, unknown> | null} sig */
 /** @param {Record<string, unknown> | null} res */
 export function resultMatchesSignal(sig, res) {
+  if (isSignalAuditEnabled()) {
+    if (sig && typeof sig === 'object') logCanonicalAudit(sig, 'vistaLab:match:sig');
+    if (res && typeof res === 'object') logCanonicalAudit(res, 'vistaLab:match:res');
+  }
+  if (isAdminRawMode()) return true;
   if (!sig || !res) return false;
+
+  const sm = String(sig.mesa ?? '').trim();
+  const rm = String(res.mesa ?? '').trim();
+  const sr = String(sig.round ?? '').trim();
+  const rr = String(res.round ?? res.roundId ?? '').trim();
+  /** El resultado cierra la señal en la misma mesa y la misma ronda objetivo (proveedor Winxplay / análogos). */
+  if (sm && rm && sm === rm && sr && rr && sr === rr) {
+    const logOn =
+      import.meta.env.DEV === true || String(import.meta.env?.VITE_MATCH_CHECK ?? '').trim() === '1';
+    if (logOn) {
+      console.log('[MATCH_CHECK]', {
+        signalMesa: sm,
+        resultMesa: rm,
+        signalRound: sr,
+        resultRound: rr,
+        path: 'mesa+round',
+      });
+    }
+    return true;
+  }
+
+  if (isMatchV2Enabled()) {
+    const sk = sig.correlationKey != null ? String(sig.correlationKey).trim() : '';
+    const rk = res.correlationKey != null ? String(res.correlationKey).trim() : '';
+    if (sk && rk && sk === rk && !sk.toLowerCase().startsWith('id:')) return true;
+    const sid = sig.id != null ? String(sig.id).trim() : '';
+    const rid = res.signalId != null ? String(res.signalId).trim() : '';
+    if (sid && rid && sid === rid) return true;
+    if (String(import.meta.env?.VITE_MATCH_DEBUG ?? '').trim() === '1') {
+      console.log('[MATCH_DEBUG]', 'no_match', {
+        sig: {
+          mesa: sig.mesa,
+          round: sig.round,
+          correlationKey: sig.correlationKey,
+          id: sig.id,
+        },
+        res: {
+          mesa: res.mesa,
+          round: res.round ?? res.roundId,
+          correlationKey: res.correlationKey,
+          signalId: res.signalId,
+        },
+      });
+    }
+    return false;
+  }
 
   const sk = sig.correlationKey != null ? String(sig.correlationKey).trim() : '';
   const rk = res.correlationKey != null ? String(res.correlationKey).trim() : '';
 
-  if (sk !== '' || rk !== '') {
-    if (sk === '' || rk === '') return false;
-    return sk === rk;
-  }
-
   const sid = sig.id != null ? String(sig.id).trim() : '';
   const rid = res.signalId != null ? String(res.signalId).trim() : '';
-  const sm = String(sig.mesa ?? '').trim();
-  const rm = String(res.mesa ?? '').trim();
 
+  function mesaContradicts() {
+    return sm !== '' && rm !== '' && sm !== rm;
+  }
+
+  /** @param {string} sr @param {string} rr */
+  function roundsComparableAndEqual(sr, rr) {
+    if (sr === '' || rr === '') return false;
+    return sr === rr;
+  }
+
+  /** Misma mesa y datos lo bastante incompletos como para no exigir CK/round alineados. */
+  function sameMesaLooseMatchForIncomplete() {
+    if (sm === '' || rm === '' || sm !== rm) return false;
+    if (sig.isIncomplete === true || res.isIncomplete === true) return true;
+    const sr = String(sig.round ?? '').trim();
+    const rr = String(res.round ?? res.roundId ?? '').trim();
+    if (sr === '' || rr === '') return true;
+    return false;
+  }
+
+  // 1) Prioridad: id ↔ signalId
   if (sid !== '' && rid !== '' && sid === rid) {
-    if (sm !== '' && rm !== '' && sm !== rm) return false;
+    if (mesaContradicts()) return false;
     return true;
   }
 
-  if (!sm || !rm || sm !== rm) return false;
-  const sr = String(sig.round ?? '').trim();
-  const rr = String(res.round ?? res.roundId ?? '').trim();
-  if (!sr || !rr) return false;
-  return sr === rr;
+  // 2) correlationKey iguales (no `id:` tipo epoch — no es ronda de mesa)
+  if (sk !== '' && rk !== '' && sk === rk && !sk.toLowerCase().startsWith('id:')) return true;
+
+  // 3) Ambos CK pero distintos: puente id o misma mesa solo si incompleto / sin ronda
+  if (sk !== '' && rk !== '') {
+    if (sid !== '' && rid !== '' && sid === rid && !mesaContradicts()) return true;
+    if (sameMesaLooseMatchForIncomplete()) return true;
+    return false;
+  }
+
+  // 4) Solo uno con CK
+  if (sk !== '' || rk !== '') {
+    if (sid !== '' && rid !== '' && sid === rid && !mesaContradicts()) return true;
+    if (sameMesaLooseMatchForIncomplete()) return true;
+    return false;
+  }
+
+  // 5) Sin CK: rounds iguales; o ronda ausente solo en fila marcada incompleta
+  if (sm === '' || rm === '' || sm !== rm) return false;
+  const sr5 = String(sig.round ?? '').trim();
+  const rr5 = String(res.round ?? res.roundId ?? '').trim();
+  if (roundsComparableAndEqual(sr5, rr5)) return true;
+  if (sr5 === '' && rr5 === '') return true;
+  if (sr5 === '' && sig.isIncomplete === true) return true;
+  if (rr5 === '' && res.isIncomplete === true) return true;
+  return false;
 }
 
 /**

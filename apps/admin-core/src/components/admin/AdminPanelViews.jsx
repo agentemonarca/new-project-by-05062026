@@ -2,6 +2,7 @@ import React, { memo, useSyncExternalStore } from 'react';
 import { Activity, Trophy } from 'lucide-react';
 import AdminSignalsProPanel from '../AdminSignalsProPanel.jsx';
 import { AdminSignalsLivePanel } from '../AdminSignalsLivePanel.jsx';
+import { ProviderLiveFeedPanel } from '../ProviderLiveFeedPanel.jsx';
 import { RawEventsPanel } from '../RawEventsPanel.jsx';
 import { SignalStreamDebugPanel } from '../SignalStreamDebugPanel.jsx';
 import ResultCasinoScoreBlock from '../ResultCasinoScoreBlock.jsx';
@@ -196,5 +197,10 @@ export const AdminDebugSection = memo(function AdminDebugSection() {
 });
 
 export const AdminVistaLabSection = memo(function AdminVistaLabSection() {
-  return <VistaLabPanel />;
+  return (
+    <div className="space-y-6">
+      <ProviderLiveFeedPanel />
+      <VistaLabPanel />
+    </div>
+  );
 });

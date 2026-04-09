@@ -4,6 +4,69 @@
  * @param {unknown} payload
  * @returns {{ type: 'NEW_SIGNAL' | 'NEW_RESULT', data: Record<string, unknown> } | null}
  */
+
+/** @param {...unknown} vals */
+function pickFirstDefined(...vals) {
+  for (const v of vals) {
+    if (v != null && String(v).trim() !== '') return v;
+  }
+  return null;
+}
+
+/**
+ * Ronda de mesa en envelopes Winxplay (raíz, data, data.signal, data_evento).
+ * @param {Record<string, unknown>} d — `payload.data`
+ * @param {Record<string, unknown>} p — `payload` raíz
+ */
+function resolveWinxNewSignalRound(d, p) {
+  const inner =
+    d.data != null && typeof d.data === 'object' && !Array.isArray(d.data)
+      ? /** @type {Record<string, unknown>} */ (d.data)
+      : null;
+  const sig =
+    d.signal != null && typeof d.signal === 'object' && !Array.isArray(d.signal)
+      ? /** @type {Record<string, unknown>} */ (d.signal)
+      : inner?.signal != null && typeof inner.signal === 'object' && !Array.isArray(inner.signal)
+        ? /** @type {Record<string, unknown>} */ (inner.signal)
+        : null;
+  const evRaw = sig?.data_evento ?? sig?.data_event ?? d.data_evento ?? d.data_event ?? p.data_evento ?? p.data_event;
+  const ev =
+    evRaw != null && typeof evRaw === 'object' && !Array.isArray(evRaw)
+      ? /** @type {Record<string, unknown>} */ (evRaw)
+      : null;
+
+  return pickFirstDefined(
+    d.round,
+    p.round,
+    d.ronda,
+    p.ronda,
+    d.ronda_actual,
+    p.ronda_actual,
+    d.Ronda,
+    p.Ronda,
+    inner?.ronda,
+    inner?.ronda_actual,
+    sig?.ronda_actual,
+    sig?.gameRound,
+    sig?.ronda,
+    sig?.ronda_objetivo,
+    ev?.Ronda,
+    ev?.ronda,
+    ev?.round,
+  );
+}
+
+/**
+ * @param {Record<string, unknown>} d
+ * @param {Record<string, unknown>} p
+ * @param {Record<string, unknown> | null} sig
+ */
+function resolveWinxNewSignalId(d, p, sig) {
+  const id = pickFirstDefined(p.id, d.id, sig?.id, sig?.signalId);
+  if (id != null) return id;
+  return Date.now();
+}
+
 export function tryWinxplayDashboardRelay(payload) {
   try {
     if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) return null;
@@ -27,14 +90,42 @@ export function tryWinxplayDashboardRelay(payload) {
     const t = typeStr.toUpperCase();
 
     if (t === 'NEW_SIGNAL') {
+      const inner =
+        d.data != null && typeof d.data === 'object' && !Array.isArray(d.data)
+          ? /** @type {Record<string, unknown>} */ (d.data)
+          : null;
+      const sig =
+        d.signal != null && typeof d.signal === 'object' && !Array.isArray(d.signal)
+          ? /** @type {Record<string, unknown>} */ (d.signal)
+          : inner?.signal != null && typeof inner.signal === 'object' && !Array.isArray(inner.signal)
+            ? /** @type {Record<string, unknown>} */ (inner.signal)
+            : null;
+
+      const roundResolved = resolveWinxNewSignalRound(d, p);
+      const idResolved = resolveWinxNewSignalId(d, p, sig);
+      const rec = pickFirstDefined(
+        d.forecast,
+        d.recommendation,
+        p.forecast,
+        p.recommendation,
+        sig?.recommendation,
+        sig?.forecast,
+        sig?.signal,
+        sig?.side,
+        sig?.prediction,
+      );
+
+      // Conservar anidamiento (`signal`, `data`, data_evento…) para normalizeNewSignalPayload;
+      // además fijar `round` / `id` en raíz del relay para dedupe y cliente.
       return {
         type: 'NEW_SIGNAL',
         data: {
-          id: p.id ?? Date.now(),
-          mesa: d.mesa ?? p.mesa,
-          recommendation: d.forecast ?? p.forecast,
-          martingale: d.martingale,
-          round: d.round ?? p.round,
+          ...d,
+          id: idResolved,
+          mesa: pickFirstDefined(d.mesa, p.mesa, sig?.nombre_mesa, sig?.tableName) ?? d.mesa ?? p.mesa,
+          recommendation: rec ?? d.recommendation ?? p.recommendation,
+          martingale: d.martingale ?? p.martingale ?? sig?.martingale,
+          round: roundResolved ?? d.round ?? p.round ?? d.ronda ?? p.ronda,
         },
       };
     }
@@ -82,7 +173,7 @@ export function tryWinxplayDashboardRelay(payload) {
           mesa: d.mesa,
           ganador,
           winStatus: d.winStatus ?? p.winStatus,
-          round: d.round ?? mesa_info?.ronda_actual ?? mesa_info?.ronda_objetivo,
+          round: d.round ?? mesa_info?.ronda_objetivo ?? mesa_info?.ronda_actual,
           historial: Array.isArray(d.history) ? d.history : Array.isArray(mesa_info?.tablero) ? mesa_info.tablero : [],
           scoreDetail,
         },

@@ -32,7 +32,16 @@ function getEnvelope(payload) {
     r.data != null && typeof r.data === 'object' && !Array.isArray(r.data)
       ? /** @type {Record<string, unknown>} */ (r.data)
       : /** @type {Record<string, unknown>} */ ({});
-  const payloadType = r.type != null ? String(r.type) : d.type != null ? String(d.type) : null;
+  const payloadType =
+    r.type != null
+      ? String(r.type)
+      : r.eventName != null
+        ? String(r.eventName)
+        : d.type != null
+          ? String(d.type)
+          : d.eventName != null
+            ? String(d.eventName)
+            : null;
   return { r, d, payloadType };
 }
 

@@ -336,9 +336,12 @@ export default function GenesisOraclePanel() {
             })();
       const partial = {
         id: Date.now(),
-        mesa: dataObj.mesa || 'UNKNOWN',
-        round: dataObj.round || dataObj.roundId || '—',
-        signal: dataObj.recommendation || '—',
+        mesa: n.mesa || dataObj.mesa || 'UNKNOWN',
+        round: n.round || dataObj.round || dataObj.roundId || '—',
+        signal:
+          n.recommendation !== 'UNKNOWN'
+            ? n.recommendation
+            : String(dataObj.recommendation ?? dataObj.signal ?? '—'),
         martingale: dataObj.martingale || 0,
         status: null,
         result: null,
@@ -347,7 +350,7 @@ export default function GenesisOraclePanel() {
         providerSignalId: n.providerSignalId,
         rawSignal: n.raw,
         rawEvents: [payload],
-        signalPayload: { ...dataObj, round: dataObj.round || dataObj.roundId },
+        signalPayload: { ...dataObj, round: n.round || dataObj.round || dataObj.roundId },
       };
       clearResultSafetyTimeout();
       clearEngineTimers();
@@ -548,13 +551,16 @@ export default function GenesisOraclePanel() {
 
   const forecastLetters = useMemo(() => {
     const payload = activeCycle?.signalPayload;
+    const fromVec = Array.isArray(payload?.vector_forecast) ? payload.vector_forecast : null;
     const fromSp = Array.isArray(payload?.forecast) ? payload.forecast : null;
     const raw =
       fromSp && fromSp.length
         ? fromSp
-        : Array.isArray(cycleNorm.forecast) && cycleNorm.forecast.length
-          ? cycleNorm.forecast
-          : [];
+        : fromVec && fromVec.length
+          ? fromVec
+          : Array.isArray(cycleNorm.forecast) && cycleNorm.forecast.length
+            ? cycleNorm.forecast
+            : [];
     if (!raw.length) return ['—'];
     return raw.map((x) => forecastTokenToLetter(x));
   }, [activeCycle?.signalPayload, cycleNorm.forecast]);

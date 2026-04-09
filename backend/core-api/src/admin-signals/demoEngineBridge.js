@@ -1,4 +1,5 @@
-import { getLastClientResultForTest, relayAdminSignalsToClients, resolveTestEmitIntervalMs } from './relayAdminSignalsToClients.js';
+import { getLastClientResultForTest, resolveTestEmitIntervalMs } from './relayAdminSignalsToClients.js';
+import { relayNormalizedAdminSignals } from './normalizeSignal.js';
 
 /**
  * GPULSE demo/emulator bridge.
@@ -13,7 +14,7 @@ import { getLastClientResultForTest, relayAdminSignalsToClients, resolveTestEmit
  * @param {unknown} signalPayload
  */
 export function emitDemoSignal(relayCtx, signalPayload) {
-  return relayAdminSignalsToClients(relayCtx, 'NEW_SIGNAL', signalPayload, { source: 'gpulse_demo' });
+  return relayNormalizedAdminSignals(relayCtx, 'NEW_SIGNAL', signalPayload, { source: 'gpulse_demo' });
 }
 
 /**
@@ -21,7 +22,7 @@ export function emitDemoSignal(relayCtx, signalPayload) {
  * @param {unknown} resultPayload
  */
 export function emitDemoResult(relayCtx, resultPayload) {
-  return relayAdminSignalsToClients(relayCtx, 'NEW_RESULT', resultPayload, { source: 'gpulse_demo' });
+  return relayNormalizedAdminSignals(relayCtx, 'NEW_RESULT', resultPayload, { source: 'gpulse_demo' });
 }
 
 /**
@@ -39,7 +40,6 @@ export function emitDemoResult(relayCtx, resultPayload) {
  * @returns {{ stop: () => void, isRunning: () => boolean }}
  */
 export function startGpulseDemoMode(relayCtx) {
-  const { io } = relayCtx;
   const traceOn = String(process.env.ADMIN_SIGNALS_TRACE ?? '').trim() === '1';
 
   const testIntervalMs = resolveTestEmitIntervalMs(Boolean(process.env.EXTERNAL_SIGNALS_API_KEY));
@@ -60,8 +60,10 @@ export function startGpulseDemoMode(relayCtx) {
 
       const mesa = lastMesa ?? 'Baccarat 5';
       const round = lastRoundOk ? Math.trunc(lastRoundRaw) + 1 : (testRoundSeq += 1);
+      const pairId = `demo-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
       const signalPayload = {
+        id: pairId,
         data: {
           signal: {
             nombre_mesa: mesa,
@@ -72,27 +74,8 @@ export function startGpulseDemoMode(relayCtx) {
         },
       };
 
-      if (traceOn) console.log('[GPULSE_DEMO] NEW_SIGNAL', { mesa, round });
+      if (traceOn) console.log('[GPULSE_DEMO] NEW_SIGNAL', { mesa, round, pairId });
       emitDemoSignal(relayCtx, signalPayload);
-
-      // Provider-like mirror (for clients that listen to dashboardUpdate).
-      try {
-        io.of('/admin-signals').emit('dashboardUpdate', {
-          type: 'NEW_SIGNAL',
-          data: {
-            mesa,
-            data: { signal: signalPayload.data.signal },
-            tipo: 'SIGNAL',
-            win: null,
-            ronda: round,
-            isOpen: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        });
-      } catch {
-        /* ignore */
-      }
 
       const winner = Math.random() > 0.5 ? 'PLAYER' : 'BANKER';
       const scoreDetail =
@@ -104,9 +87,10 @@ export function startGpulseDemoMode(relayCtx) {
         const resultPayload = {
           mesa,
           round,
+          signalId: pairId,
           winStatus: winner === 'PLAYER',
           scoreDetail,
-          correlationKey: `mesa:${mesa}|round:${round}`,
+          correlationKey: `${mesa}|${round}`,
         };
         if (traceOn) console.log('[GPULSE_DEMO] NEW_RESULT', { mesa, round, winner });
         emitDemoResult(relayCtx, resultPayload);

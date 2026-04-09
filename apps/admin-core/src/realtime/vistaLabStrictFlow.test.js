@@ -1,6 +1,6 @@
 /**
- * Fase validación final: mismo pipeline que el socket store (`createLiveSignalEntry` / `createLiveResultEntry`)
- * + matcher VistaLab. Las fases React (SIGNAL_DETECTED → …) requieren prueba manual en UI con `full`.
+ * Pipeline store + matcher VistaLab. La validación ya no rechaza filas; `strictOk` sigue siendo true
+ * cuando `validation.ok` (siempre). Las fases React requieren prueba manual con `full`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ADMIN_SIGNALS_STRICT_MODE } from '../utils/adminSignalPayloadValidators.js';
@@ -87,7 +87,7 @@ describe('STRICT_MODE pipeline (ingesta = store)', () => {
     });
   });
 
-  describe('5. Casos rechazados (no entran al buffer si strictOk === false)', () => {
+  describe('5. Casos incompletos (entran al buffer; solo warns [INCOMPLETE_*])', () => {
     let warnSpy;
 
     beforeEach(() => {
@@ -98,48 +98,37 @@ describe('STRICT_MODE pipeline (ingesta = store)', () => {
       warnSpy.mockRestore();
     });
 
-    function rejectSignalLikeStore(row) {
-      const { formatted, strictOk } = createLiveSignalEntry(row, 't');
-      if (!strictOk) console.warn('SIGNAL INVALIDA', formatted);
-      return strictOk;
-    }
-
-    function rejectResultLikeStore(row, predicted) {
-      const { formatted, strictOk } = createLiveResultEntry(row, predicted, 't');
-      if (!strictOk) console.warn('RESULT INVALIDO', formatted);
-      return strictOk;
-    }
-
-    it('mesa inválida → strictOk false, rejectReason y warn SIGNAL INVALIDA', () => {
+    it('mesa TEST → strictOk true y warn INVALID_MESA', () => {
       const { strictOk, rejectReason } = createLiveSignalEntry(
         { mesa: 'TEST', round: '1', recommendation: 'P', martingale: 0, vector_forecast: ['P', 'B', 'P', 'B', 'P', 'B'] },
         't',
       );
-      expect(strictOk).toBe(false);
-      expect(rejectReason).toBe('INVALID_MESA');
-      expect(rejectSignalLikeStore({ mesa: 'TEST', round: '1', recommendation: 'P', martingale: 0 })).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith('SIGNAL INVALIDA', expect.any(Object));
+      expect(strictOk).toBe(true);
+      expect(rejectReason).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith('[INCOMPLETE_SIGNAL_INVALID_MESA]', expect.any(Object));
     });
 
-    it('mesa TEST sin nombre real → strictOk false', () => {
-      expect(rejectSignalLikeStore(validSignalPayload('TEST', 1))).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith('SIGNAL INVALIDA', expect.any(Object));
+    it('mesa TEST vía validSignalPayload → entra al buffer', () => {
+      const { strictOk } = createLiveSignalEntry(validSignalPayload('TEST', 1), 't');
+      expect(strictOk).toBe(true);
+      expect(warnSpy).toHaveBeenCalled();
     });
 
-    it('round inválido (sin ronda resoluble) → strictOk false', () => {
-      expect(
-        rejectSignalLikeStore({
+    it('round epoch (timestamp) → entra; formatter puede dejar ronda sin correlación clara', () => {
+      const { strictOk } = createLiveSignalEntry(
+        {
           mesa: 'Baccarat 5',
           round: '1775624340744',
           recommendation: 'P',
           martingale: 0,
           vector_forecast: ['P', 'B', 'P', 'B', 'P', 'B'],
-        }),
-      ).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith('SIGNAL INVALIDA', expect.any(Object));
+        },
+        't',
+      );
+      expect(strictOk).toBe(true);
     });
 
-    it('forecast6: el formatter siempre rellena 6; fila con vector corto sigue siendo válida si mesa/round ok', () => {
+    it('vector corto: formatter rellena forecast6; strictOk true', () => {
       const { strictOk } = createLiveSignalEntry(
         {
           mesa: 'Baccarat 5',
@@ -151,20 +140,19 @@ describe('STRICT_MODE pipeline (ingesta = store)', () => {
         't',
       );
       expect(strictOk).toBe(true);
-      expect(warnSpy).not.toHaveBeenCalled();
     });
 
-    it('resultado sin mesa_info válido → RESULT INVALIDO', () => {
-      expect(
-        rejectResultLikeStore(
-          {
-            mesa: 'Baccarat 5',
-            round: '10',
-          },
-          'PLAYER',
-        ),
-      ).toBe(false);
-      expect(warnSpy).toHaveBeenCalledWith('RESULT INVALIDO', expect.any(Object));
+    it('resultado mínimo sin scoreDetail → strictOk true y warns', () => {
+      const { strictOk } = createLiveResultEntry(
+        {
+          mesa: 'Baccarat 5',
+          round: '10',
+        },
+        'PLAYER',
+        't',
+      );
+      expect(strictOk).toBe(true);
+      expect(warnSpy).toHaveBeenCalled();
     });
   });
 

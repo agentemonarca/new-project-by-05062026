@@ -1,4 +1,4 @@
-import { relayAdminSignalsToClients } from './relayAdminSignalsToClients.js';
+import { relayNormalizedAdminSignals } from './normalizeSignal.js';
 
 /**
  * Interception layer for the admin-signals pipeline (pass-through until extended).
@@ -17,7 +17,7 @@ export function createSignalEngine() {
       } catch {
         /* ignore — never block pipeline on logging */
       }
-      relayAdminSignalsToClients(ctx, type, payload, { source: 'engine_pass' });
+      relayNormalizedAdminSignals(ctx, type, payload, { source: 'engine_pass' });
       try {
         console.log('[FLOW] AFTER RELAY →', type);
       } catch {

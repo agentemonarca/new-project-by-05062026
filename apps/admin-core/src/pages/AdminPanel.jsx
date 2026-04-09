@@ -17,6 +17,9 @@ import { auditMesaRoundCorrelationKey } from '@/realtime/correlationKeyAudit.js'
 import { createLiveResultEntry, createLiveSignalEntry } from '@/realtime/adminSignalsLiveIngest.js';
 import { useAdminSignalsLiveStore } from '@/store/adminSignalsLiveStore.js';
 import { ADMIN_SIGNALS_STRICT_MODE, validateResult, validateSignal } from '@/utils/adminSignalPayloadValidators.js';
+import { vistaLabForecastCellStyle } from '@/lab/vistaLabForecastCellStyle.js';
+import { isAdminRawMode } from '@/utils/adminRawMode.js';
+import { displayRoundOrIdHintForLiveRow } from '@/utils/signalFormatter.js';
 import { resultMatchesSignal } from '@/utils/vistaLabCycle.js';
 
 /**
@@ -51,7 +54,10 @@ function AdminSignalFlowDebugPanel({ signals, results, debugLogs, connected, rev
     >
       <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-300/95">Signal flow debug (dev)</h3>
       <p className="mb-3 text-[10px] text-[#848E9C]">
-        STRICT: {strictMode ? 'on' : 'off'} · socket: {connected ? 'connected' : 'disconnected'} · rev: {rev}
+        RAW/visor:{' '}
+        {isAdminRawMode() ? 'on (VITE_ADMIN_RAW_MODE=1 o VITE_ADMIN_VIEWER_MODE=1)' : 'off'} · STRICT:{' '}
+        {strictMode ? 'on' : 'off'} · socket:{' '}
+        {connected ? 'connected' : 'disconnected'} · rev: {rev}
       </p>
       <div className="mb-3 space-y-1">
         <h4 className="text-[10px] font-bold uppercase tracking-wider text-[#848E9C]">Store</h4>
@@ -107,7 +113,7 @@ function AdminVistaLabEngineStrip() {
             Mesa: <span className="font-mono">{String(activeSignal.mesa ?? '—')}</span>
           </div>
           <div className="text-sm text-[#EAECEF]">
-            Round: <span className="font-mono">{String(activeSignal.round ?? '—')}</span>
+            Round: <span className="font-mono">{displayRoundOrIdHintForLiveRow(activeSignal)}</span>
           </div>
           <div className="text-sm text-[#EAECEF]">
             Phase: <span className="font-mono text-[#0ECB81]">{phase}</span>
@@ -115,7 +121,11 @@ function AdminVistaLabEngineStrip() {
           <div className="mt-2 flex flex-wrap items-center gap-1 text-sm">
             <span className="text-[#848E9C]">Forecast:</span>
             {forecast6.map((f, i) => (
-              <span key={i} className="rounded border border-[#474D57] px-1.5 py-0.5 font-mono text-xs text-[#FCD535]">
+              <span
+                key={i}
+                className="rounded border px-1.5 py-0.5 font-mono text-xs"
+                style={vistaLabForecastCellStyle(f)}
+              >
                 [{String(f)}]
               </span>
             ))}

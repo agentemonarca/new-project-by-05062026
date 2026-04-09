@@ -8,9 +8,9 @@ import { createSignalPersistence } from './signalPersistenceService.js';
 import { adminSignalsFlowTrace } from './signalFlowDebug.js';
 import {
   getLastClientResultForTest,
-  relayAdminSignalsToClients,
   resolveTestEmitIntervalMs,
 } from './relayAdminSignalsToClients.js';
+import { relayNormalizedAdminSignals } from './normalizeSignal.js';
 import { createSignalEngine } from './signalEngine.js';
 import { startGpulseDemoMode } from './demoEngineBridge.js';
 
@@ -182,11 +182,13 @@ export function attachAdminSignalsIo({ io, processor, logger, sessionMiddleware 
       const mesa = lastMesa ?? 'Baccarat 5';
       // Importante: avanzar la ronda para evitar dedupe del processor y mantener flujo continuo.
       const round = lastRoundOk ? Math.trunc(lastRoundRaw) + 1 : (testRoundSeq += 1);
+      const pairId = `lab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
       if (traceOn) {
         console.log('TRACE: SIGNAL CREATED', {
           type: 'NEW_SIGNAL',
           payload: {
+            id: pairId,
             data: {
               signal: {
                 nombre_mesa: mesa,
@@ -199,10 +201,11 @@ export function attachAdminSignalsIo({ io, processor, logger, sessionMiddleware 
         });
       }
 
-      relayAdminSignalsToClients(
+      relayNormalizedAdminSignals(
         relayCtx,
         'NEW_SIGNAL',
         {
+          id: pairId,
           data: {
             signal: {
               nombre_mesa: mesa,
@@ -215,32 +218,6 @@ export function attachAdminSignalsIo({ io, processor, logger, sessionMiddleware 
         { source: 'test_emit' },
       );
 
-      // Emitir también la forma "real" estilo proveedor (dashboardUpdate anidado) para pruebas end-to-end.
-      try {
-        io.of('/admin-signals').emit('dashboardUpdate', {
-          type: 'NEW_SIGNAL',
-          data: {
-            mesa,
-            data: {
-              signal: {
-                nombre_mesa: mesa,
-                ronda_actual: round,
-                vector_forecast: ['B', 'P', 'B', 'B', 'P', 'B'],
-                nombre_algoritmo: 'SIMETRIA_TEST',
-              },
-            },
-            tipo: 'SIGNAL',
-            win: null,
-            ronda: round,
-            isOpen: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        });
-      } catch {
-        /* ignore */
-      }
-
       // Si el upstream no está enviando resultados, generamos uno sintético STRICT-safe
       // para que el ciclo pueda cerrar (sin tocar matcher ni store).
       const shouldEmitFakeResult = true;
@@ -252,92 +229,19 @@ export function attachAdminSignalsIo({ io, processor, logger, sessionMiddleware 
             : { ganador: 'BANKER', puntaje_player: '5', puntaje_banker: '7', cartas_player: ['9', '6'], cartas_banker: ['K', '7'] };
         // Pequeña demora para simular latencia real (y asegurar que la señal esté ya en buffer).
         setTimeout(() => {
-          relayAdminSignalsToClients(
+          relayNormalizedAdminSignals(
             relayCtx,
             'NEW_RESULT',
             {
               mesa,
               round,
+              signalId: pairId,
               winStatus: winner === 'PLAYER',
               scoreDetail,
-              // El frontend recomputa correlationKey, pero lo incluimos para trazas.
-              correlationKey: `mesa:${mesa}|round:${round}`,
+              correlationKey: `${mesa}|${round}`,
             },
             { source: 'test_emit' },
           );
-
-          // Forma "real" estilo proveedor: dashboardUpdate con data.data.results.mesa_info.
-          try {
-            io.of('/admin-signals').emit('dashboardUpdate', {
-              type: 'NEW_RESULT',
-              data: {
-                mesa,
-                data: {
-                  results: {
-                    nombre_mesa: mesa,
-                    mesa_info: {
-                      id_mesa: String(Math.floor(Math.random() * 9e10 + 1e10)),
-                      ronda_actual: round + 1,
-                      puntaje_player: scoreDetail.puntaje_player ?? null,
-                      puntaje_banker: scoreDetail.puntaje_banker ?? null,
-                      cartas_player: scoreDetail.cartas_player ?? null,
-                      cartas_banker: scoreDetail.cartas_banker ?? null,
-                      apostar_pendiente: false,
-                      lado_objetivo: '0',
-                      ronda_objetivo: round,
-                      sesion: false,
-                      pairs_bet: false,
-                      apuesta_activa: false,
-                      lado_apostado: null,
-                      saldo_antes_apuesta: 0,
-                      monto_apostado: 100,
-                      cantidad_clics: 1,
-                      valor_moneda: 100,
-                      tablero: Array.isArray(scoreDetail.tablero) ? scoreDetail.tablero : [],
-                      Accion: 'ORDEN DE FUEGO 1',
-                      jugada_id: Math.floor(Math.random() * 1000),
-                      caption: '',
-                      martingala: {
-                        active: false,
-                        vector_forecast: ['B', 'P', 'B', 'B', 'P', 'B'],
-                        contador_martingala: 0,
-                        vector_win: [winner === 'PLAYER' ? 'W' : 'L'],
-                        vector_resultado: [winner === 'PLAYER' ? 'P' : 'B'],
-                        nombre_patron: 'SIMETRIA_TEST',
-                      },
-                      paroli: {
-                        paroli_martingala: false,
-                        active: false,
-                        vector_forecast: null,
-                        contador_paroli: 0,
-                        vector_win: [],
-                        vector_resultado: [],
-                        nombre_patron: '',
-                      },
-                      ganador: String(scoreDetail.ganador ?? winner),
-                      victorias: { player: 0, banker: 0, tie: 0 },
-                    },
-                  },
-                },
-                tipo: 'RESULT',
-                win: true,
-                isOpen: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              },
-              winStatus: winner === 'PLAYER',
-              martingalaData: {
-                active: false,
-                vector_forecast: ['B', 'P', 'B', 'B', 'P', 'B'],
-                contador_martingala: 0,
-                vector_win: [winner === 'PLAYER' ? 'W' : 'L'],
-                vector_resultado: [winner === 'PLAYER' ? 'P' : 'B'],
-                nombre_patron: 'SIMETRIA_TEST',
-              },
-            });
-          } catch {
-            /* ignore */
-          }
         }, testResultDelayMs);
       }
     }, testIntervalMs + (testJitterMs > 0 ? Math.floor(Math.random() * (testJitterMs + 1)) : 0));
