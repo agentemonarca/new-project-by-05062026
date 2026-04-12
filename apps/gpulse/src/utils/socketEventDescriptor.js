@@ -71,6 +71,7 @@ export const ENGINE_STATE_LABELS = {
   SIGNAL_ACTIVE: 'Señal activa',
   BETTING_WINDOW: 'Ventana apuesta',
   DEALING: 'Reparto',
+  WAITING_RESULT: 'Esperando resultado (proveedor)',
   RESULT_RECEIVED: 'Resultado recibido',
   RESULT_PROCESSED: 'Resultado procesado',
   COOLDOWN: 'Enfriamiento',

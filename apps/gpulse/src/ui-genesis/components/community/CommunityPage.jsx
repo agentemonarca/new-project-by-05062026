@@ -94,7 +94,7 @@ export function CommunityPage({ canViewFullNetwork = true }) {
   const referralUrl = useMemo(() => {
     const base = typeof window !== 'undefined' ? window.location.origin : '';
     const ref = address || 'your-wallet';
-    return `${base}/gpulse-lobby?ref=${ref}`;
+    return `${base}/dashboard?nav=gpulse-lobby&ref=${encodeURIComponent(ref)}`;
   }, [address]);
 
   const copyLink = useCallback(async () => {

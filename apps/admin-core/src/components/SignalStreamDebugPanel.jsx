@@ -41,7 +41,7 @@ function SignalStreamDebugPanelInner() {
             Orden visual: <span className="text-cyan-300/90">RAW</span> → <span className="text-violet-200/90">SEÑALES</span> →{' '}
             <span className="text-amber-200/90">ESTADO</span> → <span className="text-emerald-200/90">FASE</span> →{' '}
             <span className="text-slate-300">DETALLE</span>. Desactivar emisiones en core:{' '}
-            <code className="text-slate-500">ADMIN_SIGNALS_STREAM_DEBUG=0</code>.
+            <code className="text-slate-500">ADMIN_SIGNALS_STREAM_FRAMES_OFF=1</code>.
           </p>
         </div>
       </header>

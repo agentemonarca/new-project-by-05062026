@@ -5,7 +5,11 @@
  * @param {import('socket.io').Server} io
  * @param {{ sessionMiddleware: import('express').RequestHandler, logger?: object }} ctx
  */
-import { getLastClientResultForReplay, getLastClientSignalForReplay } from './relayAdminSignalsToClients.js';
+import {
+  flushBufferedAdminResultsToSocket,
+  getLastClientResultForReplay,
+  getLastClientSignalForReplay,
+} from './relayAdminSignalsToClients.js';
 
 const MIN_API_KEY_LEN = 16;
 
@@ -56,24 +60,17 @@ export function attachAdminSignalsNamespace(io, { sessionMiddleware, logger }) {
     try {
       console.log('REPLAY TO NEW CLIENT');
       const lastSignal = getLastClientSignalForReplay();
-      const lastResult = getLastClientResultForReplay();
 
       if (lastSignal) {
-        socket.emit('admin_signal_frame', {
-          type: 'NEW_SIGNAL',
-          payload: lastSignal,
-          replay: true,
-          ts: Date.now(),
-        });
+        socket.emit('NEW_SIGNAL', lastSignal);
       }
 
-      if (lastResult) {
-        socket.emit('dashboardUpdate', {
-          type: 'NEW_RESULT',
-          payload: lastResult,
-          replay: true,
-          ts: Date.now(),
-        });
+      const flushed = flushBufferedAdminResultsToSocket(socket);
+      if (flushed === 0) {
+        const lastResult = getLastClientResultForReplay();
+        if (lastResult) {
+          socket.emit('NEW_RESULT', lastResult);
+        }
       }
     } catch {
       /* ignore */

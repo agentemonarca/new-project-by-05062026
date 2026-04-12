@@ -10,7 +10,8 @@ import { AdminPanelRouter } from '../modules/admin/AdminPanelRouter.jsx';
 import { ADMIN_MODULE_IDS } from '../modules/admin/adminNavConfig.js';
 import { useAdminPanelStore } from './stores/adminPanelStore.js';
 /** User-app entry path when leaving the isolated admin shell. */
-export const ADMIN_APP_RETURN_PATH = '/genesis-lobby';
+/** Vuelta desde Command Center al dashboard Genesis (lobby). */
+export const ADMIN_APP_RETURN_PATH = '/dashboard?nav=genesis-lobby';
 
 export function AdminProtectedShell() {
   const navigate = useNavigate();

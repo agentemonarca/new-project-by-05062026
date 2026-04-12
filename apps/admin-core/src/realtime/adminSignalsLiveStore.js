@@ -3,11 +3,16 @@ import { logPhaseActiveOnce } from '@/utils/canonicalFlowFlags.js';
 import { applyCanonicalModeToPayload } from '@/utils/extractCanonicalFields.js';
 import { addRawEvent } from '../store/rawEventsStore.js';
 import { playLossSound, playNewSignalSound, playWinSound, soundEnabled } from '../utils/adminSignalsSounds.js';
-import { unwrapLiveFrameMessage } from './adminSignalFrameUnwrap.js';
 import { normalizeCorrelationKeyInRecord } from './correlationKeyNormalize.js';
 import { createLiveResultEntry, createLiveSignalEntry } from './adminSignalsLiveIngest.js';
 import { recordCorrelationKeyObservation } from './correlationKeyStats.js';
 import { mergeMesaInfoFromNestedIntoRow } from '@/utils/vistaLabProviderExtras.js';
+import { mergeRelayNewSignalForConsumers } from './mergeRelayNewSignalRow.js';
+import {
+  diffNewResultProviderVsPanel,
+  diffNewSignalProviderVsPanel,
+} from '../utils/adminPanelProviderWireDiff.js';
+import { isResultFullTraceClient } from '../gpulse-lab/utils/resultFullTraceClient.js';
 
 /**
  * @typedef {{ type: string, ts: number, reason?: string, payload?: unknown }} AdminDebugLogEntry
@@ -16,6 +21,8 @@ import { mergeMesaInfoFromNestedIntoRow } from '@/utils/vistaLabProviderExtras.j
 const MAX_ITEMS = 50;
 const MAX_DEBUG_LOGS = 100;
 const TRACE_ON = import.meta.env.VITE_ADMIN_SIGNALS_TRACE === '1';
+/** Una línea por evento: aceptación o rechazo en ingest (diagnóstico). Ver CANONICAL_ALIGNMENT_AUDIT.md */
+const INGEST_LOG = import.meta.env.VITE_ADMIN_SIGNALS_INGEST_LOG === '1';
 
 let signals = /** @type {any[]} */ ([]);
 let results = /** @type {any[]} */ ([]);
@@ -26,6 +33,14 @@ let rev = 0;
 let debugLastSignal = null;
 /** @type {{ raw: unknown, formatted: unknown } | null} */
 let debugLastResult = null;
+
+/** Último mensaje socket crudo (misma forma que envía el relay) para VistaLab / comparativa. */
+let lastNewSignalSocketPayload = /** @type {unknown} */ (null);
+let lastNewResultSocketPayload = /** @type {unknown} */ (null);
+/** @type {ReturnType<typeof diffNewSignalProviderVsPanel> | null} */
+let signalWireVsPanelDiff = null;
+/** @type {ReturnType<typeof diffNewResultProviderVsPanel> | null} */
+let resultWireVsPanelDiff = null;
 /** @type {(string | AdminDebugLogEntry)[]} */
 let debugLogs = [];
 
@@ -118,6 +133,9 @@ function harvestSignalFieldsFromNestedData(row) {
  */
 function extractLiveRowFromSocketMsg(msg, depth = 0) {
   if (depth > 4 || !msg || typeof msg !== 'object' || Array.isArray(msg)) return {};
+  if (depth === 0 && msg && typeof msg === 'object' && !Array.isArray(msg) && 'canonical' in msg) {
+    msg = mergeRelayNewSignalForConsumers(msg);
+  }
   const m = /** @type {Record<string, unknown>} */ (msg);
 
   const fromPayload =
@@ -143,7 +161,7 @@ function extractLiveRowFromSocketMsg(msg, depth = 0) {
     'id',
     'signalId',
     'serverTs',
-    'recommendation',
+    'prediction',
     'winStatus',
     'martingale',
     'nombre_algoritmo',
@@ -218,7 +236,15 @@ export function adminSignalsPushDebugLog(message) {
   bump();
 }
 
-/** @returns {{ signals: any[], results: any[], connected: boolean, rev: number, debugLastSignal: typeof debugLastSignal, debugLastResult: typeof debugLastResult, debugLogs: (string | AdminDebugLogEntry)[] }} */
+function cloneWirePreview(x) {
+  try {
+    return JSON.parse(JSON.stringify(x));
+  } catch {
+    return x ?? null;
+  }
+}
+
+/** @returns {Record<string, unknown>} */
 export function getAdminSignalsLiveSnapshot() {
   ensureAdminSignalsBridge();
   if (snapRev !== rev) {
@@ -231,6 +257,10 @@ export function getAdminSignalsLiveSnapshot() {
       debugLastSignal,
       debugLastResult,
       debugLogs: debugLogs.slice(),
+      lastNewSignalSocketPayload,
+      lastNewResultSocketPayload,
+      signalWireVsPanelDiff,
+      resultWireVsPanelDiff,
     };
   }
   return snapCache;
@@ -251,10 +281,177 @@ export function getAdminSignalsLiveServerSnapshot() {
     debugLastSignal: null,
     debugLastResult: null,
     debugLogs: [],
+    lastNewSignalSocketPayload: null,
+    lastNewResultSocketPayload: null,
+    signalWireVsPanelDiff: null,
+    resultWireVsPanelDiff: null,
   };
 }
 
 let bridgeAttached = false;
+
+/**
+ * GPulse Lab: mismo payload que VistaLab, sin segundo `socket.on` (evita doble ingesta / orden).
+ * @type {{ onNewSignal: ((data: unknown) => void) | null, onNewResult: ((data: unknown) => void) | null }}
+ */
+const gpulseRelayHooks = {
+  onNewSignal: null,
+  onNewResult: null,
+};
+
+/**
+ * Registra callbacks del GPulse Lab tras `ingestNew*FromWire` (buffer VistaLab primero).
+ * Pasar `null` al desmontar el lab.
+ * @param {{ onNewSignal?: (data: unknown) => void, onNewResult?: (data: unknown) => void } | null} handlers
+ */
+export function registerGpulseLabRelayHandlers(handlers) {
+  if (handlers == null) {
+    gpulseRelayHooks.onNewSignal = null;
+    gpulseRelayHooks.onNewResult = null;
+    return;
+  }
+  gpulseRelayHooks.onNewSignal = handlers.onNewSignal ?? null;
+  gpulseRelayHooks.onNewResult = handlers.onNewResult ?? null;
+}
+
+/** Fuerza el bridge socket (p. ej. GPulse Lab sin suscriptores VistaLab). */
+export function ensureAdminSignalsIngestBridge() {
+  ensureAdminSignalsBridge();
+}
+
+/**
+ * Misma tubería que el evento socket `NEW_SIGNAL` (única fuente del buffer VistaLab).
+ * @param {unknown} data
+ * @param {string} [source]
+ */
+function ingestNewSignalFromWire(data, source = 'ingest:NEW_SIGNAL') {
+  ensureAdminSignalsBridge();
+  logPhaseActiveOnce();
+  const msg = data && typeof data === 'object' ? /** @type {Record<string, unknown>} */ (data) : {};
+  lastNewSignalSocketPayload = cloneWirePreview(msg);
+  const row0 = extractLiveRowFromSocketMsg(msg);
+  const { payload: row } = applyCanonicalModeToPayload(row0);
+  const { formatted, strictOk, rejectReason } = createLiveSignalEntry(row, nextRecvId());
+  if (INGEST_LOG) {
+    console.info('[admin-signals ingest]', 'SIGNAL', source, strictOk ? 'ok' : `reject:${rejectReason ?? 'UNKNOWN'}`);
+  }
+  if (!strictOk) {
+    console.warn('SIGNAL INVALIDA', rejectReason ?? 'UNKNOWN', row);
+    pushStructuredDebug({
+      type: 'REJECT_SIGNAL',
+      reason: rejectReason ?? 'UNKNOWN',
+      payload: {
+        mesa: formatted.mesa,
+        round: formatted.round,
+        recvId: formatted.recvId,
+        correlationKey: formatted.correlationKey,
+      },
+    });
+    bump();
+    return;
+  }
+  signalWireVsPanelDiff = diffNewSignalProviderVsPanel(msg, formatted);
+  if (signalWireVsPanelDiff.hasMismatch) {
+    pushStructuredDebug({
+      type: 'PANEL_VS_PROVIDER_SIGNAL',
+      payload: {
+        source,
+        mismatches: signalWireVsPanelDiff.mismatches,
+        provider: signalWireVsPanelDiff.provider,
+        panel: signalWireVsPanelDiff.panel,
+      },
+    });
+  }
+  recordCorrelationKeyObservation('signal', formatted, { source });
+  adminSignalsPredictionByMesa.set(String(formatted.mesa), formatted.prediction);
+  signals = [formatted, ...signals].slice(0, MAX_ITEMS);
+  debugLastSignal = { raw: row, formatted };
+  debugLogs = [`NEW_SIGNAL mesa=${formatted.mesa} ${formatted.prediction}`, ...debugLogs].slice(0, MAX_DEBUG_LOGS);
+  if (soundEnabled) playNewSignalSound();
+  bump();
+}
+
+/**
+ * Misma tubería que `NEW_RESULT` (buffer + VistaLab). Acepta fila plana tipo relay (`scoreDetail`, `ganador`, …).
+ * @param {unknown} data
+ * @param {string} [source]
+ */
+function ingestNewResultFromWire(data, source = 'ingest:NEW_RESULT') {
+  ensureAdminSignalsBridge();
+  logPhaseActiveOnce();
+  const msg = data && typeof data === 'object' ? /** @type {Record<string, unknown>} */ (data) : {};
+  if (isResultFullTraceClient()) console.log('📥 INGEST RESULT RECEIVED', msg);
+  lastNewResultSocketPayload = cloneWirePreview(msg);
+  const row0 = extractLiveRowFromSocketMsg(msg);
+  const { payload: row } = applyCanonicalModeToPayload(row0);
+  const mesaKey = String(row.mesa ?? 'N/A');
+  const predicted = adminSignalsPredictionByMesa.get(mesaKey) ?? null;
+  const { formatted, strictOk, rejectReason } = createLiveResultEntry(row, predicted, nextRecvId());
+  if (INGEST_LOG) {
+    console.info('[admin-signals ingest]', 'RESULT', source, strictOk ? 'ok' : `reject:${rejectReason ?? 'UNKNOWN'}`);
+  }
+  if (TRACE_ON) {
+    console.log('TRACE: PARSED PAYLOAD', row);
+    console.log('TRACE: VALIDATION RESULT', { ok: strictOk, reason: rejectReason ?? null });
+  }
+  if (!strictOk) {
+    if (isResultFullTraceClient()) console.error('❌ REJECT_RESULT', rejectReason ?? 'UNKNOWN', row);
+    console.error('RESULT LOST AT:', 'VISTALAB');
+    console.warn('REJECT_RESULT', { reason: rejectReason ?? 'UNKNOWN', formatted, raw: row });
+    pushStructuredDebug({
+      type: 'REJECT_RESULT',
+      reason: rejectReason ?? 'UNKNOWN',
+      payload: {
+        mesa: formatted.mesa,
+        round: formatted.round,
+        recvId: formatted.recvId,
+        correlationKey: formatted.correlationKey,
+        signalId: formatted.signalId,
+      },
+    });
+    bump();
+    return;
+  }
+  resultWireVsPanelDiff = diffNewResultProviderVsPanel(msg, formatted);
+  if (resultWireVsPanelDiff.hasMismatch) {
+    pushStructuredDebug({
+      type: 'PANEL_VS_PROVIDER_RESULT',
+      payload: {
+        source,
+        mismatches: resultWireVsPanelDiff.mismatches,
+        provider: resultWireVsPanelDiff.provider,
+        panel: resultWireVsPanelDiff.panel,
+      },
+    });
+  }
+  recordCorrelationKeyObservation('result', formatted, { source });
+  results = [formatted, ...results].slice(0, MAX_ITEMS);
+  debugLastResult = { raw: row, formatted };
+  debugLogs = [`NEW_RESULT mesa=${mesaKey} verdict=${formatted.verdict} vs=${formatted.versus}`, ...debugLogs].slice(0, MAX_DEBUG_LOGS);
+  if (soundEnabled) {
+    if (formatted.verdict === 'WIN') playWinSound();
+    else if (formatted.verdict === 'LOSS') playLossSound();
+  }
+  bump();
+}
+
+/**
+ * Inyecta una señal sin socket (misma ruta que `NEW_SIGNAL`). Solo para pruebas / fixtures.
+ * @param {unknown} data
+ * @param {string} [source]
+ */
+export function injectAdminSignalsFixtureSignal(data, source = 'fixture:NEW_SIGNAL') {
+  ingestNewSignalFromWire(data, source);
+}
+
+/**
+ * Inyecta un resultado sin socket (misma ruta que `NEW_RESULT`). Payload plano relay / core-api.
+ * @param {unknown} data
+ * @param {string} [source]
+ */
+export function injectAdminSignalsFixtureResult(data, source = 'fixture:NEW_RESULT') {
+  ingestNewResultFromWire(data, source);
+}
 
 function ensureAdminSignalsBridge() {
   if (bridgeAttached) return;
@@ -282,243 +479,26 @@ function ensureAdminSignalsBridge() {
     bump();
   };
 
-  /**
-   * @param {unknown} data
-   * @param {string} [source] — trazabilidad id vs mesa|round (ver correlationKeyStats)
-   */
-  const onSignal = (data, source = 'socket:NEW_SIGNAL') => {
-    logPhaseActiveOnce();
-    const msg = data && typeof data === 'object' ? /** @type {Record<string, unknown>} */ (data) : {};
-    const row0 = extractLiveRowFromSocketMsg(msg);
-    const { payload: row } = applyCanonicalModeToPayload(row0);
-    const { formatted, strictOk, rejectReason } = createLiveSignalEntry(row, nextRecvId());
-    if (!strictOk) {
-      console.warn('SIGNAL INVALIDA', rejectReason ?? 'UNKNOWN', row);
-      pushStructuredDebug({
-        type: 'REJECT_SIGNAL',
-        reason: rejectReason ?? 'UNKNOWN',
-        payload: {
-          mesa: formatted.mesa,
-          round: formatted.round,
-          recvId: formatted.recvId,
-          correlationKey: formatted.correlationKey,
-        },
-      });
-      bump();
-      return;
-    }
-    recordCorrelationKeyObservation('signal', formatted, { source });
-    adminSignalsPredictionByMesa.set(String(formatted.mesa), formatted.predictionLabel);
-    signals = [formatted, ...signals].slice(0, MAX_ITEMS);
-    debugLastSignal = { raw: row, formatted };
-    debugLogs = [`NEW_SIGNAL mesa=${formatted.mesa} ${formatted.predictionLabel}`, ...debugLogs].slice(0, MAX_DEBUG_LOGS);
-    if (soundEnabled) playNewSignalSound();
-    bump();
-  };
-
-  /** NEW_RESULT: mismo criterio que `resultsBuffer.unshift(formatResult(payload))` (más reciente primero). */
-  /**
-   * @param {unknown} data
-   * @param {string} [source]
-   */
-  const onResult = (data, source = 'socket:NEW_RESULT') => {
-    logPhaseActiveOnce();
-    const msg = data && typeof data === 'object' ? /** @type {Record<string, unknown>} */ (data) : {};
-    const row0 = extractLiveRowFromSocketMsg(msg);
-    const { payload: row } = applyCanonicalModeToPayload(row0);
-    const mesaKey = String(row.mesa ?? 'N/A');
-    const predicted = adminSignalsPredictionByMesa.get(mesaKey) ?? null;
-    const { formatted, strictOk, rejectReason } = createLiveResultEntry(row, predicted, nextRecvId());
-    if (TRACE_ON) {
-      console.log('TRACE: PARSED PAYLOAD', row);
-      console.log('TRACE: VALIDATION RESULT', { ok: strictOk, reason: rejectReason ?? null });
-    }
-    if (!strictOk) {
-      console.warn('REJECT_RESULT', { reason: rejectReason ?? 'UNKNOWN', formatted, raw: row });
-      pushStructuredDebug({
-        type: 'REJECT_RESULT',
-        reason: rejectReason ?? 'UNKNOWN',
-        payload: {
-          mesa: formatted.mesa,
-          round: formatted.round,
-          recvId: formatted.recvId,
-          correlationKey: formatted.correlationKey,
-          signalId: formatted.signalId,
-        },
-      });
-      bump();
-      return;
-    }
-    recordCorrelationKeyObservation('result', formatted, { source });
-    results = [formatted, ...results].slice(0, MAX_ITEMS);
-    debugLastResult = { raw: row, formatted };
-    debugLogs = [`NEW_RESULT mesa=${mesaKey} verdict=${formatted.verdict} vs=${formatted.versus}`, ...debugLogs].slice(0, MAX_DEBUG_LOGS);
-    if (soundEnabled) {
-      if (formatted.verdict === 'WIN') playWinSound();
-      else if (formatted.verdict === 'LOSS') playLossSound();
-    }
-    bump();
-  };
-
   socket.on('connect', onConnect);
   socket.on('disconnect', onDisconnect);
   socket.on('connect_error', onConnectError);
-  socket.on('NEW_SIGNAL', (d) => onSignal(d, 'socket:NEW_SIGNAL'));
-  socket.on('NEW_RESULT', (d) => onResult(d, 'socket:NEW_RESULT'));
-  socket.on('admin_signal_frame', (msg) => {
+  // Única tubería: mismo evento → buffer VistaLab → opcional GPulse Lab (ref, sin duplicar listeners).
+  socket.on('NEW_SIGNAL', (d) => {
+    ingestNewSignalFromWire(d, 'socket:NEW_SIGNAL');
+    const wireForGpulse = lastNewSignalSocketPayload;
     try {
-      console.log('SIGNAL FRAME:', msg);
-      const { eventType, row } = unwrapLiveFrameMessage(msg);
-      if (!row || Object.keys(row).length === 0) return;
-      const et = eventType.toUpperCase();
-      if (et === 'NEW_SIGNAL') onSignal(row, 'socket:admin_signal_frame');
-      if (et === 'NEW_RESULT') onResult(row, 'socket:admin_signal_frame');
-    } catch (err) {
-      console.warn('admin_signal_frame handler error', err);
+      gpulseRelayHooks.onNewSignal?.(wireForGpulse ?? d);
+    } catch (e) {
+      console.error('[admin-signals] gpulse relay NEW_SIGNAL', e);
     }
   });
-  socket.on('dashboardUpdate', (msg) => {
+  socket.on('NEW_RESULT', (d) => {
+    ingestNewResultFromWire(d, 'socket:NEW_RESULT');
+    const wireForGpulse = lastNewResultSocketPayload;
     try {
-      const raw = msg && typeof msg === 'object' ? /** @type {Record<string, unknown>} */ (msg) : null;
-      const payload = raw?.payload ?? raw?.data ?? null;
-      const fromEnvelope = raw != null ? String(raw.type ?? raw.eventName ?? '').trim() : '';
-      const fromPayload =
-        payload != null && typeof payload === 'object' && !Array.isArray(payload)
-          ? String(/** @type {Record<string, unknown>} */ (payload).type ?? /** @type {Record<string, unknown>} */ (payload).eventName ?? '').trim()
-          : '';
-      const eventType = (fromEnvelope || fromPayload || '').toUpperCase();
-      const displayType =
-        raw && 'type' in raw && raw.type != null
-          ? String(raw.type)
-          : raw && 'eventName' in raw && raw.eventName != null
-            ? String(raw.eventName)
-            : 'dashboardUpdate';
-
-      console.log('RAW EVENT:', raw);
-      console.log('PARSED PAYLOAD:', payload);
-
-      if (!payload) {
-        console.warn('EMPTY PAYLOAD — skipping', raw);
-        pushStructuredDebug({ type: 'DASHBOARD_UPDATE', reason: 'EMPTY_PAYLOAD', payload: raw });
-        bump();
-        return;
-      }
-
-      if (eventType === 'NEW_RESULT') {
-        // Soportar forma proveedor: data.results o data.data.results (mesa_info + ronda_objetivo)
-        const pAny = /** @type {any} */ (payload);
-        const hasResultsShallow =
-          pAny?.data &&
-          typeof pAny.data === 'object' &&
-          pAny.data.results &&
-          typeof pAny.data.results === 'object';
-        const hasResultsDeep =
-          pAny?.data?.data &&
-          typeof pAny.data.data === 'object' &&
-          pAny.data.data.results &&
-          typeof pAny.data.data.results === 'object';
-        if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'data' in payload && (hasResultsShallow || hasResultsDeep)) {
-          const p = /** @type {any} */ (payload);
-          const mesa = p?.mesa ?? p?.data?.mesa ?? null;
-          const mi =
-            p?.data?.data?.results?.mesa_info ??
-            p?.data?.results?.mesa_info ??
-            null;
-          const de = mi?.data_evento ?? mi?.data_event;
-          const round =
-            mi?.ronda_objetivo ??
-            de?.Ronda ??
-            de?.ronda ??
-            de?.round ??
-            mi?.ronda_actual ??
-            p?.ronda ??
-            p?.round ??
-            null;
-          const scoreDetail = mi
-            ? {
-                puntaje_player: mi.puntaje_player,
-                puntaje_banker: mi.puntaje_banker,
-                cartas_player: mi.cartas_player,
-                cartas_banker: mi.cartas_banker,
-                ganador: mi.ganador,
-                tablero: mi.tablero,
-              }
-            : undefined;
-          const ckWire =
-            p?.correlationKey ??
-            (p.data && typeof p.data === 'object' && !Array.isArray(p.data) ? p.data.correlationKey : undefined) ??
-            raw?.correlationKey;
-          const martingalaData =
-            p?.data && typeof p.data === 'object' && !Array.isArray(p.data) && 'martingalaData' in p.data
-              ? /** @type {Record<string, unknown>} */ (p.data).martingalaData
-              : raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data) && 'martingalaData' in raw.data
-                ? /** @type {Record<string, unknown>} */ (raw.data).martingalaData
-                : undefined;
-          onResult(
-            {
-              mesa,
-              round,
-              winStatus: raw?.winStatus,
-              mesa_info: mi,
-              scoreDetail,
-              ganador: mi?.ganador,
-              correlationKey: ckWire,
-              ...(martingalaData != null && typeof martingalaData === 'object' && !Array.isArray(martingalaData)
-                ? { martingalaData }
-                : {}),
-            },
-            'socket:dashboardUpdate:NEW_RESULT',
-          );
-        } else {
-          onResult(payload, 'socket:dashboardUpdate:NEW_RESULT');
-        }
-        return;
-      }
-      if (eventType === 'NEW_SIGNAL') {
-        const p = /** @type {any} */ (payload);
-        const sigDeep = p?.data?.data?.signal && typeof p.data.data.signal === 'object' ? p.data.data.signal : null;
-        const sigShallow = p?.data?.signal && typeof p.data.signal === 'object' ? p.data.signal : null;
-        const hasSignal = Boolean(sigDeep ?? sigShallow);
-        if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'data' in payload && hasSignal) {
-          const sig = sigDeep ?? sigShallow;
-          const mesa = p?.mesa ?? sig?.nombre_mesa ?? p?.data?.mesa ?? p?.data?.data?.mesa ?? null;
-          const dataRonda = p?.data?.data?.ronda ?? p?.data?.ronda;
-          const roundFromSig =
-            sig?.ronda_actual ??
-            sig?.Ronda ??
-            sig?.ronda ??
-            sig?.ronda_objetivo ??
-            sig?.gameRound ??
-            sig?.round ??
-            null;
-          onSignal(
-            {
-              mesa,
-              data: p.data,
-              round: roundFromSig ?? dataRonda ?? p?.ronda ?? p?.round ?? p?.ronda_actual ?? p?.Ronda ?? p?.ronda_objetivo ?? null,
-              vector_forecast: sig?.vector_forecast,
-              nombre_algoritmo: sig?.nombre_algoritmo,
-              recommendation: sig?.forecast ?? sig?.recommendation ?? null,
-              correlationKey:
-                p?.correlationKey ??
-                (p?.data && typeof p.data === 'object' && !Array.isArray(p.data) ? p.data.correlationKey : undefined) ??
-                raw?.correlationKey,
-              id: p?.id ?? sig?.id ?? sig?.signalId ?? raw?.id,
-              signalId: p?.signalId ?? raw?.signalId,
-            },
-            'socket:dashboardUpdate:NEW_SIGNAL',
-          );
-        } else {
-          onSignal(payload, 'socket:dashboardUpdate:NEW_SIGNAL');
-        }
-        return;
-      }
-
-      console.log('SOCKET EVENT:', displayType);
-      pushStructuredDebug({ type: 'DASHBOARD_UPDATE', payload: raw });
-      bump();
-    } catch (err) {
-      console.warn('dashboardUpdate handler error', err);
+      gpulseRelayHooks.onNewResult?.(wireForGpulse ?? d);
+    } catch (e) {
+      console.error('[admin-signals] gpulse relay NEW_RESULT', e);
     }
   });
 

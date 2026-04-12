@@ -3,7 +3,7 @@ import { extractNestedMesaInfo } from './supplierIntelExtract.js';
 import { getForensicCycleSnapshot } from './forensicObservability.js';
 import { useLabStore } from '../store/useLabStore.js';
 import { useGpulseLabUiStore } from '../store/useGpulseLabUiStore.js';
-import { handleResult } from '../middleware/useSignalMiddleware.js';
+import { handleResult } from '../engine/executionEngineDispatch.js';
 
 const THROTTLE_MS = 3000;
 /** @type {Map<string, number>} */

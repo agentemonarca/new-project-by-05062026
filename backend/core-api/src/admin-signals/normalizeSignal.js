@@ -9,6 +9,7 @@
 import { normalizeCorrelationKey } from './correlationKeyNormalize.js';
 import { readNestedDataSignal, resolveRoundFromProvider } from './signalNormalize.js';
 import { relayAdminSignalsToClients, snapshotProviderPayloadForClient } from './relayAdminSignalsToClients.js';
+import { isAdminSignalsFullFlowEnabled, recordFullFlowRow } from './providerFullFlowCapture.js';
 
 /** Logs forenses Docker / ronda: `ADMIN_SIGNALS_PRENORMALIZE_LOG=1` */
 function isPrenormalizeTraceOn() {
@@ -305,6 +306,10 @@ export function relayNormalizedAdminSignals(ctx, type, payload, meta = {}) {
   const rid = prep.payload.roundId;
   console.log('[NORMALIZED_FINAL]', mesa, rid, ck);
   logNormalizedWireSummary(prep.payload);
+  if (isAdminSignalsFullFlowEnabled()) {
+    console.log('🧠 NORMALIZED EVENT', { type, normalizedPayload: prep.payload });
+    recordFullFlowRow({ pipeline: 'normalized', type, normalizedPayload: prep.payload });
+  }
   return relayAdminSignalsToClients(ctx, type, prep.payload, {
     ...meta,
     providerSnapshot: snapshotProviderPayloadForClient(payload),

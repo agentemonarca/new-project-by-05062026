@@ -60,7 +60,9 @@ export default defineConfig(({ mode }) => {
       configureServer(server) {
         server.httpServer?.once('listening', () => {
           const port = server.config.server?.port ?? 5174;
-          console.log('✔ GPulse running on', port);
+          const host = server.config.server?.host === true ? '0.0.0.0' : server.config.server?.host || 'localhost';
+          const displayHost = host === '0.0.0.0' ? 'localhost' : host;
+          console.log(`✔ GPulse → http://${displayHost}:${port} (puerto fijado aquí; el default de Vite es 5173)`);
         });
       },
     },
@@ -139,6 +141,10 @@ export default defineConfig(({ mode }) => {
           },
         },
       },
+    },
+    test: {
+      include: ['src/**/*.test.js'],
+      environment: 'node',
     },
   };
 });

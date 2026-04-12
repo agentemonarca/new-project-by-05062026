@@ -1,12 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
-import {
-  disposeSignalMiddleware,
-  getActiveLabSignalPayloadForMesa,
-  onLabSocketConnect,
-  handleResult,
-  handleSignal,
-} from '../middleware/useSignalMiddleware.js';
+import { useEffect } from 'react';
+import { dispatchToEngine } from '../engine/executionEngineDispatch.js';
+import { disposeSignalMiddleware, onLabSocketConnect } from '../middleware/useSignalMiddleware.js';
+import { ensureAdminSignalsIngestBridge, registerGpulseLabRelayHandlers } from '../../realtime/adminSignalsLiveStore.js';
+import getAdminSignalsSocket from '../../services/socket-admin.js';
+import { getAdminSignalsIoOrigin } from '../../services/resolveAdminSignalsIoOrigin.js';
 import { useMetricsStore } from '../store/useMetricsStore.js';
 import { useSocketHealthStore } from '../store/useSocketHealthStore.js';
 import { useLabStore } from '../store/useLabStore.js';
@@ -21,21 +18,47 @@ import { auditPayloadMapping, detectMismatch } from '../utils/payloadContractAud
 import { deriveRecommendation, vectorForecastForDebug } from '../utils/deriveRecommendation.js';
 import { deriveMartingaleFields } from '../utils/martingaleUi.js';
 
+/** Mismo origen que `getAdminSignalsSocket` / VistaLab (`resolveAdminSignalsIoOrigin.js`). */
+const LAB_IO_ORIGIN = getAdminSignalsIoOrigin();
+
+/** Verificación Winx → cliente: `🔥 EVENT: NEW_*` sin depender del resto de logs. */
+const SOCKET_EVENT_TRACE = import.meta.env.VITE_ADMIN_SIGNALS_SOCKET_EVENT_LOG === '1';
+
+/** Irregular timing vs bulk/replay/demo: `🧠 TIMING CHECK` (serverTs vs Date.now()). */
+const TIMING_CHECK_LOG = import.meta.env.VITE_GPULSE_TIMING_CHECK_LOG === '1';
+
 /**
- * Origen Engine — namespace Socket.IO `/admin-signals`.
- * Prioridad: `VITE_GPULSE_LAB_IO_ORIGIN` → `VITE_ADMIN_SIGNALS_IO_ORIGIN` → core-api local (5050).
+ * @param {unknown} payload
  */
-function resolveLabIoOrigin() {
-  const lab = typeof import.meta.env.VITE_GPULSE_LAB_IO_ORIGIN === 'string' ? import.meta.env.VITE_GPULSE_LAB_IO_ORIGIN.trim() : '';
-  if (lab !== '') return lab.replace(/\/$/, '');
-  const admin = typeof import.meta.env.VITE_ADMIN_SIGNALS_IO_ORIGIN === 'string' ? import.meta.env.VITE_ADMIN_SIGNALS_IO_ORIGIN.trim() : '';
-  if (admin !== '') return admin.replace(/\/$/, '');
-  return 'http://localhost:5050';
+function correlationKeyFromSocketPayload(payload) {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) return undefined;
+  const p = /** @type {Record<string, unknown>} */ (payload);
+  if (p.correlationKey != null) return p.correlationKey;
+  const c = p.canonical;
+  if (c != null && typeof c === 'object' && !Array.isArray(c) && 'correlationKey' in c) {
+    return /** @type {Record<string, unknown>} */ (c).correlationKey;
+  }
+  return undefined;
 }
 
-const LAB_IO_ORIGIN = resolveLabIoOrigin();
-
-const DISABLE_AUTH = import.meta.env.VITE_ADMIN_SIGNALS_DISABLE_AUTH === '1';
+/**
+ * @param {'NEW_SIGNAL' | 'NEW_RESULT'} type
+ * @param {unknown} payload
+ */
+function logTimingCheck(type, payload) {
+  if (!TIMING_CHECK_LOG) return;
+  const p =
+    payload != null && typeof payload === 'object' && !Array.isArray(payload)
+      ? /** @type {Record<string, unknown>} */ (payload)
+      : {};
+  const signalTs = p.serverTs ?? p.createdAt;
+  console.log('🧠 TIMING CHECK', {
+    type,
+    correlationKey: correlationKeyFromSocketPayload(payload),
+    now: Date.now(),
+    signalTs,
+  });
+}
 
 /**
  * @param {string} type
@@ -94,7 +117,13 @@ async function fetchAndApplyGpulseLabCurrentState() {
         round: normalized.round,
         syncSource: 'bootstrap',
       });
-      handleSignal(normalized, currentSignal);
+      const rawVec = vectorForecastForDebug(currentSignal);
+      dispatchToEngine({
+        type: 'NEW_SIGNAL',
+        normalized,
+        rawPayload: currentSignal,
+        vectorForecast: Array.isArray(rawVec) ? rawVec : undefined,
+      });
       const id =
         normalized.mesa != null && String(normalized.mesa).trim() !== ''
           ? String(normalized.mesa)
@@ -125,7 +154,7 @@ async function fetchAndApplyGpulseLabCurrentState() {
         round: normalized.round,
         syncSource: 'bootstrap',
       });
-      useLabStore.getState().setResult(normalized);
+      dispatchToEngine({ type: 'NEW_RESULT', normalized });
       if (id) {
         useLabStore.getState().mergeSupplierIntelResult(currentResult, { mesaId: id });
       }
@@ -140,9 +169,6 @@ async function fetchAndApplyGpulseLabCurrentState() {
     useLabStore.getState().setSelectedMesaId(String(mesa));
   }
 }
-
-/** Evita desconectar en el primer cleanup de React Strict Mode (remount rápido). */
-const STRICT_MODE_DISCONNECT_DELAY_MS = 400;
 
 /** NEW_SIGNAL → argumento de useLabStore.setSignal */
 export function normalizeNewSignalPayload(payload) {
@@ -300,51 +326,18 @@ export function normalizeNewResultPayload(payload) {
 }
 
 export function useLabSocket() {
-  const socketRef = useRef(/** @type {import('socket.io-client').Socket | null} */ (null));
-  const disconnectTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
-
   useEffect(() => {
-    if (disconnectTimerRef.current != null) {
-      clearTimeout(disconnectTimerRef.current);
-      disconnectTimerRef.current = null;
-    }
-
-    const apiKeyRaw = import.meta.env.VITE_GENESIS_ADMIN_API_KEY;
-    const auth =
-      DISABLE_AUTH || typeof apiKeyRaw !== 'string' || apiKeyRaw.trim() === ''
-        ? undefined
-        : { apiKey: apiKeyRaw.trim() };
-
+    /** Una sola conexión con VistaLab: buffer primero, luego relay a este motor (`registerGpulseLabRelayHandlers`). */
+    ensureAdminSignalsIngestBridge();
+    const socket = getAdminSignalsSocket();
     const namespaceUrl = `${LAB_IO_ORIGIN}/admin-signals`;
-
-    /** @type {import('socket.io-client').Socket} */
-    let socket = socketRef.current;
-
-    if (socket == null) {
-      gpulseLabLog.operational('[gpulse-lab] connecting to namespace:', `${LAB_IO_ORIGIN}/admin-signals`);
-
-      socket = io(`${LAB_IO_ORIGIN}/admin-signals`, {
-        path: '/socket.io',
-        transports: ['websocket'],
-        withCredentials: false,
-        reconnection: true,
-        reconnectionAttempts: 15,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 30000,
-        randomizationFactor: 0.5,
-        ...(auth ? { auth } : {}),
-      });
-
-      socketRef.current = socket;
-    }
-
     const manager = socket.io;
 
-    const onConnect = () => {
+    const onConnectLab = () => {
       beginGpulseLabWarmupWindow(3000);
       onLabSocketConnect();
       useSocketHealthStore.getState().setConnected();
-      gpulseLabLog.operational('[gpulse-lab] socket connection success', {
+      gpulseLabLog.operational('[gpulse-lab] shared admin-signals socket (VistaLab wire)', {
         id: socket.id,
         url: namespaceUrl,
         path: '/socket.io',
@@ -377,7 +370,7 @@ export function useLabSocket() {
       gpulseLabLog.error('socket reconnection failed (max attempts)');
     };
 
-    socket.on('connect', onConnect);
+    socket.on('connect', onConnectLab);
     socket.on('connect_error', onConnectError);
     socket.on('disconnect', onDisconnect);
 
@@ -389,7 +382,7 @@ export function useLabSocket() {
       beginGpulseLabWarmupWindow(3000);
       onLabSocketConnect();
       useSocketHealthStore.getState().setConnected();
-      gpulseLabLog.operational('[gpulse-lab] socket already connected (reuse)', {
+      gpulseLabLog.operational('[gpulse-lab] socket already connected (shared singleton)', {
         id: socket.id,
         url: namespaceUrl,
       });
@@ -397,6 +390,23 @@ export function useLabSocket() {
     }
 
     const onNewSignal = (payload) => {
+      logTimingCheck('NEW_SIGNAL', payload);
+      if (SOCKET_EVENT_TRACE) {
+        console.log('🔥 EVENT: NEW_SIGNAL');
+        const p = payload != null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+        const canon =
+          /** @type {Record<string, unknown>} */ (p).canonical != null &&
+          typeof /** @type {Record<string, unknown>} */ (p).canonical === 'object'
+            ? /** @type {Record<string, unknown>} */ (/** @type {Record<string, unknown>} */ (p).canonical)
+            : null;
+        console.log('🔥 SOCKET RECEIVED', {
+          type: 'NEW_SIGNAL',
+          source: /** @type {Record<string, unknown>} */ (p).relaySource ?? /** @type {Record<string, unknown>} */ (p).source,
+          correlationKey:
+            /** @type {Record<string, unknown>} */ (p).correlationKey ??
+            (canon != null ? canon.correlationKey : undefined),
+        });
+      }
       console.log('RAW PROVIDER SIGNAL:', JSON.stringify(payload, null, 2));
       gpulseLabLog.debug('📡 SIGNAL', payload);
       const normalized = normalizeNewSignalPayload(payload);
@@ -428,7 +438,13 @@ export function useLabSocket() {
         round: normalized.round,
       });
       useMetricsStore.getState().bumpSignal();
-      handleSignal(normalized, payload);
+      const rawVecLive = vectorForecastForDebug(payload);
+      dispatchToEngine({
+        type: 'NEW_SIGNAL',
+        normalized,
+        rawPayload: payload,
+        vectorForecast: Array.isArray(rawVecLive) ? rawVecLive : undefined,
+      });
 
       const prev = id ? useLabStore.getState().mesas[id] : undefined;
       const cycleClosed = !prev || prev.estado === 'RESULT' || prev.estado === 'WAITING';
@@ -440,6 +456,16 @@ export function useLabSocket() {
     };
 
     const onNewResult = (payload) => {
+      logTimingCheck('NEW_RESULT', payload);
+      if (SOCKET_EVENT_TRACE) {
+        console.log('🔥 EVENT: NEW_RESULT');
+        const p = payload != null && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+        console.log('🔥 SOCKET RECEIVED', {
+          type: 'NEW_RESULT',
+          source: /** @type {Record<string, unknown>} */ (p).relaySource ?? /** @type {Record<string, unknown>} */ (p).source,
+          correlationKey: /** @type {Record<string, unknown>} */ (p).correlationKey,
+        });
+      }
       console.log('RAW PROVIDER RESULT:', JSON.stringify(payload, null, 2));
       gpulseLabLog.debug('📡 RESULT', payload);
       let normalized = normalizeNewResultPayload(payload);
@@ -494,8 +520,7 @@ export function useLabSocket() {
           mesa: normalized.mesa,
           round: normalized.round,
         });
-        // socket is transport only — middleware is the authority (auto-resync, correlation, delays).
-        handleResult(normalized);
+        dispatchToEngine({ type: 'NEW_RESULT', normalized });
         recordStreamResult(normalized, payload);
         useMetricsStore.getState().bumpResult();
       }
@@ -504,28 +529,20 @@ export function useLabSocket() {
       }
     };
 
-    socket.on('NEW_SIGNAL', onNewSignal);
-    socket.on('NEW_RESULT', onNewResult);
+    registerGpulseLabRelayHandlers({
+      onNewSignal,
+      onNewResult,
+    });
 
     return () => {
-      socket.off('connect', onConnect);
+      registerGpulseLabRelayHandlers(null);
+      socket.off('connect', onConnectLab);
       socket.off('connect_error', onConnectError);
       socket.off('disconnect', onDisconnect);
-      socket.off('NEW_SIGNAL', onNewSignal);
-      socket.off('NEW_RESULT', onNewResult);
 
       manager.off('reconnect_attempt', onReconnectAttempt);
       manager.off('reconnect', onReconnect);
       manager.off('reconnect_failed', onReconnectFailed);
-
-      disconnectTimerRef.current = setTimeout(() => {
-        disconnectTimerRef.current = null;
-        if (socketRef.current === socket) {
-          socket.disconnect();
-          socketRef.current = null;
-          useSocketHealthStore.getState().setDisconnected('client_teardown');
-        }
-      }, STRICT_MODE_DISCONNECT_DELAY_MS);
 
       disposeSignalMiddleware();
     };

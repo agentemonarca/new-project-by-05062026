@@ -9,6 +9,13 @@ describe('mapForecast', () => {
     expect(mapForecast(['E'])).toBe('TIE');
   });
 
+  it('segundo argumento: índice de celda 0..5', () => {
+    const vec = ['B', 'P', 'B', 'P', 'B', 'P'];
+    expect(mapForecast(vec, 0)).toBe('BANKER');
+    expect(mapForecast(vec, 1)).toBe('PLAYER');
+    expect(mapForecast(vec, 5)).toBe('PLAYER');
+  });
+
   it('vacío → null', () => {
     expect(mapForecast([])).toBe(null);
     expect(mapForecast(null)).toBe(null);
@@ -41,6 +48,46 @@ describe('resolveSignalFromProvider', () => {
         nombre_algoritmo: 'X',
       }),
     ).toEqual({ signalName: 'X', direction: 'BANKER' });
+  });
+
+  it('martingale 1-based: contador 2 → segunda celda del vector', () => {
+    expect(
+      resolveSignalFromProvider({
+        recommendation: 'UNKNOWN',
+        vector_forecast: ['B', 'P', 'B'],
+        nombre_algoritmo: 'SIM',
+        martingale: 2,
+      }),
+    ).toEqual({ signalName: 'SIM', direction: 'PLAYER' });
+  });
+
+  it('data.data.signal: martingala.contador_martingala gana sobre vector[0]', () => {
+    const payload = {
+      recommendation: 'UNKNOWN',
+      data: {
+        data: {
+          signal: {
+            nombre_algoritmo: 'SIMETRIA_DIRECTA',
+            vector_forecast: ['P', 'B', 'P'],
+            martingala: { contador_martingala: 2 },
+          },
+        },
+      },
+    };
+    expect(resolveSignalFromProvider(payload)).toEqual({
+      signalName: 'SIMETRIA_DIRECTA',
+      direction: 'BANKER',
+    });
+  });
+
+  it('contador 0 → primera celda', () => {
+    expect(
+      resolveSignalFromProvider({
+        vector_forecast: ['P', 'B'],
+        martingale: 0,
+        nombre_algoritmo: 'X',
+      }),
+    ).toEqual({ signalName: 'X', direction: 'PLAYER' });
   });
 });
 

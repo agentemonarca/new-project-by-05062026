@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bell,
   History,
@@ -33,14 +33,25 @@ import { getAdaptiveStreamDeadlineMs, getStreamDelayStatsForMesa } from '../stor
 import { useAlertStore } from '../store/useAlertStore.js';
 import { computeIntelligentWaitingUx } from '../utils/intelligentWaitingUx.js';
 import { useBaccaratLiveDealEngine } from '../hooks/useBaccaratLiveDealEngine.js';
-import { computePredictionFromRow, normalizeOutcomeCell } from '../utils/baccaratIntelligence.js';
-import { getMartingaleAccentClass, getMartingaleLabel } from '../utils/martingaleUi.js';
+import { normalizeOutcomeCell } from '../utils/baccaratIntelligence.js';
 import { validateUIUXState } from '../utils/uiUxValidator.js';
 import { validateUIFlow, UI_FLOW_STATES } from '../utils/uiFlowValidator.js';
 import { monitorProviderTruth } from '../utils/providerTruthMonitor.js';
 import { computeAndAlertTrace } from '../utils/forensicObservability.js';
 import { useGpulseLabUiStore } from '../store/useGpulseLabUiStore.js';
+import { useEngineRenderForensic } from '../hooks/useEngineRenderForensic.js';
+import { replayFold } from '../engine/executionReplay.js';
+import { selectEngineForDisplay, useExecutionEngineStore } from '../store/useExecutionEngineStore.js';
+import { useExecutionReplayStore } from '../store/useExecutionReplayStore.js';
+import { normalizeCorrelationKey } from '../utils/labCorrelationKey.js';
+import ExecutionReplayBar from './ExecutionReplayBar.jsx';
 import { detectAndPreventPreFailure } from '../utils/preFailureDetector.js';
+import { padForecastVector } from '../engine/executionEngine.js';
+import {
+  forecastStepIndexFromContador,
+  mapForecastAtStep,
+  recommendationFromForecastCell,
+} from '../../utils/forecastMartingaleStep.js';
 
 /** Títulos modo casino (es) + fallback inglés en store */
 const TITLE_BY_LIFECYCLE = {
@@ -204,33 +215,10 @@ function winnerToPlayerBanker(w) {
   return null;
 }
 
-/** @param {unknown[]} history */
-function buildMartingaleFeedFromCycleHistory(history) {
-  if (!Array.isArray(history) || history.length === 0) return [];
-  const rev = [...history].reverse();
-  const out = [];
-  for (let i = 0; i < rev.length; i += 1) {
-    const e = rev[i];
-    if (e == null || typeof e !== 'object' || e.type !== 'RESULT') continue;
-    let step = 1;
-    for (let j = i + 1; j < rev.length; j += 1) {
-      const prev = rev[j];
-      if (prev?.type === 'MARTINGALE') {
-        step = typeof prev.step === 'number' && Number.isFinite(prev.step) ? prev.step : 1;
-        break;
-      }
-      if (prev?.type === 'SIGNAL') break;
-    }
-    const ts = typeof e.timestamp === 'number' ? e.timestamp : Date.now();
-    out.push({
-      id: ts + i,
-      status: e.win === true ? 'WIN' : 'LOSS',
-      step,
-      time: ts,
-    });
-    if (out.length >= 20) break;
-  }
-  return out;
+/** Predicción del motor de ejecución → etiqueta PatternTracker */
+function trackerLabelFromEnginePrediction(pred) {
+  if (pred == null) return null;
+  return winnerToPlayerBanker(pred);
 }
 
 function GlassPanel({ children, className = '' }) {
@@ -300,40 +288,106 @@ function PlayingCard({ card, type, isDealt }) {
   );
 }
 
-function PatternTracker({ history, currentPrediction, lifecycleState: lc }) {
-  const lastFive = Array.isArray(history) && history.length > 0 ? history.slice(-5) : [];
-  const recentPatterns = lastFive.map((h) => (h && h.result) || null);
-  while (recentPatterns.length < 5) recentPatterns.unshift(null);
-  const displayPatterns = [...recentPatterns, currentPrediction];
+/** Vector + paso (proveedor: `contador_martingala` → celda; motor como respaldo). */
+function PatternTracker({ currentStep, maxSteps, vector, predictionLabel, tiroNumber }) {
+  const cells = Array.isArray(vector) ? vector : [];
+  const ms = typeof maxSteps === 'number' && maxSteps > 0 ? maxSteps : 6;
+  const stepLine =
+    typeof tiroNumber === 'number' && Number.isFinite(tiroNumber)
+      ? `TIRO ${tiroNumber} · paso ${currentStep}/${ms}`
+      : `paso ${currentStep}/${ms}`;
   return (
-    <div className="z-50 flex items-center gap-2 rounded-xl border border-indigo-500/20 bg-slate-900/60 p-3 backdrop-blur-lg">
-      <span className="mr-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-400">
-        <Crosshair className="h-3 w-3" /> Secuencia
-      </span>
-      {displayPatterns.map((result, i) => {
-        const isLastHistory = i === 4;
-        const isPrediction = i === 5;
-        const isActive =
-          (lc === LAB_LIFECYCLE_STATES.BETTING_PHASE && isPrediction) ||
-          ((lc === LAB_LIFECYCLE_STATES.BETTING_CLOSED || lc === LAB_LIFECYCLE_STATES.WAITING_RESULT) &&
-            isLastHistory);
-        let colorClass = 'border-slate-600 bg-slate-700/50 shadow-none';
-        if (result === 'PLAYER') colorClass = 'border-blue-400 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]';
-        if (result === 'BANKER') colorClass = 'border-red-400 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]';
-        if (result === 'TIE') colorClass = 'border-emerald-400 bg-emerald-600 shadow-[0_0_10px_rgba(52,211,153,0.6)]';
-        return (
-          <div key={i} className="group relative">
+    <div className="z-50 flex flex-col gap-2 rounded-xl border border-indigo-500/20 bg-slate-900/60 p-3 backdrop-blur-lg">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-400">
+          <Crosshair className="h-3 w-3" /> Vector
+        </span>
+        <span className="font-mono text-[10px] text-cyan-300/90">{stepLine}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {cells.map((cell, i) => {
+          const side = trackerLabelFromEnginePrediction(cell);
+          const isActive = typeof currentStep === 'number' && currentStep === i + 1;
+          let colorClass = 'border-slate-600 bg-slate-700/50 text-slate-500';
+          if (side === 'PLAYER') colorClass = 'border-blue-400 bg-blue-500/80 text-white';
+          if (side === 'BANKER') colorClass = 'border-red-400 bg-red-500/80 text-white';
+          if (side === 'TIE') colorClass = 'border-emerald-400 bg-emerald-600/80 text-white';
+          const letter =
+            side === 'PLAYER' ? 'P' : side === 'BANKER' ? 'B' : side === 'TIE' ? 'T' : '—';
+          return (
             <div
-              className={`h-5 w-5 rounded-full border transition-all duration-500 ${colorClass} ${
-                isActive ? 'scale-125 animate-pulse' : 'scale-100'
-              } ${!result && isPrediction ? 'flex items-center justify-center border-dashed border-indigo-500/50 bg-transparent text-xs text-indigo-500' : ''}`}
+              key={i}
+              className={`flex h-7 min-w-[1.75rem] items-center justify-center rounded-md border px-1 font-mono text-[10px] font-bold ${colorClass} ${
+                isActive ? 'ring-2 ring-indigo-400 ring-offset-1 ring-offset-slate-900' : ''
+              }`}
             >
-              {!result && isPrediction ? '?' : null}
+              {letter}
             </div>
-          </div>
+          );
+        })}
+      </div>
+      {predictionLabel ? (
+        <div className="text-center text-[10px] font-bold uppercase tracking-wider text-indigo-200/90">
+          predicción · {predictionLabel}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Historial del motor (`history` ya viene del reducer). */
+function HistoryPanel({ history }) {
+  const rows = Array.isArray(history) ? history : [];
+  if (rows.length === 0) {
+    return <p className="text-xs text-slate-500">Sin entradas en el motor para este ciclo.</p>;
+  }
+  return (
+    <>
+      {rows.map((h, i) => {
+        const pred = trackerLabelFromEnginePrediction(h.prediction);
+        const resRaw = h.result;
+        const res = winnerToPlayerBanker(resRaw);
+        const id = `eh-${h.step}-${i}`;
+        return (
+          <GlassPanel key={id} className="group flex cursor-default items-center justify-between p-4 transition-colors hover:bg-indigo-900/20">
+            <div>
+              <div className="mb-1 font-mono text-[10px] font-bold text-slate-500">PASO {h.step}</div>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                <span>
+                  pred:{' '}
+                  <span className="font-bold text-slate-200">{pred ?? '—'}</span>
+                </span>
+                <span>
+                  res:{' '}
+                  <span
+                    className={`font-black ${
+                      res === 'BANKER'
+                        ? 'text-red-400'
+                        : res === 'PLAYER'
+                          ? 'text-blue-400'
+                          : res === 'TIE'
+                            ? 'text-emerald-400'
+                            : 'text-slate-500'
+                    }`}
+                  >
+                    {res ?? '—'}
+                  </span>
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div
+                className={`text-xs font-black uppercase ${
+                  h.status === 'WIN' ? 'text-emerald-400' : h.status === 'LOSS' ? 'text-rose-400' : 'text-slate-500'
+                }`}
+              >
+                {h.status ?? '—'}
+              </div>
+            </div>
+          </GlassPanel>
         );
       })}
-    </div>
+    </>
   );
 }
 
@@ -354,7 +408,69 @@ export default function CenterPanel() {
     [mesas, effectiveId],
   );
 
-  const recommendation = row.recommendation;
+  const selectedCorrelationKey = useMemo(
+    () => normalizeCorrelationKey(null, row.mesa ?? effectiveId, row.round),
+    [row.mesa, row.round, effectiveId],
+  );
+
+  const replayRow = useExecutionReplayStore(
+    useCallback(
+      (s) => (selectedCorrelationKey ? s.byCk[selectedCorrelationKey] : undefined),
+      [selectedCorrelationKey],
+    ),
+  );
+
+  const liveEngineState = useExecutionEngineStore(
+    useCallback(
+      (s) => selectEngineForDisplay(s.engineMap, selectedCorrelationKey, s.engineIndex),
+      [selectedCorrelationKey],
+    ),
+  );
+
+  const engineState = useMemo(() => {
+    if (replayRow?.events?.length) {
+      const tail = replayRow.events.length - 1;
+      if (replayRow.cursor < tail) {
+        return replayFold(replayRow.events, replayRow.cursor);
+      }
+    }
+    return liveEngineState;
+  }, [replayRow, liveEngineState]);
+
+  useEngineRenderForensic(engineState.correlationKey);
+
+  const providerForecastSideLabel = useMemo(() => {
+    const vf = row.vector_forecast;
+    if (!Array.isArray(vf) || vf.length === 0) return null;
+    const idx = forecastStepIndexFromContador(row.martingala);
+    const cell = mapForecastAtStep(vf, idx);
+    return recommendationFromForecastCell(cell);
+  }, [row.vector_forecast, row.martingala]);
+
+  const patternTrackerVector = useMemo(() => {
+    const vf = row.vector_forecast;
+    if (Array.isArray(vf) && vf.length > 0) return padForecastVector(vf);
+    return Array.isArray(engineState.vector) ? engineState.vector : [];
+  }, [row.vector_forecast, engineState.vector]);
+
+  const patternTrackerStep = useMemo(() => {
+    if (Array.isArray(row.vector_forecast) && row.vector_forecast.length > 0) {
+      return forecastStepIndexFromContador(row.martingala) + 1;
+    }
+    return typeof engineState.currentStep === 'number' ? engineState.currentStep : 0;
+  }, [row.vector_forecast, row.martingala, engineState.currentStep]);
+
+  const tiroDisplayNumber = useMemo(() => {
+    const c = Number(row.martingala);
+    if (!Number.isFinite(c)) return null;
+    return c + 1;
+  }, [row.martingala]);
+
+  const predictionSideLabel = useMemo(
+    () => providerForecastSideLabel ?? trackerLabelFromEnginePrediction(engineState.prediction),
+    [providerForecastSideLabel, engineState.prediction],
+  );
+
   const ganador = row.ganador;
   const mesaInfo = row.supplierMesaInfoFull;
 
@@ -474,11 +590,9 @@ export default function CenterPanel() {
           : `Esperando resultado… · ${waitingFeedback.tierMessage}`;
     } else {
       subtitle =
-        recommendation == null
+        providerForecastSideLabel == null
           ? 'Señal activa · esperando resultado del proveedor'
-          : typeof recommendation === 'object'
-            ? JSON.stringify(recommendation)
-            : String(recommendation);
+          : `Señal activa · ${providerForecastSideLabel}`;
     }
   } else if (lifecycleState === LAB_LIFECYCLE_STATES.STREAM_INTERRUPTED) {
     subtitle = 'La mesa no ha emitido resultado en el tiempo esperado…';
@@ -521,8 +635,6 @@ export default function CenterPanel() {
     bankerCards: tableData.bankerCards,
     lifecycleState: uiLifecycleState,
   });
-
-  const predictionHud = useMemo(() => computePredictionFromRow(row), [row.recommendation, row.martingala]);
 
   const winnerForTableLive = isDealing && dealStep < totalDealSteps ? null : winnerForTable;
 
@@ -644,14 +756,6 @@ export default function CenterPanel() {
     return lifecycleState;
   }, [lifecycleState]);
 
-  const predictionSideLabel = useMemo(() => {
-    const s = predictionHud.side;
-    if (s === 'P') return 'PLAYER';
-    if (s === 'B') return 'BANKER';
-    if (s === 'T') return 'TIE';
-    return null;
-  }, [predictionHud.side]);
-
   const supplierDisplay = useMemo(() => {
     const pc = (Array.isArray(visiblePlayer) ? visiblePlayer : []).map(adaptCardPlaying).filter(Boolean);
     const bc = (Array.isArray(visibleBanker) ? visibleBanker : []).map(adaptCardPlaying).filter(Boolean);
@@ -665,36 +769,16 @@ export default function CenterPanel() {
     };
   }, [visiblePlayer, visibleBanker, winnerForTableLive, winnerForTable, tableData]);
 
-  const historyUi = useMemo(() => {
-    const arr = Array.isArray(row.wins) ? row.wins.slice(-12) : [];
-    const conf = predictionHud.confidence;
-    return [...arr].reverse().map((w, i) => {
-      const c = normalizeOutcomeCell(w);
-      return {
-        id: `h-${i}-${String(c)}`,
-        round: row.round != null ? String(Math.max(0, Number(row.round) - i)) : String(i),
-        result: c === 'P' ? 'PLAYER' : c === 'B' ? 'BANKER' : 'TIE',
-        pattern: c === 'P' ? '🔵' : c === 'B' ? '🔴' : '⚪',
-        accuracy: conf != null ? `${conf}%` : '—',
-      };
-    });
-  }, [row.wins, row.round, predictionHud.confidence]);
-
-  const patternHistoryForTracker = useMemo(() => {
-    const slice = Array.isArray(row.wins) ? row.wins.slice(-5) : [];
-    const items = slice.map((cell) => {
-      const c = normalizeOutcomeCell(cell);
-      const result = c === 'P' ? 'PLAYER' : c === 'B' ? 'BANKER' : c === 'T' ? 'TIE' : null;
-      return { result };
-    });
-    const pad = Math.max(0, 5 - items.length);
-    return [...Array.from({ length: pad }, () => ({ result: null })), ...items];
-  }, [row.wins]);
-
-  const martingaleHistoryUi = useMemo(
-    () => buildMartingaleFeedFromCycleHistory(row.currentCycleHistory ?? []),
-    [row.currentCycleHistory],
-  );
+  const martingaleHistoryUi = useMemo(() => {
+    if (!Array.isArray(engineState.history) || engineState.history.length === 0) return [];
+    const t0 = engineState.startedAt ?? Date.now();
+    return engineState.history.map((h, i) => ({
+      id: `eng-${String(engineState.correlationKey ?? 'ck')}-${h.step}-${i}`,
+      status: h.status,
+      step: h.step,
+      time: t0 + i * 100,
+    }));
+  }, [engineState.history, engineState.startedAt, engineState.correlationKey]);
 
   const metricsPair = useMemo(() => {
     const w = Array.isArray(row.wins) ? row.wins : [];
@@ -786,6 +870,10 @@ export default function CenterPanel() {
                   : 'scale-90 bg-blue-900/10'
           }`}
         />
+      </div>
+
+      <div className="relative z-40 border-b border-cyan-500/10 bg-slate-950/50 px-4 py-2 sm:px-6">
+        <ExecutionReplayBar correlationKey={selectedCorrelationKey} />
       </div>
 
       <header className="relative z-50 flex h-16 items-center justify-between border-b border-indigo-500/20 bg-slate-900/80 px-6 backdrop-blur-xl">
@@ -949,7 +1037,11 @@ export default function CenterPanel() {
             <div className="flex items-center justify-between border-t border-indigo-500/20 pt-3">
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Ciclo Actual</span>
               <span className="text-xs font-black text-indigo-300">
-                Tiro {Math.min(6, Math.max(1, Number(row.martingala ?? 0) || 1))} / 6
+                {engineState.status === 'RUNNING' && tiroDisplayNumber != null
+                  ? `TIRO ${tiroDisplayNumber}`
+                  : engineState.status === 'RUNNING'
+                    ? `${engineState.currentStep}/${engineState.maxSteps}`
+                    : '—'}
               </span>
             </div>
           </GlassPanel>
@@ -983,6 +1075,16 @@ export default function CenterPanel() {
           </div>
 
           <div className="flex min-h-[180px] flex-1 flex-col space-y-3 overflow-hidden">
+            <div className="rounded-lg border border-slate-600/40 bg-slate-900/40 px-2 py-1.5 font-mono text-[9px] text-slate-400">
+              <span className="text-slate-500">Execution engine</span>{' '}
+              <span className="text-cyan-300/90">{engineState.status}</span>
+              {engineState.status === 'RUNNING' ? (
+                <span className="text-slate-500">
+                  {' '}
+                  · step {patternTrackerStep}/{engineState.maxSteps}
+                </span>
+              ) : null}
+            </div>
             <h3 className="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
               Historial Martingala <span className="text-indigo-400">(Ciclo 6)</span>
             </h3>
@@ -1099,9 +1201,11 @@ export default function CenterPanel() {
 
             <div className="absolute top-28 z-50">
               <PatternTracker
-                history={patternHistoryForTracker}
-                currentPrediction={predictionSideLabel}
-                lifecycleState={uiLifecycleState}
+                currentStep={patternTrackerStep}
+                maxSteps={engineState.maxSteps}
+                vector={patternTrackerVector}
+                predictionLabel={predictionSideLabel}
+                tiroNumber={tiroDisplayNumber}
               />
             </div>
 
@@ -1389,36 +1493,20 @@ export default function CenterPanel() {
               >
                 {predictionSideLabel ?? 'ANALIZANDO'}
               </div>
-              <div className="mt-4 flex w-full items-center gap-3 px-2">
-                <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className={`h-full transition-all duration-1000 ${
-                      predictionSideLabel === 'BANKER'
-                        ? 'bg-gradient-to-r from-red-600 to-pink-400 shadow-[0_0_10px_rgba(239,68,68,0.8)]'
-                        : predictionSideLabel === 'PLAYER'
-                          ? 'bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_10px_rgba(59,130,246,0.8)]'
-                          : 'bg-transparent'
-                    }`}
-                    style={{ width: `${predictionHud.confidence ?? 0}%` }}
-                  />
+              <div className="mt-4 w-full px-2 text-center font-mono text-[10px] text-slate-400">
+                <div className="mb-1 uppercase tracking-widest text-slate-500">Motor</div>
+                <div className="text-indigo-200">
+                  {engineState.status}
+                  {engineState.status === 'RUNNING'
+                    ? ` · paso ${patternTrackerStep}/${engineState.maxSteps}`
+                    : ''}
                 </div>
-                <span
-                  className={`w-8 text-right text-xs font-black ${predictionHud.confidence ? 'text-white' : 'text-slate-600'}`}
-                >
-                  {predictionHud.confidence ?? 0}%
-                </span>
-              </div>
-              <div className="mt-3 w-full px-2 text-center">
-                <div className="mb-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">
-                  Martingala
-                </div>
-                <div
-                  className={`font-mono text-[11px] font-bold ${row.signalMartingaleLevel != null ? getMartingaleAccentClass(row.signalMartingaleLevel) : 'text-slate-500'}`}
-                >
-                  {row.signalMartingaleLevel != null
-                    ? `${row.martingaleType ?? getMartingaleLabel(row.signalMartingaleLevel)} (${row.signalMartingaleLevel})`
-                    : '—'}
-                </div>
+                {engineState.result != null ? (
+                  <div className="mt-2 text-[11px] text-slate-300">
+                    último resultado:{' '}
+                    <span className="font-bold text-white">{String(engineState.result)}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </GlassPanel>
@@ -1518,37 +1606,7 @@ export default function CenterPanel() {
             </button>
           </div>
           <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-2">
-            {historyUi.length === 0 ? (
-              <p className="text-xs text-slate-500">Sin historial de resultados.</p>
-            ) : (
-              historyUi.map((item) => (
-                <GlassPanel
-                  key={item.id}
-                  className="group flex cursor-pointer items-center justify-between p-4 transition-colors hover:bg-indigo-900/20"
-                >
-                  <div>
-                    <div className="mb-1 font-mono text-[10px] font-bold text-slate-500">RONDA {item.round}</div>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`text-lg font-black ${
-                          item.result === 'BANKER'
-                            ? 'text-red-400 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]'
-                            : item.result === 'PLAYER'
-                              ? 'text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.8)]'
-                              : 'text-emerald-400'
-                        }`}
-                      >
-                        {item.result}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-black text-white">{item.accuracy} PRECISIÓN</div>
-                    <div className="text-xs text-indigo-300/70">Patrón {item.pattern}</div>
-                  </div>
-                </GlassPanel>
-              ))
-            )}
+            <HistoryPanel history={engineState.history} />
           </div>
         </div>
       </div>

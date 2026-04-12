@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { normalizeNewResultPayload, normalizeNewSignalPayload } from '../lib/externalSignalsTypes.js';
+import {
+  extractProviderSignalAlgorithmName,
+  normalizeNewResultPayload,
+  normalizeNewSignalPayload,
+} from '../lib/externalSignalsTypes.js';
+import { isGpulseFullFlowEnabled, postFullFlowRow } from '../../utils/gpulseFullFlowClient.js';
 
 /** @typedef {'pending' | 'won' | 'lost'} SignalSettlement */
 
@@ -17,6 +22,7 @@ import { normalizeNewResultPayload, normalizeNewSignalPayload } from '../lib/ext
  * @property {number | null} settledAt
  * @property {boolean | null} winStatus
  * @property {Record<string, unknown>} rawSignal
+ * @property {string | null} algorithmDisplayName — snapshot al ingest (nombre modelo desde payload relay).
  * @property {Record<string, unknown> | null} rawResult
  */
 
@@ -179,6 +185,7 @@ export const useExternalSignalsStore = create((set, get) => ({
 
   ingestNewSignal(payload) {
     const n = normalizeNewSignalPayload(payload);
+    const algorithmDisplayName = extractProviderSignalAlgorithmName(payload) || null;
     const row = /** @type {ExternalBaccaratSignalRow} */ ({
       id: genId(),
       correlationKey: n.correlationKey,
@@ -192,6 +199,7 @@ export const useExternalSignalsStore = create((set, get) => ({
       settledAt: null,
       winStatus: null,
       rawSignal: n.raw,
+      algorithmDisplayName,
       rawResult: null,
     });
 
@@ -206,6 +214,11 @@ export const useExternalSignalsStore = create((set, get) => ({
         },
       };
     });
+    if (isGpulseFullFlowEnabled()) {
+      const s = get();
+      console.log('🧠 STORE UPDATE', { signals: s.activeSignals, history: s.history });
+      void postFullFlowRow({ pipeline: 'store', after: 'ingestNewSignal', signals: s.activeSignals, history: s.history });
+    }
     get().pushEvent(
       'NEW_SIGNAL',
       `${n.recommendation} · mesa ${n.mesa || '—'} · ronda ${n.round || '—'}`,
@@ -255,6 +268,11 @@ export const useExternalSignalsStore = create((set, get) => ({
         },
       };
     });
+    if (isGpulseFullFlowEnabled()) {
+      const s = get();
+      console.log('🧠 STORE UPDATE', { signals: s.activeSignals, history: s.history });
+      void postFullFlowRow({ pipeline: 'store', after: 'ingestNewResult', signals: s.activeSignals, history: s.history });
+    }
 
     get().pushEvent('NEW_RESULT', `${status.toUpperCase()} · ${target.recommendation} · mesa ${target.mesa}`);
     get().recordSettlementLatency(latencyMs);

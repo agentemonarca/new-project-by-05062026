@@ -18,6 +18,16 @@ import {
 import { getSignalStreamInterpreter } from './signalStreamInterpreter.js';
 import { getSignalSessionTracker } from './signalSessionTracker.js';
 import { buildGpulseLabCurrentStateResponse } from './gpulseLabCurrentState.js';
+import { getAdminSignalsRelayContext } from './adminSignalsRelayContext.js';
+import { relayNormalizedAdminSignals } from './normalizeSignal.js';
+import { getAdminSignalsRelayDiagnostics } from './adminSignalsRelayDiagnostics.js';
+import { isAdminSignalsFullFlowEnabled, recordFullFlowRow } from './providerFullFlowCapture.js';
+
+/** POST /api/admin/signals/dev/* — activo en no-producción o si ADMIN_SIGNALS_SIMULATE_HTTP=1 */
+function isSimulateHttpEnabled() {
+  const forced = String(process.env.ADMIN_SIGNALS_SIMULATE_HTTP ?? '').trim() === '1';
+  return forced || process.env.NODE_ENV !== 'production';
+}
 
 /**
  * @param {import('express').Request} req
@@ -56,7 +66,11 @@ export function adminSignalsApi({ processor, logger, configRateLimit, persistenc
   r.get('/admin/signals/config', async (_req, res) => {
     try {
       if (persistence?.isReady?.()) await persistence.reloadConfigToRuntime();
-      res.json({ ok: true, config: getPublicConfigFromRuntime() });
+      res.json({
+        ok: true,
+        config: getPublicConfigFromRuntime(),
+        relayDiagnostics: getAdminSignalsRelayDiagnostics(),
+      });
     } catch (e) {
       res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
@@ -258,6 +272,89 @@ export function adminSignalsApi({ processor, logger, configRateLimit, persistenc
     res.json({ ok: true });
   });
 
+  /**
+   * Simula un ciclo proveedor (NEW_SIGNAL + NEW_RESULT retardado), mismo pipeline que relay real.
+   * Requiere header `X-Admin-Api-Key` (o sesión admin). Body opcional: `{ mesa?, round? }`.
+   */
+  r.get('/admin/signals/dev/simulate-status', (_req, res) => {
+    const ctx = getAdminSignalsRelayContext();
+    res.json({
+      ok: true,
+      simulateHttpEnabled: isSimulateHttpEnabled(),
+      relayReady: Boolean(ctx?.io),
+    });
+  });
+
+  r.post('/admin/signals/dev/simulate-cycle', limit, async (req, res) => {
+    if (!isSimulateHttpEnabled()) {
+      return res.status(403).json({
+        ok: false,
+        error: 'simulate_http_disabled',
+        hint: 'Set ADMIN_SIGNALS_SIMULATE_HTTP=1 (required when NODE_ENV=production)',
+      });
+    }
+    const ctx = getAdminSignalsRelayContext();
+    if (!ctx?.io) {
+      return res.status(503).json({ ok: false, error: 'relay_context_unavailable' });
+    }
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const mesa = String(body.mesa || 'Baccarat Sim').trim() || 'Baccarat Sim';
+    const roundRaw = body.round;
+    const round = Number.isFinite(Number(roundRaw)) ? Math.trunc(Number(roundRaw)) : Math.abs(Date.now() % 1_000_000_000);
+    const pairId = `sim-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const testResultDelayMs = Math.max(0, Number(process.env.ADMIN_SIGNALS_TEST_RESULT_DELAY_MS || 650));
+
+    const signalPayload = {
+      id: pairId,
+      data: {
+        signal: {
+          nombre_mesa: mesa,
+          ronda_actual: round,
+          vector_forecast: ['B', 'P', 'B', 'B', 'P', 'B'],
+          nombre_algoritmo: 'SIMULATE_HTTP',
+        },
+      },
+    };
+
+    const outSignal = relayNormalizedAdminSignals(ctx, 'NEW_SIGNAL', signalPayload, { source: 'relay' });
+
+    const winner = Math.random() > 0.5 ? 'PLAYER' : 'BANKER';
+    const scoreDetail =
+      winner === 'PLAYER'
+        ? { ganador: 'PLAYER', puntaje_player: '8', puntaje_banker: '6', cartas_player: ['K', '8'], cartas_banker: ['Q', '6'] }
+        : { ganador: 'BANKER', puntaje_player: '5', puntaje_banker: '7', cartas_player: ['9', '6'], cartas_banker: ['K', '7'] };
+
+    setTimeout(() => {
+      try {
+        relayNormalizedAdminSignals(
+          ctx,
+          'NEW_RESULT',
+          {
+            mesa,
+            round,
+            signalId: pairId,
+            winStatus: winner === 'PLAYER',
+            scoreDetail,
+            correlationKey: `${mesa}|${round}`,
+          },
+          { source: 'relay' },
+        );
+      } catch (e) {
+        logger?.warn?.('simulate_cycle_result_error', { message: e?.message || String(e) });
+      }
+    }, testResultDelayMs);
+
+    res.json({
+      ok: true,
+      mesa,
+      round,
+      pairId,
+      winnerScheduled: winner,
+      newSignal: outSignal,
+      resultScheduledMs: testResultDelayMs,
+    });
+  });
+
   /** Últimos frames interpretados (memoria) + contadores; alineado con Socket `signal_stream_frame`. */
   r.get('/admin/signals/stream-debug', (req, res) => {
     const interp = getSignalStreamInterpreter();
@@ -310,6 +407,23 @@ export function adminSignalsApi({ processor, logger, configRateLimit, persistenc
       ok: true,
       session: completed[0] ?? null,
     });
+  });
+
+  /**
+   * Merge GPulse client rows into `debug/provider-full-flow.json` when ADMIN_SIGNALS_FULL_FLOW=1.
+   * Body: any JSON object (e.g. `{ pipeline: 'front_socket', type: 'NEW_SIGNAL', data }`).
+   */
+  r.post('/admin/signals/full-flow', limit, (req, res) => {
+    try {
+      if (!isAdminSignalsFullFlowEnabled()) {
+        return res.status(404).json({ ok: false, error: 'full_flow_disabled' });
+      }
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      recordFullFlowRow({ ...body });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ ok: false, error: String(e?.message || e) });
+    }
   });
 
   return r;

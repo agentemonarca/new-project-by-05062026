@@ -87,7 +87,7 @@ export function GenesisDashboardPage({
     if (import.meta.env.VITE_GENESIS_INITIAL_NAV) {
       return normalizeGenesisNav(import.meta.env.VITE_GENESIS_INITIAL_NAV);
     }
-    return pathToNav(window.location.pathname);
+    return pathToNav(window.location.pathname, window.location.search || '');
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -313,8 +313,8 @@ export function GenesisDashboardPage({
 
   useEffect(() => {
     if (import.meta.env.VITE_GENESIS_INITIAL_NAV) return;
-    setNav(pathToNav(location.pathname));
-  }, [location.pathname]);
+    setNav(pathToNav(location.pathname, location.search));
+  }, [location.pathname, location.search]);
 
   const runClaim = async (type) => {
     if (!hasSession) {

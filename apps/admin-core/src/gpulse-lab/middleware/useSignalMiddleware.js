@@ -115,16 +115,14 @@ function extractProviderTimerFromRaw(raw) {
   };
 }
 
-function processSignalFlow(event) {
-  const { type, payload, rawPayload } = event;
-  console.log('FLOW IN:', { type, payload });
+/** Aplicación única al lab; solo debe invocarse desde `dispatchToEngine` (motor + lab). */
+export function labApplySignal(payload, rawPayload) {
+  orchestrateNewSignal(payload, rawPayload);
+}
 
-  if (type === 'NEW_SIGNAL') {
-    orchestrateNewSignal(payload, rawPayload);
-  }
-  if (type === 'NEW_RESULT') {
-    orchestrateNewResult(payload);
-  }
+/** Aplicación única al lab para resultado. */
+export function labApplyResult(payload) {
+  orchestrateNewResult(payload);
 }
 
 /**
@@ -308,19 +306,3 @@ export function onLabSocketConnect() {
   useLabStore.getState().enterWaitingSignal();
 }
 
-/** @param {Record<string, unknown>} payload — normalizado NEW_SIGNAL */
-export function handleSignal(payload, rawPayload) {
-  processSignalFlow({ type: 'NEW_SIGNAL', payload, rawPayload });
-}
-
-/** @param {Record<string, unknown>} payload — normalizado NEW_RESULT */
-export function handleResult(payload) {
-  processSignalFlow({ type: 'NEW_RESULT', payload });
-}
-
-/**
- * @param {{ type: 'NEW_SIGNAL' | 'NEW_RESULT', payload: Record<string, unknown>, rawPayload?: unknown }} event
- */
-export function useSignalMiddleware(event) {
-  processSignalFlow(event);
-}

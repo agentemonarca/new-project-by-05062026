@@ -11,7 +11,7 @@ import {
 } from '../utils/mockWeb3.js';
 
 /**
- * Panel de depuración — solo visible con VITE_WEB3_MODE=mock
+ * Panel de depuración — solo en modo mock (`VITE_WEB3_MODE` distinto de `real`).
  */
 export default function MockWeb3DevPanel() {
   const [, force] = useState(0);

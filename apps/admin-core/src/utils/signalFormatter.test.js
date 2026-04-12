@@ -192,6 +192,26 @@ describe('formatSignal', () => {
     expect(row.mesa).toBe('Baccarat 2');
     expect(row.round).toBe(88);
   });
+
+  it('vector_forecast: UNKNOWN + martingale 1-based usa celda activa (no solo [0])', () => {
+    const row = formatSignal({
+      mesa: 'T1',
+      round: 1,
+      recommendation: 'UNKNOWN',
+      martingale: 2,
+      data: {
+        data: {
+          signal: {
+            nombre_algoritmo: 'Algo',
+            vector_forecast: ['B', 'P', 'B', 'P', 'B', 'P'],
+            martingale: 2,
+          },
+        },
+      },
+    });
+    expect(row.recommendation).toBe('PLAYER');
+    expect(row.predictionLabel).toBe('PLAYER');
+  });
 });
 
 describe('resolveMesaFromPayload / resolveRoundFromPayload', () => {

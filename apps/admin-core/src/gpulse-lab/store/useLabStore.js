@@ -7,6 +7,12 @@ import {
 } from '../utils/supplierIntelExtract.js';
 import { deriveMirrorLifecycleFromMesaRow } from '../utils/vistaLabsMirror.js';
 import { getMartingaleLabel } from '../utils/martingaleUi.js';
+import {
+  forecastStepIndexFromContador,
+  mapForecastAtStep,
+  recommendationFromForecastCell,
+  winStatusFromVectorWinLastArray,
+} from '../../utils/forecastMartingaleStep.js';
 
 export const LAB_LIFECYCLE_STATES = {
   IDLE: 'IDLE',
@@ -49,6 +55,8 @@ export function createEmptyMesaState() {
     historial: [],
     wins: [],
     startTime: null,
+    /** Copia del vector del ciclo para recalcular `recommendation` tras NEW_RESULT (paso martingala). */
+    vector_forecast: null,
     /** Step-by-step timeline for the active / last completed cycle (GPulse Lab UI). */
     currentCycleHistory: [],
     /** Proveedor: `data.data.signal` (o equivalente). */
@@ -109,6 +117,32 @@ function mesaKeyFromPayload(payload) {
   if (payload == null || typeof payload !== 'object') return '';
   const m = /** @type {Record<string, unknown>} */ (payload).mesa;
   return m == null || m === '' ? '' : String(m);
+}
+
+/** @param {unknown} payload */
+function vectorForecastFromPayload(payload) {
+  if (payload == null || typeof payload !== 'object') return null;
+  const p = /** @type {Record<string, unknown>} */ (payload);
+  if (Array.isArray(p.vector_forecast)) return p.vector_forecast;
+  const d = p.data;
+  if (d != null && typeof d === 'object' && !Array.isArray(d)) {
+    const inner = /** @type {Record<string, unknown>} */ (d).data;
+    if (inner != null && typeof inner === 'object' && !Array.isArray(inner)) {
+      const s2 = inner.signal;
+      if (s2 != null && typeof s2 === 'object' && !Array.isArray(s2) && Array.isArray(s2.vector_forecast)) {
+        return s2.vector_forecast;
+      }
+    }
+    const s1 = /** @type {Record<string, unknown>} */ (d).signal;
+    if (s1 != null && typeof s1 === 'object' && !Array.isArray(s1) && Array.isArray(s1.vector_forecast)) {
+      return s1.vector_forecast;
+    }
+  }
+  const root = p.signal;
+  if (root != null && typeof root === 'object' && !Array.isArray(root) && Array.isArray(root.vector_forecast)) {
+    return root.vector_forecast;
+  }
+  return null;
 }
 
 /** Lifecycle espejo VistaLabs: solo desde datos de mesa efectiva (sin timers). */
@@ -183,6 +217,30 @@ export const useLabStore = create((set) => ({
       return { selectedMesaId, ...mirrorSliceFromState(state.mesas, selectedMesaId) };
     }),
 
+  /**
+   * Align selected mesa + round so `normalizeCorrelationKey` matches an execution engine (debug / multi-mesa focus).
+   * @param {{ mesaId: string, round?: string | null }} p
+   */
+  focusMesaForEngineView: ({ mesaId, round }) =>
+    set((state) => {
+      const id = mesaId != null && String(mesaId).trim() !== '' ? String(mesaId).trim() : '';
+      if (!id) return state;
+      const prev = state.mesas[id] ?? createEmptyMesaState();
+      const r =
+        round != null && String(round).trim() !== '' ? String(round).trim() : prev.round ?? null;
+      const nextRow = {
+        ...prev,
+        round: r,
+        mesa: id,
+      };
+      const nextMesas = { ...state.mesas, [id]: nextRow };
+      return {
+        selectedMesaId: id,
+        mesas: nextMesas,
+        ...mirrorSliceFromState(nextMesas, id),
+      };
+    }),
+
   setLifecycleState: (next) =>
     set({
       lifecycleState:
@@ -235,6 +293,7 @@ export const useLabStore = create((set) => ({
             intelSignalTs: null,
             intelResultTs: null,
             intelStepDurations: [],
+            vector_forecast: null,
           },
         },
       };
@@ -273,6 +332,7 @@ export const useLabStore = create((set) => ({
           intelSignalTs: null,
           intelResultTs: null,
           intelStepDurations: [],
+          vector_forecast: null,
         };
       });
       return {
@@ -344,12 +404,14 @@ export const useLabStore = create((set) => ({
           timestamp: Date.now(),
         });
       }
+      const nextVf = vectorForecastFromPayload(payload) ?? prev.vector_forecast;
       const nextMesas = {
         ...state.mesas,
         [id]: {
           ...prev,
           round: payload?.round ?? null,
           recommendation: payload?.recommendation ?? null,
+          vector_forecast: nextVf,
           martingala: payload?.martingale ?? 0,
           signalMartingaleLevel: mgStep,
           martingaleType: mgType,
@@ -381,7 +443,18 @@ export const useLabStore = create((set) => ({
           ? payload.contador_martingala
           : prev.martingala;
 
-      const win = isWinVsRecommendation(prev.recommendation, ganador);
+      let recommendation = prev.recommendation;
+      const vf = prev.vector_forecast;
+      if (Array.isArray(vf) && vf.length > 0) {
+        const idx = forecastStepIndexFromContador(martingala);
+        const cell = mapForecastAtStep(vf, idx);
+        const rec = recommendationFromForecastCell(cell);
+        if (rec != null) recommendation = rec;
+      }
+
+      const winFromVw = winStatusFromVectorWinLastArray(payload?.vector_win);
+      const win =
+        winFromVw !== null ? winFromVw : isWinVsRecommendation(prev.recommendation, ganador);
       const nextHistory = [...(prev.currentCycleHistory ?? [])];
       const resultTs = Date.now();
       nextHistory.push({
@@ -399,6 +472,7 @@ export const useLabStore = create((set) => ({
           historial,
           wins,
           martingala,
+          recommendation,
           estado: 'RESULT',
           intelResultTs: resultTs,
           currentCycleHistory: nextHistory,

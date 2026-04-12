@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Radar } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard.jsx';
 import { NeonButton } from '../components/NeonButton.jsx';
+import { GPULSE_APP_SHELL_PATH } from '../navigation/genesisPaths.js';
 
 const ringDelays = ['0s', '0.8s', '1.6s', '2.4s'];
 
@@ -140,7 +141,7 @@ export function GPulseLobby({ onBackToDashboard, onActivateMembership }) {
           <NeonButton
             variant="primary"
             className="!normal-case !font-semibold !tracking-normal"
-            onClick={() => navigate('/gpulse')}
+            onClick={() => navigate(GPULSE_APP_SHELL_PATH)}
           >
             Abrir App GPulse
           </NeonButton>

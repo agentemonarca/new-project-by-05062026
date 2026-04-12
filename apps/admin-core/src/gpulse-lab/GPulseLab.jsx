@@ -11,11 +11,13 @@ import MesaSelector from './components/MesaSelector.jsx';
 import LeftPanel from './components/LeftPanel.jsx';
 import RightPanel from './components/RightPanel.jsx';
 import ValidationPanel from './components/ValidationPanel.jsx';
+import MultiEngineDebugPanel from './components/MultiEngineDebugPanel.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import { useGpulseLabPersistence } from './hooks/useGpulseLabPersistence.js';
 import { useLabSocket } from './hooks/useLabSocket.js';
 import { useLabStore } from './store/useLabStore.js';
 import { useAutoHealingForensics } from './hooks/useAutoHealingForensics.js';
+import { useAutoFocusSingleRunningEngine } from './hooks/useAutoFocusSingleRunningEngine.js';
 
 /**
  * GPulse Lab — grid: 260px | minmax(0,1fr) (lg). Left: monitor + cycle intel + alertas; center immersive.
@@ -24,6 +26,7 @@ export default function GPulseLab() {
   useLabSocket();
   useGpulseLabPersistence();
   useAutoHealingForensics();
+  useAutoFocusSingleRunningEngine();
 
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined;
@@ -73,6 +76,7 @@ export default function GPulseLab() {
             aria-label="Control center and validation"
           >
             <ControlCenterPanel variant="dock" />
+            <MultiEngineDebugPanel variant="dock" />
             <ValidationPanel variant="dock" />
           </div>
         </div>

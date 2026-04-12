@@ -356,45 +356,10 @@ export default function GenesisOraclePanel() {
       clearEngineTimers();
       setActiveCycle(partial);
       setEngineState('SIGNAL_DETECTED');
-      const steps = [
-        ['SIGNAL_VALIDATING', 380],
-        ['SIGNAL_ACTIVE', 760],
-        ['BETTING_WINDOW', 1140],
-        ['DEALING', 1520],
-      ];
-      steps.forEach(([st, ms]) => {
-        pushEngineTimer(() => setEngineState(st), ms);
-      });
+      queueMicrotask(() => setEngineState('WAITING_RESULT'));
       addLog(`NEW_SIGNAL mesa=${partial.mesa} round=${partial.round} ${partial.signal}`, 'info');
-
-      resultSafetyTimeoutRef.current = setTimeout(() => {
-        resultSafetyTimeoutRef.current = null;
-        const cur = activeCycleRef.current;
-        if (cur && cur.status == null) {
-          console.log('⚠️ FORZANDO CIERRE POR TIMEOUT (15s sin NEW_RESULT)');
-          const synthetic = {
-            type: 'NEW_RESULT',
-            data: {
-              mesa: cur.mesa,
-              round: cur.round,
-              data: {
-                results: {
-                  mesa_info: {
-                    ganador: 'UNKNOWN',
-                    puntaje_player: 0,
-                    puntaje_banker: 0,
-                    cartas_player: [],
-                    cartas_banker: [],
-                  },
-                },
-              },
-            },
-          };
-          ingestResult(synthetic, synthetic);
-        }
-      }, 15_000);
     },
-    [addLog, clearEngineTimers, clearResultSafetyTimeout, ingestResult, pushEngineTimer],
+    [addLog, clearEngineTimers, clearResultSafetyTimeout],
   );
 
   const processEvent = useCallback(
@@ -429,7 +394,8 @@ export default function GenesisOraclePanel() {
         }
       }
 
-      const flat = { ...d, ...p };
+      const canon = p.canonical && typeof p.canonical === 'object' && !Array.isArray(p.canonical) ? p.canonical : {};
+      const flat = { ...d, ...p, ...canon };
       if (
         flat.prediction != null ||
         flat.recommendation != null ||

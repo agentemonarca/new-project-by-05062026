@@ -6,29 +6,20 @@
  * 2) Clave compuesta `mesa` + `ronda` (fallback).
  */
 
-/** @typedef {'PLAYER' | 'BANKER' | 'UNKNOWN'} BaccaratSide */
+import {
+  extractVectorForecastArrayFromSignalRaw,
+  pickContadorMartingalaFromSignalRaw,
+  predictionSideFromVectorAndContador,
+  winStatusFromVectorWinLast,
+} from '../../utils/providerMartingaleRead.js';
+
+/** @typedef {'PLAYER' | 'BANKER' | 'TIE' | 'UNKNOWN'} BaccaratSide */
 
 /** @param {...unknown} vals */
 function pickFirst(...vals) {
   for (const v of vals) {
     if (v != null && String(v).trim() !== '') return v;
   }
-  return null;
-}
-
-/**
- * Alineado con core-api `mapVectorForecastToRecommendation` / admin-core resolveSignal.
- * @param {unknown} vector
- * @returns {'PLAYER' | 'BANKER' | 'TIE' | null}
- */
-function mapVectorForecastToRecommendation(vector) {
-  if (!Array.isArray(vector) || vector.length === 0) return null;
-  const v = vector[0];
-  if (v == null) return null;
-  const s = String(v).trim().toUpperCase();
-  if (s === 'P' || s.startsWith('PLAY')) return 'PLAYER';
-  if (s === 'B' || s.startsWith('BANK')) return 'BANKER';
-  if (s === 'E' || s === 'T' || s.startsWith('TIE')) return 'TIE';
   return null;
 }
 
@@ -109,6 +100,19 @@ export function normalizeNewSignalPayload(raw) {
   );
   const round = roundV != null ? String(roundV).trim() : '';
 
+  const vfArr = extractVectorForecastArrayFromSignalRaw(r);
+  const contadorRaw = pickContadorMartingalaFromSignalRaw(r);
+  const contadorForStep =
+    contadorRaw != null && String(contadorRaw).trim() !== '' ? contadorRaw : vfArr.length > 0 ? 1 : null;
+
+  /** Primary: `vector_forecast[ index(contador_martingala) ]` — not flat `recommendation`. */
+  /** @type {BaccaratSide} */
+  let recommendation = 'UNKNOWN';
+  if (vfArr.length > 0 && contadorForStep != null) {
+    const fromVec = predictionSideFromVectorAndContador(vfArr, contadorForStep);
+    if (fromVec === 'PLAYER' || fromVec === 'BANKER' || fromVec === 'TIE') recommendation = fromVec;
+  }
+
   const rec = String(
     pickFirst(
       sig2?.recommendation,
@@ -125,27 +129,29 @@ export function normalizeNewSignalPayload(raw) {
       r.prediction,
     ) ?? '',
   ).toUpperCase();
-  /** @type {BaccaratSide} */
-  let recommendation = 'UNKNOWN';
-  if (rec === 'BANKER' || rec === 'B' || rec.startsWith('BANK')) recommendation = 'BANKER';
-  else if (rec === 'PLAYER' || rec === 'P' || rec.startsWith('PLAY')) recommendation = 'PLAYER';
-
   if (recommendation === 'UNKNOWN') {
-    let vf = sig2?.vector_forecast;
-    if (!Array.isArray(vf) || vf.length === 0) vf = sig?.vector_forecast;
-    if (!Array.isArray(vf) || vf.length === 0) vf = r.vector_forecast;
-    const fromVec = mapVectorForecastToRecommendation(Array.isArray(vf) ? vf : []);
-    if (fromVec === 'PLAYER' || fromVec === 'BANKER') recommendation = fromVec;
+    if (rec === 'BANKER' || rec === 'B' || rec.startsWith('BANK')) recommendation = 'BANKER';
+    else if (rec === 'PLAYER' || rec === 'P' || rec.startsWith('PLAY')) recommendation = 'PLAYER';
+    else if (rec.includes('TIE') || rec === 'T' || rec === 'E') recommendation = 'TIE';
   }
 
   const idVal = r.id ?? r.signalId ?? sig?.id ?? sig?.signalId ?? sig2?.id ?? sig2?.signalId;
 
   const rForKey = { ...r, mesa: mesa || r.mesa, round: round || r.round };
+  const mgNum = Number(
+    pickFirst(
+      contadorRaw,
+      sig2?.martingale,
+      sig?.martingale,
+      r.martingale,
+      r.martinGale,
+    ) ?? 0,
+  );
   return {
     providerSignalId: idVal != null ? String(idVal) : null,
     mesa,
     round,
-    martingale: Number(pickFirst(sig?.martingale, r.martingale, r.martinGale) ?? 0) || 0,
+    martingale: Number.isFinite(mgNum) ? mgNum : 0,
     recommendation,
     correlationKey: buildCorrelationKey(rForKey),
     raw: r,
@@ -153,21 +159,84 @@ export function normalizeNewSignalPayload(raw) {
 }
 
 /**
- * @param {unknown} raw
- * @returns {{
- *   providerSignalId: string | null,
- *   mesa: string,
- *   round: string,
- *   winStatus: boolean,
- *   correlationKey: string,
- *   raw: Record<string, unknown>,
- * }}
+ * Nombre legible del modelo / algoritmo en el payload proveedor (p. ej. Winx `nombre_algoritmo`).
+ * @param {unknown} raw — cuerpo NEW_SIGNAL tal cual en store (`rawSignal`).
+ * @returns {string}
  */
+export function extractProviderSignalAlgorithmName(raw) {
+  if (raw == null || typeof raw !== 'object') return '';
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  /** Payload plano del BFF (`buildAdminSignalsClientPayload`) suele traer `nombre_algoritmo` en raíz. */
+  if (r.nombre_algoritmo != null && String(r.nombre_algoritmo).trim() !== '') {
+    return String(r.nombre_algoritmo).trim();
+  }
+  /** Relay BFF añade a veces `providerNormalized` / `supplier` (snapshot). */
+  const pn = r.providerNormalized;
+  if (pn != null && typeof pn === 'object' && !Array.isArray(pn)) {
+    const p = /** @type {Record<string, unknown>} */ (pn);
+    const fromPn = pickFirst(p.nombre_algoritmo, p.algorithm, p.signalName);
+    if (fromPn != null && String(fromPn).trim() !== '') return String(fromPn).trim();
+  }
+  const sup = r.supplier;
+  if (sup != null && typeof sup === 'object' && !Array.isArray(sup)) {
+    const s = /** @type {Record<string, unknown>} */ (sup);
+    const fromS = pickFirst(s.nombre_algoritmo, s.algorithm);
+    if (fromS != null && String(fromS).trim() !== '') return String(fromS).trim();
+  }
+  const d =
+    r.data != null && typeof r.data === 'object' && !Array.isArray(r.data)
+      ? /** @type {Record<string, unknown>} */ (r.data)
+      : null;
+  const d2 =
+    d?.data != null && typeof d.data === 'object' && !Array.isArray(d.data)
+      ? /** @type {Record<string, unknown>} */ (d.data)
+      : null;
+  const sig =
+    d?.signal != null && typeof d.signal === 'object' && !Array.isArray(d.signal)
+      ? /** @type {Record<string, unknown>} */ (d.signal)
+      : null;
+  const sig2 =
+    d2?.signal != null && typeof d2.signal === 'object' && !Array.isArray(d2.signal)
+      ? /** @type {Record<string, unknown>} */ (d2.signal)
+      : null;
+  const canon =
+    r.canonical != null && typeof r.canonical === 'object' && !Array.isArray(r.canonical)
+      ? /** @type {Record<string, unknown>} */ (r.canonical)
+      : null;
+  const canonSig =
+    canon?.signal != null && typeof canon.signal === 'object' && !Array.isArray(canon.signal)
+      ? /** @type {Record<string, unknown>} */ (canon.signal)
+      : null;
+  const mi =
+    r.mesa_info != null && typeof r.mesa_info === 'object' && !Array.isArray(r.mesa_info)
+      ? /** @type {Record<string, unknown>} */ (r.mesa_info)
+      : null;
+  const miD =
+    d?.mesa_info != null && typeof d.mesa_info === 'object' && !Array.isArray(d.mesa_info)
+      ? /** @type {Record<string, unknown>} */ (d.mesa_info)
+      : null;
+  const v = pickFirst(
+    sig2?.nombre_algoritmo,
+    sig?.nombre_algoritmo,
+    d2?.nombre_algoritmo,
+    d?.nombre_algoritmo,
+    canonSig?.nombre_algoritmo,
+    canon?.nombre_algoritmo,
+    mi?.nombre_algoritmo,
+    miD?.nombre_algoritmo,
+    r.nombre_algoritmo,
+    r.algorithm,
+  );
+  return v != null && String(v).trim() !== '' ? String(v).trim() : '';
+}
+
 export function normalizeNewResultPayload(raw) {
   const r = raw && typeof raw === 'object' ? /** @type {Record<string, unknown>} */ (raw) : {};
   const idVal = r.signalId ?? r.id;
   const w = r.winStatus;
-  const winStatus = w === true || w === 'true' || w === 1 || w === '1';
+  const relayWin = w === true || w === 'true' || w === 1 || w === '1';
+  const fromVectorWin = winStatusFromVectorWinLast(r);
+  const winStatus = fromVectorWin !== null ? fromVectorWin : relayWin;
   return {
     providerSignalId: idVal != null ? String(idVal) : null,
     mesa: String(r.mesa ?? r.table ?? r.desk ?? ''),

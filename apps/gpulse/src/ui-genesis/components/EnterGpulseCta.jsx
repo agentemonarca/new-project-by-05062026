@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
+import { navToPath } from '../navigation/genesisPaths.js';
 
 const glowIdle =
   '0 0 18px rgba(139, 92, 246, 0.5), 0 0 36px rgba(34, 211, 238, 0.22), 0 0 56px rgba(139, 92, 246, 0.12)';
@@ -11,7 +12,7 @@ const glowHover =
   '0 0 32px rgba(139, 92, 246, 0.75), 0 0 56px rgba(34, 211, 238, 0.45), 0 0 88px rgba(34, 211, 238, 0.25)';
 
 /**
- * Primary entry CTA → GPulse lobby (`/gpulse-lobby`) or in-app `onNavigate` (e.g. `navigateTo('gpulse-lobby')`).
+ * Primary entry CTA → lobby GPulse (`/dashboard?nav=gpulse-lobby`) o `onNavigate` in-app.
  * @param {{ onNavigate?: () => void }} props
  */
 export function EnterGpulseCta({ onNavigate }) {
@@ -21,7 +22,7 @@ export function EnterGpulseCta({ onNavigate }) {
       onNavigate();
       return;
     }
-    navigate('/gpulse-lobby');
+    navigate(navToPath('gpulse-lobby'));
   };
 
   return (

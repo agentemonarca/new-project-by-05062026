@@ -30,6 +30,7 @@ import { GenesisChromeContextBar } from '../components/GenesisChromeContextBar.j
 import { GenesisNotificationCenter } from '../components/GenesisNotificationCenter.jsx';
 import { UiModeToggle } from '../components/UiModeToggle.jsx';
 import { SimulationModeToggle } from '../components/SimulationModeToggle.jsx';
+import { ProviderRelayStatusStrip } from '../../components/ProviderRelayStatusStrip.jsx';
 import { useWallet } from '../../context/WalletContext.jsx';
 import { useGenesisDashboardStore } from '../stores/genesisDashboardStore.js';
 import { DEFAULT_PERMISSIONS } from '../lib/userPermissions.js';
@@ -192,6 +193,7 @@ export function GenesisDashboardLayout({
               </>
             }
           />
+          <ProviderRelayStatusStrip variant="bar" />
           {isSimulationMode ? (
             <div className="border-b border-amber-500/35 bg-amber-500/10 px-4 py-2 text-center text-[11px] font-semibold text-amber-100/95 md:text-xs">
               Modo simulación activo · volúmenes, wallet y ledger usan datos ficticios (variación aleatoria).

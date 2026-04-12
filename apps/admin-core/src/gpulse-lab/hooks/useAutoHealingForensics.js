@@ -3,7 +3,7 @@ import { ALERT_TYPES, pushAlert, useAlertStore } from '../store/useAlertStore.js
 import { useLabStore } from '../store/useLabStore.js';
 import { useGpulseLabUiStore } from '../store/useGpulseLabUiStore.js';
 import { extractNestedMesaInfo } from '../utils/supplierIntelExtract.js';
-import { handleResult } from '../middleware/useSignalMiddleware.js';
+import { handleResult } from '../engine/executionEngineDispatch.js';
 
 const TRIGGER_TYPES = new Set([
   ALERT_TYPES.PROVIDER_DATA_NOT_RENDERED,

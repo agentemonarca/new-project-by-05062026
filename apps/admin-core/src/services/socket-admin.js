@@ -1,28 +1,17 @@
 import { Manager } from 'socket.io-client';
 import { redirectToAdminLogin } from '../lib/adminAuthRedirect.js';
+import { getAdminSignalsIoOrigin } from './resolveAdminSignalsIoOrigin.js';
+import { isResultFullTraceClient } from '../gpulse-lab/utils/resultFullTraceClient.js';
 
 /** @type {import('socket.io-client').Manager | null} */
 let _manager = null;
 /** @type {import('socket.io-client').Socket | null} */
 let _socket = null;
+/** Evita registrar `onAny` de traza completa varias veces. */
+let _fullResultTraceAttached = false;
 
 const ADMIN_NAMESPACE = '/admin-signals';
 const DISABLE_AUTH = import.meta.env.VITE_ADMIN_SIGNALS_DISABLE_AUTH === '1';
-
-/** Origen del Engine (host:puerto, sin path). En dev: mismo origen que la app → /socket.io vía proxy Vite + cookies de sesión. */
-function resolveManagerOrigin() {
-  const explicit = import.meta.env.VITE_ADMIN_SIGNALS_IO_ORIGIN;
-  if (typeof explicit === 'string' && explicit.trim() !== '') {
-    return explicit.trim().replace(/\/$/, '');
-  }
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin.replace(/\/$/, '');
-  }
-  if (import.meta.env.DEV) {
-    return 'http://127.0.0.1:5190';
-  }
-  return '';
-}
 
 function attachSocketHandlers(socket) {
   socket.on('connect', () => {
@@ -42,6 +31,13 @@ function attachSocketHandlers(socket) {
     }
   });
 
+  if (isResultFullTraceClient()) {
+    socket.onAny((event, ...args) => {
+      const payload = args.length <= 1 ? args[0] : args;
+      console.log('📡 SOCKET EVENT:', event, payload);
+    });
+  }
+
   if (import.meta.env.DEV || import.meta.env.VITE_ADMIN_SIGNALS_DEBUG === '1') {
     socket.onAny((event, ...args) => {
       const data = args.length <= 1 ? args[0] : args;
@@ -52,8 +48,7 @@ function attachSocketHandlers(socket) {
 
 function createAdminSignalsSocket() {
   // Namespace must match backend: io.of('/admin-signals')
-  // Connect directly to core-api by default, unless explicitly overridden.
-  const origin = (import.meta.env.VITE_ADMIN_SIGNALS_IO_ORIGIN || 'http://localhost:5050').replace(/\/$/, '');
+  const origin = getAdminSignalsIoOrigin();
   const apiKeyRaw = import.meta.env.VITE_GENESIS_ADMIN_API_KEY;
 
   // In dev, persist singletons across Vite HMR reloads (prevents connect/disconnect flapping).
@@ -91,6 +86,14 @@ function createAdminSignalsSocket() {
     const w = /** @type {any} */ (window);
     w.__adminSignalsManager = _manager;
     w.__adminSignalsSocket = _socket;
+  }
+
+  if (import.meta.env.VITE_FULL_RESULT_TRACE === '1' && !_fullResultTraceAttached) {
+    _fullResultTraceAttached = true;
+    _socket.onAny((event, ...args) => {
+      const payload = args.length <= 1 ? args[0] : args;
+      console.log('📡 SOCKET EVENT:', event, payload);
+    });
   }
 
   if (!_socket.connected) {

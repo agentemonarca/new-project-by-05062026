@@ -21,6 +21,15 @@ No cambia el comportamiento por defecto: todos los flags son **opt-in** (`=1`). 
 | `VITE_DIRECTION_FROM_VECTOR=1` | Fuerza `recommendation` desde `vector_forecast[0]` vía extracto canónico |
 | `VITE_SIGNAL_AUDIT=1` | Logs `[CANONICAL_MAP]`, `[SOURCE_PATHS]`, `[DIAGNOSTICS]`, `[PROVIDER_SOURCE]` donde se llama `logCanonicalAudit` |
 | `VITE_MATCH_DEBUG=1` | En rama V2, si **no** hay match: `[MATCH_DEBUG] no_match` con resumen `sig` / `res` |
+| `VITE_GPULSE_LAB_INGEST_FROM_VISTALAB_BUFFER=1` | GPulse Lab: el middleware (`handleSignal` / `handleResult`) se dispara solo desde el buffer VistaLab (`subscribeAdminSignalsLive` + `lastNewSignalSocketPayload` / `lastNewResultSocketPayload`), no desde el relay paralelo. VistaLab + socket ingest siguen igual. |
+| `VITE_ADMIN_SIGNALS_INGEST_LOG=1` | Consola: `[admin-signals ingest] SIGNAL|RESULT <source> ok|reject:<razón>` tras cada evento socket (no cambia la lógica). |
+
+### GPulse Lab — relay vs buffer VistaLab (`VITE_GPULSE_LAB_INGEST_FROM_VISTALAB_BUFFER`)
+
+| Valor | `registerGpulseLabRelayHandlers` | Fuente del wire para GPulse middleware |
+|--------|-----------------------------------|----------------------------------------|
+| ausente / `0` | Registrado desde `useLabSocket`: cada `NEW_SIGNAL` / `NEW_RESULT` va al relay y al pipeline GPulse **en paralelo** al ingest VistaLab. | Mismo evento socket que VistaLab (doble normalización posible). |
+| `1` | **No** se registran handlers GPulse; solo telemetría / bridge ingest. | `lastNew*SocketPayload` del live store tras bump de `recvId` en cabeza de buffer (mismo wire que aceptó ingest). |
 
 ### Comportamiento con flags en `0` / ausentes
 
@@ -116,3 +125,46 @@ Los campos `*Working` / `roundAligned` / `incompleteHandled` reflejan **si el fl
 | Dirección UNKNOWN con vector presente | `VITE_DIRECTION_FROM_VECTOR`, payload anidado |
 | Sin match en VistaLab con V2 | `VITE_MATCH_DEBUG`, comparar `sig` vs `res` en el log |
 | Round distinto señal/resultado | `VITE_ROUND_TARGET_MODE`, `ronda_objetivo` vs `ronda_actual` en proveedor |
+
+---
+
+## Diagnóstico: faltan resultados o la data no cuadra en el lab
+
+Orden sugerido (misma lógica que el plan de diagnóstico del proyecto):
+
+1. **VistaLab** (listas en vivo): si aquí **no** hay filas de resultado, el problema está **antes** del panel central (proveedor, relay en core-api, o el socket no entrega `NEW_RESULT`). Si VistaLab **sí** tiene resultados y GPulse no, acotar a pipeline GPulse / flag de buffer / normalización.
+2. **Navegador → Network → WebSocket** (namespace `/admin-signals`): ¿existen mensajes con nombre `NEW_RESULT`?
+3. **core-api (Node):** `ADMIN_SIGNALS_TRACE=1` y revisar logs `relay_new_result_prevalidate_skip`, `relay_skip_emit_deduped`, `CRITICAL_MISMATCH`, `relay_client_emit_skipped`.
+4. **Consola admin-core:** búsqueda de `REJECT_RESULT` (ingest rechazó la fila) o activar `VITE_ADMIN_SIGNALS_INGEST_LOG=1` para una línea por evento (`ingest:RESULT ok|reject:…`).
+5. **Prueba de hipótesis (solo diagnóstico):** `VITE_ADMIN_SIGNALS_STRICT=0` desactiva el modo estricto del validador ([`adminSignalPayloadValidators.js`](src/utils/adminSignalPayloadValidators.js)); si entonces aparecen resultados, el proveedor envía datos **incompletos** respecto a [`validateResult`](src/utils/adminSignalPayloadValidators.js).
+6. **GPulse con** `VITE_GPULSE_LAB_INGEST_FROM_VISTALAB_BUFFER=1`: el hook del buffer solo avanza con nueva cabeza en `results[]` (`recvId`). Un `NEW_RESULT` que VistaLab **rechaza** no añade fila: el centro GPulse puede no moverse aunque exista `lastNewResultSocketPayload` (comportamiento alineado con “solo lo validado por VistaLab”).
+
+### Tarjeta «Diagnóstico · stream resultados» (GPulse Lab → ValidationPanel)
+
+En el dock inferior de GPulse Lab, la tarjeta usa [`useGpulseLabStreamDiagnosticsStore.js`](src/gpulse-lab/store/useGpulseLabStreamDiagnosticsStore.js) y resume el flujo **sin depender solo de la consola**:
+
+| Campo | Qué indica |
+|--------|------------|
+| **Ingress** | `relay` (handlers socket en paralelo al buffer) vs `vistaLabBuffer` (`VITE_GPULSE_LAB_INGEST_FROM_VISTALAB_BUFFER=1`). Se actualiza al montar el lab y al abrir el panel (`refreshIngressMode`). |
+| **Validación UI** | Si el módulo de validación está activo (`validationUiEnabled` en Zustand, ligado a `setValidationEnabled`). Si está **off**, no hay filas `stream · NEW_SIGNAL` / `stream · NEW_RESULT` en el log de validación. |
+| **Último RESULT crudo** | Timestamp del último frame RESULT guardado en la UI (`gpulseLabRawSocketFrames.resultTs`). |
+| **Última CK stream · señal / resultado** | Correlation keys vistas por `recordStreamSignal` / asentamiento en `recordStreamResult` (puede diferir del payload si hubo match por mesa). |
+| **Relay · código / Middleware** | Último intento de pipeline: `reason` del relay (p. ej. `duplicate_socket_frame`, `normalize_or_canonical_null`) y, si aplica, código del middleware (`duplicate_mesa_round`, `duplicate_ck_*`, etc.). |
+| **Pipeline NEW_RESULT** | Línea compacta: aplicado (con `streamSettledCk`, si el log stream es esperable) u omitido con JSON de detalle. |
+| **Copiar JSON** | Exporta snapshot (ingress, validación, CKs, `lastResultPipeline`) al portapapeles para pegar en un ticket. |
+
+**Log avanzado** en el mismo panel lista entradas recientes del store de validación (`stream · NEW_SIGNAL`, `stream · NEW_RESULT`, timeouts, etc.).
+
+Tests del store de diagnóstico: [`useGpulseLabStreamDiagnosticsStore.test.js`](src/gpulse-lab/store/useGpulseLabStreamDiagnosticsStore.test.js).
+
+---
+
+## Relay — ingesta única (VistaLab + GPulse Lab)
+
+Un solo par de listeners `NEW_SIGNAL` / `NEW_RESULT` en el socket `/admin-signals` ([`adminSignalsLiveStore.js`](src/realtime/adminSignalsLiveStore.js)): primero buffer VistaLab (`ingestNew*FromWire`), luego callbacks opcionales del GPulse Lab (`registerGpulseLabRelayHandlers`). No hay segundo `socket.on` duplicado en [`useLabSocket.js`](src/gpulse-lab/hooks/useLabSocket.js).
+
+### Origen IO compartido
+
+[`resolveAdminSignalsIoOrigin.js`](src/services/resolveAdminSignalsIoOrigin.js) — mismo host para el `Manager` de Socket.IO ([`socket-admin.js`](src/services/socket-admin.js)) y referencias alineadas en el lab. Prioridad: `VITE_GPULSE_LAB_IO_ORIGIN` → `VITE_ADMIN_SIGNALS_IO_ORIGIN` → `window.location.origin` → `http://localhost:5050`.
+
+`GET /api/admin/signals/current-state` sigue usando `window.location.origin` en el navegador (proxy Vite / cookies de sesión).

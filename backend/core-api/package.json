@@ -18,6 +18,7 @@
     "worker:tx": "node src/workers/txWorker.js",
     "typecheck:compensation": "tsc -p tsconfig.compensation.json --noEmit",
     "test:payout": "npm run build:compensation && node --test tests/payoutIdempotency.test.js",
+    "test:signal-normalize": "node --test tests/signalNormalize.test.js",
     "mongo:inspect": "node scripts/mongo-inspect.mjs",
     "analyze:provider-stream": "node provider-stream-analyze-120s.mjs",
     "capture:one-signal-session": "node capture-one-signal-session.mjs",

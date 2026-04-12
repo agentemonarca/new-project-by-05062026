@@ -1,5 +1,8 @@
+import { buildCorrelationKey, extractSupplierResult } from '../core/provider-contract.js';
 import { normalizeNewResultPayload, normalizeNewSignalPayload } from './signalNormalize.js';
 import { adminSignalsFlowTrace } from './signalFlowDebug.js';
+import { validateRelayResultPredictionOrThrow } from './resultRealAnalysis.js';
+import { isResultFullTraceOn, logResultLostAt, traceVerbose } from './resultFullTrace.js';
 
 const HISTORY_CAP = 150;
 const LOG_CAP = 220;
@@ -87,7 +90,7 @@ export function createSignalsProcessor({ logger, hooks } = {}) {
       id: genId(),
       correlationKey: n.correlationKey,
       providerSignalId: n.providerSignalId,
-      recommendation: n.recommendation,
+      prediction: n.prediction,
       martingale: n.martingale,
       mesa: n.mesa,
       round: n.round,
@@ -107,7 +110,7 @@ export function createSignalsProcessor({ logger, hooks } = {}) {
     adminSignalsFlowTrace(logger, 'processor_new_signal_ingested', {
       correlationKey: row.correlationKey,
       mesa: row.mesa,
-      recommendation: row.recommendation,
+      prediction: row.prediction,
       id: row.id,
     });
     fire(() => hooks?.onSignalIngested?.(row, n));
@@ -115,9 +118,34 @@ export function createSignalsProcessor({ logger, hooks } = {}) {
   }
 
   function ingestNewResult(payload) {
+    try {
+      validateRelayResultPredictionOrThrow(payload);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === 'CRITICAL_MISMATCH') {
+        let correlationKey = '(unknown)';
+        try {
+          const res = extractSupplierResult(payload);
+          if (res && typeof res === 'object' && !Array.isArray(res)) {
+            correlationKey = buildCorrelationKey(/** @type {Record<string, unknown>} */ (res));
+          }
+        } catch {
+          /* keep unknown */
+        }
+        console.error('❌ PROCESSOR REJECTED RESULT', correlationKey);
+        logger?.error?.('ingestNewResult_blocked', { reason: 'CRITICAL_MISMATCH' });
+        adminSignalsFlowTrace(logger, 'processor_new_result_blocked_mismatch', {});
+        return false;
+      }
+      throw e;
+    }
     const r = normalizeNewResultPayload(payload);
+    console.log('🧠 PROCESSOR RESULT', r.correlationKey);
+    if (isResultFullTraceOn()) traceVerbose('🧠 PROCESSOR RESULT', r.correlationKey);
     const dedupe = `${r.correlationKey}|R|${r.winStatus}|${extractRound(payload)}`;
     if (seenKeys.has(dedupe)) {
+      console.error('❌ PROCESSOR REJECTED RESULT', r.correlationKey);
+      logResultLostAt('PROCESSOR');
       adminSignalsFlowTrace(logger, 'processor_new_result_deduped', { dedupe, correlationKey: r.correlationKey });
       return false;
     }

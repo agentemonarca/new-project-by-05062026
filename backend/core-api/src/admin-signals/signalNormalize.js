@@ -14,21 +14,70 @@ function pickFirst(...vals) {
   return null;
 }
 
+/** mirror admin-core `forecastMartingaleStep.js` */
+function forecastStepIndexFromContador(contador) {
+  if (contador == null || contador === '') return 0;
+  const n = Number(contador);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  if (n <= 1) return 0;
+  return Math.max(0, Math.min(5, Math.floor(n) - 1));
+}
+
+function mapForecastAtStep(vector, idx) {
+  if (!Array.isArray(vector)) return null;
+  const cell = vector[idx];
+  return cell || null;
+}
+
 /**
- * Primera celda de `vector_forecast` del proveedor (prioridad sobre `recommendation` plano).
- * Alineado con `apps/admin-core/src/utils/resolveSignalFromProvider.js`.
- * @param {unknown} vector
+ * @param {unknown} cell
  * @returns {'PLAYER' | 'BANKER' | 'TIE' | null}
  */
-function mapVectorForecastToRecommendation(vector) {
-  if (!Array.isArray(vector) || vector.length === 0) return null;
-  const v = vector[0];
-  if (v == null) return null;
-  const s = String(v).trim().toUpperCase();
+function forecastCellToRecommendation(cell) {
+  if (cell == null) return null;
+  const s = String(cell).trim().toUpperCase();
+  if (s === '') return null;
   if (s === 'P' || s.startsWith('PLAY')) return 'PLAYER';
   if (s === 'B' || s.startsWith('BANK')) return 'BANKER';
   if (s === 'E' || s === 'T' || s.startsWith('TIE')) return 'TIE';
   return null;
+}
+
+/**
+ * `vector_forecast` indexado por `contador_martingala` (misma regla que admin-core).
+ * @param {unknown} vector
+ * @param {unknown} martingaleCounter
+ * @returns {'PLAYER' | 'BANKER' | 'TIE' | null}
+ */
+function mapVectorForecastToRecommendation(vector, martingaleCounter) {
+  if (!Array.isArray(vector) || vector.length === 0) return null;
+  const idx = forecastStepIndexFromContador(martingaleCounter);
+  const cell = mapForecastAtStep(vector, idx);
+  return forecastCellToRecommendation(cell);
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} sig2
+ * @param {Record<string, unknown> | null | undefined} sig
+ * @param {Record<string, unknown>} r
+ */
+function readMartingaleCounterForForecastStep(sig2, sig, r) {
+  /** @param {Record<string, unknown> | null | undefined} s */
+  const fromSig = (s) => {
+    if (s == null || typeof s !== 'object' || Array.isArray(s)) return null;
+    const m = s.martingala;
+    const c = m != null && typeof m === 'object' && !Array.isArray(m) ? m.contador_martingala : null;
+    return pickFirst(c, s.contador_martingala, s.martingale);
+  };
+  return pickFirst(
+    fromSig(sig2),
+    fromSig(sig),
+    sig2?.martingale,
+    sig?.martingale,
+    r.martingale,
+    r.martinGale,
+    r.martingaleLevel,
+  );
 }
 
 /**
@@ -336,7 +385,8 @@ export function normalizeNewSignalPayload(raw) {
     let vf = sig2?.vector_forecast;
     if (!Array.isArray(vf) || vf.length === 0) vf = sig?.vector_forecast;
     if (!Array.isArray(vf) || vf.length === 0) vf = r.vector_forecast;
-    const fromVec = mapVectorForecastToRecommendation(Array.isArray(vf) ? vf : []);
+    const mc = readMartingaleCounterForForecastStep(sig2, sig, r);
+    const fromVec = mapVectorForecastToRecommendation(Array.isArray(vf) ? vf : [], mc);
     if (fromVec) recommendation = fromVec;
   }
 
@@ -346,7 +396,7 @@ export function normalizeNewSignalPayload(raw) {
     providerSignalId: idVal != null ? String(idVal) : null,
     mesa,
     round: roundStr,
-    martingale: Number(pickFirst(sig?.martingale, r.martingale, r.martinGale) ?? 0) || 0,
+    martingale: Number(pickFirst(sig2?.martingale, sig?.martingale, r.martingale, r.martinGale) ?? 0) || 0,
     recommendation,
     correlationKey: buildCorrelationKey(r),
     raw: r,

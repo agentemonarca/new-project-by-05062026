@@ -30,6 +30,25 @@ function envelopeBody(ev) {
   return ev;
 }
 
+/** mirror admin-core `forecastMartingaleStep.js` */
+function forecastStepIndexFromContador(contador) {
+  if (contador == null || contador === '') return 0;
+  const n = Number(contador);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  if (n <= 1) return 0;
+  return Math.max(0, Math.min(5, Math.floor(n) - 1));
+}
+
+function forecastCellToSideLabel(cell) {
+  if (cell == null) return null;
+  const s = String(cell).trim().toUpperCase();
+  if (s === '') return null;
+  if (s === 'P' || s.startsWith('PLAY')) return 'PLAYER';
+  if (s === 'B' || s.startsWith('BANK')) return 'BANKER';
+  if (s === 'E' || s === 'T' || s.startsWith('TIE')) return 'TIE';
+  return null;
+}
+
 /** Prioridad proveedor (resultado): ronda_objetivo (cierra la señal) → data_evento → ronda_actual último. */
 function roundFromMesaInfoForensic(mi) {
   if (mi == null || typeof mi !== 'object' || Array.isArray(mi)) return null;
@@ -91,10 +110,19 @@ export function normalizeCycle(cycle) {
     else if (a.includes('PLAY')) side = 'PLAYER';
     else side = String(apuesta);
   } else {
-    side =
-      signal?.vector_forecast?.[0] === 'P' || String(signal?.vector_forecast?.[0]).toUpperCase() === 'P'
-        ? 'PLAYER'
-        : 'BANKER';
+    const cm = mesaInfo?.martingala?.contador_martingala;
+    const idx = forecastStepIndexFromContador(cm != null && cm !== '' ? cm : 0);
+    const vf = signal?.vector_forecast;
+    const cell = Array.isArray(vf) ? vf[idx] : null;
+    const fromCell = forecastCellToSideLabel(cell);
+    if (fromCell) {
+      side = fromCell;
+    } else {
+      side =
+        signal?.vector_forecast?.[0] === 'P' || String(signal?.vector_forecast?.[0]).toUpperCase() === 'P'
+          ? 'PLAYER'
+          : 'BANKER';
+    }
   }
 
   let winner = mesaInfo?.ganador != null ? String(mesaInfo.ganador) : null;

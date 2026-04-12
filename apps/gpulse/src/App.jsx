@@ -90,13 +90,44 @@ import {
 } from './domain/ledger/index.js';
 import { computeGPulse } from './core/gpulse/gpulseEngine.js';
 import { unlockAudio, subscribeAudioUnlock, getAudioUnlockEpoch, isAudioUnlocked } from './utils/audioUnlock.js';
+import { useExternalSignals } from './ui-genesis/hooks/useExternalSignals.js';
+import { useExternalSignalsStore } from './ui-genesis/stores/externalSignalsStore.js';
+import { createIdleIaRealVisualState, iaRealStatusToPresentationFase } from './utils/iaRealEngineModel.js';
+import { extractVectorForecastFromActiveRow, forecastStepIndexFromProviderRow } from './utils/iaRealEngineUi.js';
+import { ProviderRelayStatusStrip } from './components/ProviderRelayStatusStrip.jsx';
+import { IaRealExecutionLayer } from './components/iaReal/IaRealExecutionLayer.jsx';
+import { logIaRealEngineInput } from './utils/iaRealFullFlowLog.js';
 
 // --- CONFIGURACIÓN DE SISTEMA ---
 /** Plan de usuario para reglas de voz G_Pulse (alinear con Access / backend cuando exista). */
 const GPULSE_VOICE_USER_PLAN = 'OPERATOR';
 
+/** When true, {@link resolveUiDefaultMode} always starts in IA Real. To hide the «Simular» button use `VITE_GPULSE_HIDE_SIM_MODE=1` (not this flag). */
+const GPULSE_FORCE_IA_REAL = String(import.meta.env.VITE_GPULSE_FORCE_IA_REAL ?? '0').trim() === '1';
+/**
+ * IA Real: no local phase scheduler / martingale loop — only `externalSignalsStore` NEW_SIGNAL / NEW_RESULT.
+ * Set VITE_GPULSE_REAL_PROVIDER_EXECUTION=0 to restore legacy local engine (dev).
+ */
+const GPULSE_REAL_PROVIDER_EXECUTION = String(import.meta.env.VITE_GPULSE_REAL_PROVIDER_EXECUTION ?? '1').trim() === '1';
+
+/** IA Real: UI-only hold after NEW_RESULT before clearing overlay (ms). */
+const IA_REAL_RESULT_DISPLAY_MS = Math.max(
+  0,
+  Number(String(import.meta.env.VITE_IA_REAL_RESULT_DISPLAY_MS ?? '2500').trim()) || 2500,
+);
+
 const MODOS = { VISOR: 'VISOR', SIMULACION: 'SIMULACION', IA_REAL: 'IA_REAL' };
 const FASES = PHASES;
+
+/** `VITE_GPULSE_DEFAULT_MODE`: IA_REAL | SIMULACION | VISOR (default IA_REAL — no arrancar en demo local). */
+function resolveUiDefaultMode() {
+  if (GPULSE_FORCE_IA_REAL) return MODOS.IA_REAL;
+  const raw = String(import.meta.env.VITE_GPULSE_DEFAULT_MODE || 'IA_REAL').trim().toUpperCase();
+  if (raw === 'SIMULACION' || raw === 'SIMULATION' || raw === 'DEMO') return MODOS.SIMULACION;
+  if (raw === 'VISOR' || raw === 'VIEWER') return MODOS.VISOR;
+  if (raw === 'IA_REAL' || raw === 'REAL') return MODOS.IA_REAL;
+  return MODOS.IA_REAL;
+}
 
 /** Dice-roll / cognitive ticks: fixed tempo, never scaled by Go Pulse */
 const COGNITIVE_ROLL_TICK_MS = 125;
@@ -113,7 +144,9 @@ const WALLET_MODE = { AIG: 'AIG', MULTI: 'MULTI' };
 /** Core wallet keys for global IA selection (maps to WALLET_MODE: aig→AIG, dual→MULTI) */
 const WALLET_KEY = { AIG: 'aig', DUAL: 'dual' };
 const WALLET_VIEWS = { MAIN: 'main', DEPOSIT: 'deposit', WITHDRAW: 'withdraw', HISTORY: 'history' };
-const WEB3_MODE = 'MOCK'; // options: MOCK | REAL
+/** Alineado con `VITE_WEB3_MODE`: `real` → pagos/deposit on-chain; default `mock`. */
+const WEB3_MODE =
+  String(import.meta.env.VITE_WEB3_MODE ?? 'mock').trim().toLowerCase() === 'real' ? 'REAL' : 'MOCK';
 
 const MOCK_TX_STATUS = {
   PENDING: 'PENDING',
@@ -3060,6 +3093,12 @@ const HubEcosystemPanel = React.memo(function HubEcosystemPanel() {
 });
 
 export default function App() {
+  /** Relay BFF → core-api upstream (Winx u otro proveedor en EXTERNAL_SIGNALS_*). Sin demo en servidor. */
+  useExternalSignals();
+  const extStreamTick = useExternalSignalsStore((s) => s.streamTick);
+  const extActiveSignals = useExternalSignalsStore((s) => s.activeSignals);
+  const extHistory = useExternalSignalsStore((s) => s.history);
+
   const [db, setDb] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -3086,8 +3125,47 @@ export default function App() {
   const [currentRonda, setCurrentRonda] = useState(1);
   const [stake, setStake] = useState(10.00);
   const [mgLevels, setMgLevels] = useState(6);
-  const [selectedMode, setSelectedMode] = useState(MODOS.SIMULACION);
+  const [selectedMode, setSelectedMode] = useState(resolveUiDefaultMode);
+  const [iaRealEngineState, setIaRealEngineState] = useState(() => createIdleIaRealVisualState());
+  const iaRealPhaseTimersRef = useRef(/** @type {ReturnType<typeof setTimeout>[]} */ ([]));
+  const clearIaRealPhaseTimers = useCallback(() => {
+    iaRealPhaseTimersRef.current.forEach(clearTimeout);
+    iaRealPhaseTimersRef.current = [];
+  }, []);
+
+  const isIaRealProviderShell = useMemo(
+    () => selectedMode === MODOS.IA_REAL && GPULSE_REAL_PROVIDER_EXECUTION,
+    [selectedMode],
+  );
+
+  /** Legacy phase enum for non–IA-Real UI; when IA Real provider shell is on, derived only from `iaRealEngineState.status`. */
+  const presentationFase = useMemo(() => {
+    if (isIaRealProviderShell) return iaRealStatusToPresentationFase(iaRealEngineState.status);
+    return fase;
+  }, [isIaRealProviderShell, iaRealEngineState.status, fase]);
+
+  const hideSimulacionUi = String(import.meta.env.VITE_GPULSE_HIDE_SIM_MODE ?? '0').trim() === '1';
   const [activeCycleMode, setActiveCycleMode] = useState(null);
+
+  useEffect(() => {
+    if (hideSimulacionUi && selectedMode === MODOS.SIMULACION) setSelectedMode(MODOS.IA_REAL);
+  }, [hideSimulacionUi, selectedMode]);
+
+  useEffect(() => {
+    if (isIaRealProviderShell) return;
+    clearIaRealPhaseTimers();
+    setIaRealEngineState(createIdleIaRealVisualState());
+  }, [isIaRealProviderShell, clearIaRealPhaseTimers]);
+
+  const shellModeButtons = useMemo(() => {
+    const all = [
+      { id: MODOS.VISOR, label: 'Visor', icon: <Monitor size={12} />, color: '#10b981' },
+      { id: MODOS.SIMULACION, label: 'Simular', icon: <Activity size={12} />, color: '#8A2BE2' },
+      { id: MODOS.IA_REAL, label: 'IA Real', icon: <Zap size={12} />, color: '#FF1B8D' },
+    ];
+    return hideSimulacionUi ? all.filter((m) => m.id !== MODOS.SIMULACION) : all;
+  }, [hideSimulacionUi]);
+
   const [sessionStats, setSessionStats] = useState({ wins: 0, losses: 0, total: 0, distribution: Array(8).fill(0), sessionRewardsNet: 0 });
   const [showSessionReport, setShowSessionReport] = useState(false);
   const [isProcessingSequence, setIsProcessingSequence] = useState(false);
@@ -3226,9 +3304,9 @@ export default function App() {
   const syncHudStatus = useMemo(() => {
     const delta = Math.abs(syncPercent - syncTarget);
     if (delta >= 1) return 'syncing';
-    if (isRunning && fase !== FASES.STANDBY && fase !== FASES.RESULTADO) return 'syncing';
+    if (isRunning && presentationFase !== FASES.STANDBY && presentationFase !== FASES.RESULTADO) return 'syncing';
     return 'synced';
-  }, [syncPercent, syncTarget, isRunning, fase]);
+  }, [syncPercent, syncTarget, isRunning, presentationFase]);
 
   /** Solo el toggle del usuario; no acoplar a modo de juego. */
   const isSyncRequired = syncMode === true;
@@ -3275,7 +3353,7 @@ export default function App() {
   }, [selectedMode]);
 
   useEffect(() => {
-    switch (fase) {
+    switch (presentationFase) {
       case FASES.ANALISIS:
         setSyncTarget(30);
         setSystemMessage('Escaneando entorno...');
@@ -3300,7 +3378,7 @@ export default function App() {
         setSyncTarget(5);
         setSystemMessage('Sistema en espera');
     }
-  }, [fase]);
+  }, [presentationFase]);
 
   useEffect(() => {
     setSystemMessage(
@@ -3331,7 +3409,7 @@ export default function App() {
 
     const next = buildNarrative({
       mode,
-      fase,
+      fase: presentationFase,
       data: {
         wins: sessionStats?.wins,
         losses: sessionStats?.losses,
@@ -3342,7 +3420,7 @@ export default function App() {
     });
 
     setSystemNarrative(next || '');
-  }, [activeCycleMode, selectedMode, fase, activeShot, stake, sessionStats?.wins, sessionStats?.losses, sessionStats?.sessionRewardsNet]);
+  }, [activeCycleMode, selectedMode, presentationFase, activeShot, stake, sessionStats?.wins, sessionStats?.losses, sessionStats?.sessionRewardsNet]);
 
   const [ledger, setLedger] = useState([]);
   const demoBalanceRef = useRef(demoBalance);
@@ -3455,6 +3533,8 @@ export default function App() {
   /** Patrón guardado si G_Pulse bloquea en IA_REAL (reintento cuando la señal sea válida). */
   const gpulseBlockedPatternRef = useRef(null);
   const isGoldModeRef = useRef(false);
+  /** Latest external signal row id driving IA Real (provider-only execution). */
+  const lastProviderSignalIdRef = useRef(null);
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'genesis-oracle-v9-0';
 
   // Hoisted function; refs above are initialized before any call site runs.
@@ -3471,7 +3551,7 @@ export default function App() {
       id: `snap-${ts}-${snapshotIdRef.current++}`,
       timestamp: ts,
       note: String(note || ''),
-      phase: fase,
+      phase: presentationFase,
       isRunning,
       isProcessingSequence,
       enginesReady,
@@ -3489,18 +3569,18 @@ export default function App() {
     };
     const prev = Array.isArray(snapshotsRef.current) ? snapshotsRef.current : [];
     snapshotsRef.current = [...prev, snap].slice(-20);
-  }, [fase, isRunning, isProcessingSequence, enginesReady, currentMesa, currentRonda, pattern, activeShot, winnerSide, lastWinningShot, scores, wallets, ledger]);
+  }, [presentationFase, isRunning, isProcessingSequence, enginesReady, currentMesa, currentRonda, pattern, activeShot, winnerSide, lastWinningShot, scores, wallets, ledger]);
 
   useEffect(() => {
     // snapshot on every phase change
-    takeEngineSnapshot(`phase:${String(fase)}`);
-  }, [fase, takeEngineSnapshot]);
+    takeEngineSnapshot(`phase:${String(presentationFase)}`);
+  }, [presentationFase, takeEngineSnapshot]);
 
   useEffect(() => {
-    if (fase !== FASES.RESULTADO) return;
+    if (presentationFase !== FASES.RESULTADO) return;
     // snapshot on result signal (win/loss)
     takeEngineSnapshot(lastWinningShot ? `result:WIN:T${Number(lastWinningShot)}` : 'result:LOSS');
-  }, [fase, lastWinningShot, takeEngineSnapshot]);
+  }, [presentationFase, lastWinningShot, takeEngineSnapshot]);
 
   const restoreEngineSnapshot = useCallback((snapshotId) => {
     if (!import.meta.env.DEV) return;
@@ -4253,7 +4333,7 @@ export default function App() {
 
   useEffect(() => {
     // Mark terminal win/loss on RESULTADO for stable rendering.
-    if (fase !== FASES.RESULTADO) return;
+    if (presentationFase !== FASES.RESULTADO) return;
     setRoundSteps((prev) => {
       const arr = Array.isArray(prev) ? prev : [];
       if (arr.length === 0) return prev;
@@ -4264,7 +4344,7 @@ export default function App() {
       // Loss outcome: keep per-step results recorded during execution; if none, keep pending.
       return arr;
     });
-  }, [fase, lastWinningShot]);
+  }, [presentationFase, lastWinningShot]);
 
   const pulseHudFocus = useCallback(() => {
     setHudFocusBoost(true);
@@ -4280,8 +4360,8 @@ export default function App() {
     if (scores?.rolling) pulseHudFocus();
   }, [scores?.rolling, pulseHudFocus]);
   useEffect(() => {
-    if (fase === FASES.RESULTADO) pulseHudFocus();
-  }, [fase, pulseHudFocus]);
+    if (presentationFase === FASES.RESULTADO) pulseHudFocus();
+  }, [presentationFase, pulseHudFocus]);
 
   const closeHub = useCallback(() => {
     setHubSlideIn(false);
@@ -4400,12 +4480,22 @@ export default function App() {
   }, [sessionStats, activeCycleMode]);
 
   const statusUI = useMemo(() => {
+    if (isIaRealProviderShell) {
+      const st = iaRealEngineState.status;
+      if (st === 'IDLE') return { title: 'EN REPOSO', sub: 'Esperando señal...' };
+      if (st === 'SYNC') return { title: 'SINCRONIZACIÓN', sub: 'Sincronizando...' };
+      if (st === 'WAITING_RESULT') return { title: 'SEÑAL ACTIVA', sub: 'Esperando resultado...' };
+      if (st === 'RESULT_ANIMATION') return { title: 'RESULTADO', sub: 'Mano resuelta' };
+      if (st === 'SUCCESS') return { title: 'SEÑAL ACERTADA', sub: 'Mano resuelta' };
+      if (st === 'FAILED') return { title: 'SEÑAL FALLIDA', sub: 'Mano resuelta' };
+      return { title: 'IA REAL', sub: '' };
+    }
     if (fase === FASES.RESULTADO) return { title: lastWinningShot ? (RESULT_EMOTIONS[lastWinningShot]?.title || "SINC_LOGRADA") : "RECALIBRACIÓN", sub: "MI NÚCLEO ESTÁ APRENDIENDO..." };
     return { 
       title: Number(enginesReady) === 4 ? 'SINC_TOTAL' : fase === FASES.ANALISIS ? 'PENSANDO...' : enginesReady > 0 ? 'CALCULANDO' : 'EN REPOSO', 
       sub: isRunning ? `MODO: ${activeCycleMode || 'SYNC'}` : 'ESPERANDO TU SEÑAL' 
     };
-  }, [fase, lastWinningShot, enginesReady, isRunning, activeCycleMode]);
+  }, [isIaRealProviderShell, iaRealEngineState.status, fase, lastWinningShot, enginesReady, isRunning, activeCycleMode]);
 
   const isGoldMode = useMemo(() => isGoPulseActive && pulseCharge === 100, [isGoPulseActive, pulseCharge]);
   const goPulseSpeedFactor = useMemo(() => (isGoPulseActive ? 0.6 : 1), [isGoPulseActive]);
@@ -4849,16 +4939,23 @@ export default function App() {
 
   const energyOpacity = useMemo(() => {
     const base = isGoPulseActive ? 0.12 : 0.07;
-    const phaseBoost = fase === FASES.SEÑAL ? 0.06 : fase === FASES.DETECCION ? 0.04 : fase === FASES.ANALISIS ? 0.03 : 0.02;
+    const phaseBoost =
+      presentationFase === FASES.SEÑAL
+        ? 0.06
+        : presentationFase === FASES.DETECCION
+          ? 0.04
+          : presentationFase === FASES.ANALISIS
+            ? 0.03
+            : 0.02;
     const moodBoost = systemSyncMood === 'risk' ? 0.05 : systemSyncMood === 'balance' ? 0.04 : systemSyncMood === 'opportunity' ? 0.04 : 0.0;
     return Math.min(0.22, base + phaseBoost + moodBoost);
-  }, [isGoPulseActive, fase, systemSyncMood]);
+  }, [isGoPulseActive, presentationFase, systemSyncMood]);
 
   const portalSyncClass = useMemo(() => {
-    if (fase === FASES.ANALISIS || fase === FASES.DETECCION) return 'sync-portal-breath';
-    if (fase === FASES.SEÑAL) return 'sync-portal-breath';
+    if (presentationFase === FASES.ANALISIS || presentationFase === FASES.DETECCION) return 'sync-portal-breath';
+    if (presentationFase === FASES.SEÑAL) return 'sync-portal-breath';
     return '';
-  }, [fase]);
+  }, [presentationFase]);
 
   useEffect(() => {
     const currentKey = aiPopup ? `${aiPopup.type}::${aiPopup.message}` : '';
@@ -4897,21 +4994,21 @@ export default function App() {
     const now = Date.now();
     const debounceMs = 700;
 
-    const phaseKey = `fase:${String(fase)}`;
+    const phaseKey = `fase:${String(presentationFase)}`;
     if (phaseKey !== lastSoundCueRef.current.phaseKey && now - lastSoundCueRef.current.at > debounceMs) {
       const intensity =
         systemSyncMood === 'risk' ? 0.22 :
         systemSyncMood === 'opportunity' ? 0.18 :
         systemSyncMood === 'balance' ? 0.16 :
         0.16;
-      if (fase === FASES.ANALISIS) SoundEngine.playThinkingCue('analysis', intensity);
-      else if (fase === FASES.DETECCION) SoundEngine.playThinkingCue('detection', intensity);
-      else if (fase === FASES.SEÑAL) SoundEngine.playSignalCue(Math.min(0.22, intensity + 0.04));
+      if (presentationFase === FASES.ANALISIS) SoundEngine.playThinkingCue('analysis', intensity);
+      else if (presentationFase === FASES.DETECCION) SoundEngine.playThinkingCue('detection', intensity);
+      else if (presentationFase === FASES.SEÑAL) SoundEngine.playSignalCue(Math.min(0.22, intensity + 0.04));
       lastSoundCueRef.current.phaseKey = phaseKey;
       lastSoundCueRef.current.at = now;
       lastSoundRef.current = now;
     }
-  }, [fase, isSoundEnabled, systemSyncMood]);
+  }, [presentationFase, isSoundEnabled, systemSyncMood]);
 
   useEffect(() => {
     if (!isSoundEnabled) return;
@@ -5069,8 +5166,15 @@ export default function App() {
   }
 
   const executeSequence = useCallback(async (pat) => {
-    console.log('EXECUTE SEQUENCE TRIGGERED');
-    console.log('SYNC CHECK:', { syncMode, isSyncRequired, syncPercent });
+    if (GPULSE_REAL_PROVIDER_EXECUTION && activeCycleMode === MODOS.IA_REAL) {
+      setIsProcessingSequence(false);
+      setCoreVisual('READY');
+      return;
+    }
+    if (import.meta.env.DEV) {
+      console.log('EXECUTE SEQUENCE TRIGGERED');
+      console.log('SYNC CHECK:', { syncMode, isSyncRequired, syncPercent });
+    }
     setCoreVisual('EXECUTING');
     if (import.meta.env.DEV) logWalletSync('BEFORE_EXECUTE_SEQUENCE');
 
@@ -5493,8 +5597,235 @@ export default function App() {
     executeSequenceRef.current = executeSequence;
   }, [executeSequence]);
 
+  /** IA Real (proveedor): NEW_SIGNAL → SEÑAL sin motor local; NEW_RESULT → RESULTADO. */
+  useEffect(() => {
+    if (!GPULSE_REAL_PROVIDER_EXECUTION || selectedMode !== MODOS.IA_REAL) return;
+
+    const pending = extActiveSignals.filter((s) => s.status === 'pending');
+    if (pending.length === 0) return;
+    const latest = pending[pending.length - 1];
+    if (lastProviderSignalIdRef.current === latest.id) return;
+    lastProviderSignalIdRef.current = latest.id;
+
+    clearIaRealPhaseTimers();
+    setIsRunning(true);
+    setActiveCycleMode(MODOS.IA_REAL);
+    const mesaStr = String(latest.mesa ?? '').trim();
+    setCurrentMesa(mesaStr || BACCARAT_TABLES[0]);
+    const r = latest.round;
+    setCurrentRonda(r != null && r !== '' ? Number(r) || 1 : 1);
+    if (!isIaRealProviderShell) {
+      setFase(FASES.SEÑAL);
+    }
+    isSequenceTriggered.current = true;
+    syncBlockedPatternRef.current = null;
+    gpulseBlockedPatternRef.current = null;
+    setSystemMessage('Señal recibida · esperando NEW_RESULT del proveedor.');
+    setWinnerSide(null);
+    setActiveShot(null);
+    setPattern([]);
+    setIsProcessingSequence(false);
+
+    if (isIaRealProviderShell) {
+      const vf0 = extractVectorForecastFromActiveRow(latest);
+      const vIdx = forecastStepIndexFromProviderRow(latest, vf0.length);
+      const t0 = Date.now();
+      if (isSyncRequired && isBlocked) {
+        logIaRealEngineInput({
+          activeRow: latest,
+          outcomeRow: null,
+          correlationKey: latest.correlationKey,
+          nextStatus: 'SYNC',
+        });
+        setIaRealEngineState({
+          status: 'SYNC',
+          activeRow: latest,
+          outcomeRow: null,
+          visualStepIndex: vIdx,
+          visualProgress: 0,
+          startedAt: t0,
+        });
+      } else {
+        /** WAITING_RESULT immediately on NEW_SIGNAL — no artificial delay (only real events). */
+        logIaRealEngineInput({
+          activeRow: latest,
+          outcomeRow: null,
+          correlationKey: latest.correlationKey,
+          nextStatus: 'WAITING_RESULT',
+        });
+        setIaRealEngineState({
+          status: 'WAITING_RESULT',
+          activeRow: latest,
+          outcomeRow: null,
+          visualStepIndex: vIdx,
+          visualProgress: 0,
+          startedAt: t0,
+        });
+      }
+    }
+  }, [
+    extStreamTick,
+    extActiveSignals,
+    selectedMode,
+    isIaRealProviderShell,
+    isSyncRequired,
+    isBlocked,
+    clearIaRealPhaseTimers,
+  ]);
+
+  useEffect(() => {
+    if (!GPULSE_REAL_PROVIDER_EXECUTION || selectedMode !== MODOS.IA_REAL) return;
+
+    const sid = lastProviderSignalIdRef.current;
+    if (!sid) return;
+    const stillPending = extActiveSignals.some((s) => s.id === sid && s.status === 'pending');
+    if (stillPending) return;
+    const done = extHistory.find((h) => h.id === sid);
+    if (!done || done.settledAt == null) return;
+
+    if (isIaRealProviderShell) {
+      const st = iaRealEngineState.status;
+      if (st !== 'WAITING_RESULT' && st !== 'SYNC') return;
+
+      if (done.winStatus) {
+        setLastWinningShot(1);
+      } else {
+        setLastWinningShot(null);
+      }
+      setScores({ player: done.winStatus ? 9 : 1, banker: done.winStatus ? 1 : 9, rolling: false });
+      setIsProcessingSequence(false);
+      setCoreVisual('READY');
+      setSystemMessage(done.winStatus ? 'Resultado: acierto.' : 'Resultado: sin acierto.');
+
+      clearIaRealPhaseTimers();
+      const hit = done.winStatus === true;
+      logIaRealEngineInput({
+        activeRow: iaRealEngineState.activeRow,
+        outcomeRow: done,
+        correlationKey: String(done.correlationKey ?? iaRealEngineState.activeRow?.correlationKey ?? ''),
+        nextStatus: hit ? 'SUCCESS' : 'FAILED',
+      });
+      setIaRealEngineState((prev) => ({
+        ...prev,
+        status: hit ? 'SUCCESS' : 'FAILED',
+        outcomeRow: done,
+      }));
+      const t = setTimeout(() => {
+        logIaRealEngineInput({
+          activeRow: null,
+          outcomeRow: null,
+          correlationKey: null,
+          nextStatus: 'IDLE',
+          reason: 'ia_real_result_display_elapsed',
+        });
+        setIaRealEngineState(createIdleIaRealVisualState());
+        setIsRunning(false);
+        lastProviderSignalIdRef.current = null;
+        setCoreVisual('IDLE');
+        setSystemMessage('Sistema en espera');
+      }, IA_REAL_RESULT_DISPLAY_MS);
+      iaRealPhaseTimersRef.current.push(t);
+      return;
+    }
+
+    if (fase !== FASES.SEÑAL) return;
+
+    if (done.winStatus) {
+      setLastWinningShot(1);
+    } else {
+      setLastWinningShot(null);
+    }
+    setScores({ player: done.winStatus ? 9 : 1, banker: done.winStatus ? 1 : 9, rolling: false });
+    setFase(FASES.RESULTADO);
+    setIsProcessingSequence(false);
+    setCoreVisual('READY');
+    setSystemMessage(done.winStatus ? 'Resultado: acierto.' : 'Resultado: sin acierto.');
+  }, [
+    extStreamTick,
+    extActiveSignals,
+    extHistory,
+    fase,
+    selectedMode,
+    isIaRealProviderShell,
+    iaRealEngineState.status,
+    clearIaRealPhaseTimers,
+  ]);
+
+  /** IA Real: sync guard overlays WAITING when blocked. */
+  useEffect(() => {
+    if (!isIaRealProviderShell) return;
+    if (!lastProviderSignalIdRef.current) return;
+    const cur = extActiveSignals.find((x) => x.id === lastProviderSignalIdRef.current && x.status === 'pending');
+    if (!cur) return;
+    if (isSyncRequired && isBlocked) {
+      setIaRealEngineState((s) => {
+        if (s.status === 'SUCCESS' || s.status === 'FAILED' || s.status === 'RESULT_ANIMATION') return s;
+        const vf = extractVectorForecastFromActiveRow(cur);
+        const vIdx = forecastStepIndexFromProviderRow(cur, vf.length);
+        const next = { ...s, status: 'SYNC', activeRow: cur, visualStepIndex: vIdx };
+        logIaRealEngineInput({
+          activeRow: next.activeRow,
+          outcomeRow: next.outcomeRow ?? null,
+          correlationKey: next.activeRow?.correlationKey,
+          nextStatus: 'SYNC',
+        });
+        return next;
+      });
+    } else {
+      setIaRealEngineState((s) => {
+        if (s.status !== 'SYNC') return s;
+        const vf = extractVectorForecastFromActiveRow(cur);
+        const vIdx = forecastStepIndexFromProviderRow(cur, vf.length);
+        const next = { ...s, status: 'WAITING_RESULT', activeRow: cur, visualStepIndex: vIdx };
+        logIaRealEngineInput({
+          activeRow: next.activeRow,
+          outcomeRow: next.outcomeRow ?? null,
+          correlationKey: next.activeRow?.correlationKey,
+          nextStatus: 'WAITING_RESULT',
+        });
+        return next;
+      });
+    }
+  }, [isIaRealProviderShell, isSyncRequired, isBlocked, extActiveSignals]);
+
+  /** Provider-only: martingale / contador updates on the pending row → visual step index (no local T1–T6 loop). */
+  useEffect(() => {
+    if (!isIaRealProviderShell) return;
+    const sid = lastProviderSignalIdRef.current;
+    if (!sid) return;
+    setIaRealEngineState((s) => {
+      if (s.status !== 'WAITING_RESULT' && s.status !== 'SYNC') return s;
+      const row = extActiveSignals.find((x) => x.id === sid && x.status === 'pending');
+      if (!row) return s;
+      const vf = extractVectorForecastFromActiveRow(row);
+      const vIdx = forecastStepIndexFromProviderRow(row, vf.length);
+      if (s.activeRow?.id !== row.id) {
+        const next = { ...s, activeRow: row, visualStepIndex: vIdx };
+        logIaRealEngineInput({
+          activeRow: next.activeRow,
+          outcomeRow: next.outcomeRow ?? null,
+          correlationKey: next.activeRow?.correlationKey,
+          nextStatus: next.status,
+          visualStepIndex: vIdx,
+        });
+        return next;
+      }
+      if (s.visualStepIndex === vIdx) return s;
+      const next = { ...s, activeRow: row, visualStepIndex: vIdx };
+      logIaRealEngineInput({
+        activeRow: next.activeRow,
+        outcomeRow: next.outcomeRow ?? null,
+        correlationKey: next.activeRow?.correlationKey,
+        nextStatus: next.status,
+        visualStepIndex: vIdx,
+      });
+      return next;
+    });
+  }, [extStreamTick, extActiveSignals, isIaRealProviderShell]);
+
   /** Reintenta la secuencia cuando syncPercent >= syncTarget (mismo umbral que SYNC_BLOCK), sin re-disparar el scheduler. */
   useEffect(() => {
+    if (GPULSE_REAL_PROVIDER_EXECUTION && activeCycleMode === MODOS.IA_REAL) return;
     if (!isRunning || fase !== FASES.SEÑAL) return;
     const pat = syncBlockedPatternRef.current;
     if (!pat || !Array.isArray(pat) || pat.length === 0) return;
@@ -5507,6 +5838,7 @@ export default function App() {
 
   /** Reintenta la secuencia cuando G_Pulse vuelve a ser válido (IA_REAL), sin tocar scheduler ni sync. */
   useEffect(() => {
+    if (GPULSE_REAL_PROVIDER_EXECUTION && activeCycleMode === MODOS.IA_REAL) return;
     if (!isRunning || fase !== FASES.SEÑAL) return;
     if (activeCycleMode !== MODOS.IA_REAL) return;
     const pat = gpulseBlockedPatternRef.current;
@@ -5537,9 +5869,19 @@ export default function App() {
     if (isProcessingSequence) return; 
     if (isSoundEnabled) SoundEngine.playClick();
     if (sessionStats.total > 0) setShowSessionReport(true);
+    clearIaRealPhaseTimers();
+    logIaRealEngineInput({
+      activeRow: null,
+      outcomeRow: null,
+      correlationKey: null,
+      nextStatus: 'IDLE',
+      reason: 'stopCycle',
+    });
+    setIaRealEngineState(createIdleIaRealVisualState());
     setIsRunning(false); setFase(FASES.STANDBY); setActiveCycleMode(null); setEnginesReady(0);
     setCoreVisual('IDLE');
     isSequenceTriggered.current = false;
+    lastProviderSignalIdRef.current = null;
     syncBlockedPatternRef.current = null;
     executionBlockedBySyncRef.current = false;
     setIsBlocked(false);
@@ -5548,9 +5890,13 @@ export default function App() {
     if (scoreInterval.current) clearInterval(scoreInterval.current);
     engineTimers.current.forEach(t => clearTimeout(t)); engineTimers.current = [];
     SoundEngine.setNoise(false); speak('REINICIO');
-  }, [isProcessingSequence, isSoundEnabled, sessionStats.total, speak]);
+  }, [isProcessingSequence, isSoundEnabled, sessionStats.total, speak, clearIaRealPhaseTimers]);
 
   const startCycle = async () => {
+    if (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.IA_REAL) {
+      setSystemMessage('Motor local desactivado: el ciclo avanza solo con NEW_SIGNAL / NEW_RESULT del proveedor.');
+      return;
+    }
     if (selectedMode === MODOS.IA_REAL) {
       if (activeTradingWallet === WALLET_MODE.AIG) {
         if (Number(walletBalanceAig) < Number(stake)) { setAiSpeech({ message: "RESERVA INSUFICIENTE PARA OPERAR.", type: "error" }); return; }
@@ -5621,8 +5967,30 @@ export default function App() {
     void startCycle();
   }, [isProcessingSequence, isRunning, ignitionBlocked, stopCycle, startCycle]);
 
+  /** IA Real: optional audio + haptic on first paint of a settled result (event-driven; no logic timers). */
+  const iaRealOutcomePresented = useCallback((hit) => {
+    if (!isSoundEnabled) return;
+    void SoundEngine.init().then(() => {
+      try {
+        if (hit) SoundEngine.playSignalCue(0.18);
+        else SoundEngine.playClick();
+      } catch {
+        /* ignore */
+      }
+    });
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(hit ? [10, 38, 12] : [18, 22, 18]);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [isSoundEnabled]);
+
   // --- Core (nucleus) interaction laws (UI/UX only; motor intact) ---
-  const isCoreLocked = fase === FASES.SEÑAL || fase === FASES.DETECCION;
+  const isCoreLocked = isIaRealProviderShell
+    ? iaRealEngineState.status === 'WAITING_RESULT' || iaRealEngineState.status === 'SYNC'
+    : fase === FASES.SEÑAL || fase === FASES.DETECCION;
   const coreRejectAnimRef = useRef(null);
   const [coreRejectAnim, setCoreRejectAnim] = useState(false);
   const coreClickGuardRef = useRef(0);
@@ -5651,6 +6019,25 @@ export default function App() {
       return;
     }
 
+    if (isIaRealProviderShell) {
+      if (iaRealEngineState.status === 'IDLE') {
+        setSystemMessage('Listo para iniciar…');
+        void startCycle();
+        return;
+      }
+      if (
+        iaRealEngineState.status === 'RESULT_ANIMATION' ||
+        iaRealEngineState.status === 'SUCCESS' ||
+        iaRealEngineState.status === 'FAILED'
+      ) {
+        setSystemMessage('Puedes detener el sistema cuando quieras');
+        stopCycle();
+        return;
+      }
+      triggerPulseFeedback();
+      return;
+    }
+
     if (fase === FASES.STANDBY) {
       setSystemMessage('Listo para iniciar…');
       void startCycle();
@@ -5665,7 +6052,15 @@ export default function App() {
 
     // Default: ignore but give gentle feedback
     triggerPulseFeedback();
-  }, [fase, isCoreLocked, startCycle, stopCycle, triggerPulseFeedback]);
+  }, [
+    fase,
+    isCoreLocked,
+    isIaRealProviderShell,
+    iaRealEngineState.status,
+    startCycle,
+    stopCycle,
+    triggerPulseFeedback,
+  ]);
 
   useEffect(() => {
     let interval = null;
@@ -5682,7 +6077,10 @@ export default function App() {
   useEffect(() => {
     if (!isRunning) return;
     if (isEnginePaused) return;
-    console.log('SCHEDULER RUN:', { fase, isRunning });
+    if (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.IA_REAL) {
+      return () => {};
+    }
+    if (import.meta.env.DEV) console.log('SCHEDULER RUN:', { fase, isRunning });
     const speedFactor = goPulseSpeedFactor;
     const plan = nextPhasePlan(fase, {
       speedFactor,
@@ -5774,7 +6172,7 @@ export default function App() {
       engineTimers.current.forEach((t) => clearTimeout(t));
       engineTimers.current = [];
     };
-  }, [fase, isRunning, isEnginePaused, isEngineStepMode, goPulseSpeedFactor]);
+  }, [fase, isRunning, isEnginePaused, isEngineStepMode, goPulseSpeedFactor, selectedMode]);
 
   useEffect(() => {
     const initFirebase = async () => {
@@ -5896,7 +6294,8 @@ export default function App() {
         ))}
       </div>
       
-      <header className="glass relative z-30 shrink-0 p-3 flex justify-between items-center" data-layer="ui" data-z="30">
+      <div className="relative z-30 shrink-0 flex flex-col" data-layer="ui" data-z="30">
+      <header className="glass relative p-3 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 flex items-center justify-center rounded-xl ${isLightMode ? 'bg-slate-200' : 'bg-black/5 border-[#00EDFF]/20'} border shadow-sm`}>
             <Eye className="text-cyan-600" size={20} />
@@ -6128,6 +6527,8 @@ export default function App() {
            </div>
         </div>
       </header>
+      <ProviderRelayStatusStrip variant="bar" />
+      </div>
 
       <div
         className="relative z-20 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0 w-full flex-1 lg:min-h-0 lg:overflow-auto custom-scrollbar"
@@ -6411,14 +6812,22 @@ export default function App() {
                         isLight={isLightMode} 
                         isGoPulseActive={isGoPulseActive} 
                         isGoldMode={isGoldMode}
-                        isFaseResult={fase === FASES.RESULTADO}
+                        isFaseResult={isIaRealProviderShell ? presentationFase === FASES.RESULTADO : fase === FASES.RESULTADO}
                         lastWinningShot={lastWinningShot}
                         activeAlert={activeAlert}
                       />
                     </motion.button>
                   </div>
 
-                  {fase === FASES.SEÑAL && (
+                  {isIaRealProviderShell ? (
+                    <IaRealExecutionLayer
+                      engine={iaRealEngineState}
+                      isLightMode={isLightMode}
+                      onOutcomePresented={iaRealOutcomePresented}
+                    />
+                  ) : null}
+
+                  {fase === FASES.SEÑAL && !isIaRealProviderShell && (
                     <div
                       className="absolute bottom-12 z-30 w-full space-y-8 animate-in zoom-in-95 pointer-events-auto"
                       data-layer="signal"
@@ -6607,8 +7016,8 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
               <div className="md:col-span-5 space-y-3">
                 <div className="flex items-center gap-2 px-1 text-cyan-600"><Settings2 size={12}/><label className="armani-label-dynamic opacity-100">Configuración Táctica</label></div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[{ id: MODOS.VISOR, label: 'Visor', icon: <Monitor size={12}/>, color: '#10b981' }, { id: MODOS.SIMULACION, label: 'Simular', icon: <Activity size={12}/>, color: '#8A2BE2' }, { id: MODOS.IA_REAL, label: 'IA Real', icon: <Zap size={12}/>, color: '#FF1B8D' }].map(m => (
+                <div className={`grid gap-2 ${shellModeButtons.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {shellModeButtons.map((m) => (
                     <button key={m.id} disabled={isRunning} onClick={async () => { await SoundEngine.init(); setSelectedMode(m.id); if (isSoundEnabled) SoundEngine.playClick(); speak(String(m.id)); }} className={`p-3 rounded-xl border transition-all flex flex-col items-center gap-1.5 ${selectedMode === m.id ? (isLightMode ? 'bg-slate-800 border-slate-900 text-white shadow-md' : 'bg-white/10 border-white text-white shadow-[0_0_10px_rgba(255,255,255,0.1)]') : (isLightMode ? 'bg-white border-slate-200 text-slate-400' : 'bg-black/10 border-black/10 text-slate-400')}`}>
                       <div className="font-black text-[10px] uppercase" style={{ color: selectedMode === m.id && !isLightMode ? m.color : '' }}>{m.label}</div>
                     </button>
@@ -7593,6 +8002,20 @@ export default function App() {
           >
             SYS·INTEL
           </button>
+          <a
+            href="/admin/login"
+            className="opacity-50 hover:opacity-100 transition-opacity text-amber-200/80 tracking-[0.2em]"
+            title="Acceso operadores — panel admin (sesión segura)"
+          >
+            ADMIN
+          </a>
+          <a
+            href="/admin/signals"
+            className="opacity-50 hover:opacity-100 transition-opacity text-emerald-300/85 tracking-[0.2em]"
+            title="Señales en vivo (misma app; pide login admin si no hay sesión)"
+          >
+            SEÑALES
+          </a>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-pink-500 flex items-center gap-2">

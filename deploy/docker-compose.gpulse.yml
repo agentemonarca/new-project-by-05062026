@@ -1,0 +1,10 @@
+# G-Pulse frontend estático (nginx). API: despliega core-api aparte (puerto 5050) y apunta VITE_API_URL al proxy público.
+# Uso (desde la raíz del repo): docker compose -f deploy/docker-compose.gpulse.yml up --build
+services:
+  gpulse-web:
+    build:
+      context: .
+      dockerfile: deploy/gpulse-frontend/Dockerfile
+    ports:
+      - "8080:80"
+    restart: unless-stopped

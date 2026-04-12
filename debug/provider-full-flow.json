@@ -1,0 +1,8 @@
+{
+  "_readme": "Append-only capture when backend ADMIN_SIGNALS_FULL_FLOW=1 and gpulse VITE_GPULSE_FULL_FLOW=1. Run 5–10 live cycles; events include provider_raw, normalized, relay_out, front_socket, store, ia_real. Backend merges client POST /api/admin/signals/full-flow into this file.",
+  "meta": {
+    "updatedAt": null,
+    "eventCount": 0
+  },
+  "events": []
+}

@@ -17,6 +17,7 @@ import {
 import { buildPresentedSignalView, useExternalSignalsStore } from '../../stores/externalSignalsStore.js';
 import { isExternalSignalsTransportActive } from '../../lib/externalSignalsConfig.js';
 import { fadeUpBlur } from '../../motion/variants.js';
+import { formatPredictionSideLabel, predictionSideFromRawSignal } from '../../../utils/providerMartingaleRead.js';
 
 const springSignal = { type: 'spring', stiffness: 440, damping: 32, mass: 0.85 };
 const springSoft = { type: 'spring', stiffness: 280, damping: 26 };
@@ -27,9 +28,18 @@ function pillRecommendation(side, large = false) {
       ? 'border-emerald-400/40 bg-emerald-500/[0.14] text-emerald-100 shadow-[0_0_24px_-6px_rgba(16,185,129,0.45)]'
       : side === 'BANKER'
         ? 'border-amber-400/45 bg-amber-500/[0.14] text-amber-100 shadow-[0_0_24px_-6px_rgba(245,158,11,0.4)]'
-        : 'border-slate-500/40 bg-slate-800/60 text-slate-300';
+        : side === 'TIE'
+          ? 'border-violet-400/40 bg-violet-500/[0.14] text-violet-100 shadow-[0_0_24px_-6px_rgba(139,92,246,0.35)]'
+          : 'border-slate-500/40 bg-slate-800/60 text-slate-300';
   const sz = large ? 'px-5 py-2.5 text-lg md:text-xl font-black tracking-tight' : 'px-3 py-1 text-xs font-bold';
   return `${base} rounded-xl border ${sz}`;
+}
+
+/** Vector + contador (proveedor); no usar `row.recommendation` como fuente. */
+function sidePillFromRow(row) {
+  if (!row?.rawSignal || typeof row.rawSignal !== 'object') return { side: null, label: '—' };
+  const side = predictionSideFromRawSignal(row.rawSignal);
+  return { side, label: formatPredictionSideLabel(side) };
 }
 
 function connectionBarClass(status) {
@@ -128,6 +138,7 @@ function statusBadge(status) {
 }
 
 function HistoryRow({ row, isLatestSettled, reduceMotion }) {
+  const { side: pillSide, label: pillLabel } = sidePillFromRow(row);
   const settled = row.status === 'won' || row.status === 'lost';
   const pending = row.status === 'pending';
   const bar =
@@ -154,7 +165,7 @@ function HistoryRow({ row, isLatestSettled, reduceMotion }) {
       <span className={`h-9 w-1 shrink-0 rounded-full ${bar}`} aria-hidden />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={pillRecommendation(row.recommendation, false)}>{row.recommendation}</span>
+          <span className={pillRecommendation(pillSide, false)}>{pillLabel}</span>
           {statusBadge(row.status)}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
@@ -314,9 +325,12 @@ export function ExternalSignalBoard({ compact = false, adminPreview = false }) {
                     className="mt-5"
                   >
                     <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <span className={pillRecommendation(current.recommendation, !compact)}>
-                        {current.recommendation}
-                      </span>
+                      {(() => {
+                        const ps = sidePillFromRow(current);
+                        return (
+                          <span className={pillRecommendation(ps.side, !compact)}>{ps.label}</span>
+                        );
+                      })()}
                       <div className="flex flex-wrap gap-3 text-xs text-slate-400">
                         <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono">
                           <TrendingUp className="h-4 w-4 text-slate-500" strokeWidth={2} />
@@ -355,7 +369,7 @@ export function ExternalSignalBoard({ compact = false, adminPreview = false }) {
                         key={q.id}
                         className="inline-flex items-center gap-2 rounded-lg border border-slate-600/40 bg-slate-900/60 px-2.5 py-1.5 text-[10px] font-mono text-slate-300"
                       >
-                        {q.recommendation} · MG{q.martingale}
+                        {sidePillFromRow(q).label} · MG{q.martingale}
                       </span>
                     ))}
                   </div>

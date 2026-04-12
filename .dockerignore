@@ -1,0 +1,12 @@
+**/node_modules
+**/.git
+**/dist
+.git
+.env
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+.DS_Store
+apps/admin-core/node_modules
+apps/backoffice/node_modules

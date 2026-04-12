@@ -56,6 +56,24 @@ function coerceObject(payload) {
 }
 
 /**
+ * Relay `NEW_SIGNAL`: `{ supplier, canonical }` → una fila para normalizar (canonical encima del proveedor).
+ * @param {unknown} forClient
+ */
+function mergeRelayNewSignalForInterpreter(forClient) {
+  const b = coerceObject(forClient);
+  const sup = b.supplier;
+  const can = b.canonical;
+  if (can != null && typeof can === 'object' && !Array.isArray(can)) {
+    const canObj = /** @type {Record<string, unknown>} */ (can);
+    if (sup != null && typeof sup === 'object' && !Array.isArray(sup)) {
+      return { ...coerceObject(sup), ...canObj };
+    }
+    return { ...canObj };
+  }
+  return b;
+}
+
+/**
  * @param {Record<string, unknown>} r
  * @returns {unknown[]|null}
  */
@@ -102,14 +120,14 @@ export function martingaleToTipo(m) {
 }
 
 /**
- * @param {'PLAYER'|'BANKER'|null} recommendation
+ * @param {'PLAYER'|'BANKER'|null} prediction
  * @param {'PLAYER'|'BANKER'|'TIE'|null} resultado
  * @returns {VigilanciaEstado}
  */
-export function matchVerdict(recommendation, resultado) {
+export function matchVerdict(prediction, resultado) {
   if (resultado === 'TIE') return 'TIE';
-  if (recommendation == null || resultado == null) return null;
-  if (recommendation === resultado) return 'WON';
+  if (prediction == null || resultado == null) return null;
+  if (prediction === resultado) return 'WON';
   return 'LOST';
 }
 
@@ -224,8 +242,8 @@ function emptyCounters() {
  * @param {Record<string, unknown>} frame
  */
 function emitFrame(frame) {
-  const off = String(process.env.ADMIN_SIGNALS_STREAM_DEBUG || '').toLowerCase();
-  if (off === '0' || off === 'false') return;
+  const off = String(process.env.ADMIN_SIGNALS_STREAM_FRAMES_OFF || '').toLowerCase();
+  if (off === '1' || off === 'true' || off === 'yes') return;
   try {
     ioRef?.of('/admin-signals')?.emit('signal_stream_frame', frame);
   } catch {
@@ -312,12 +330,12 @@ function createEngine() {
 
     if (eventName === 'NEW_SIGNAL') {
       const norm = normalizeNewSignalPayload(payload);
-      direccion = norm.recommendation === 'UNKNOWN' ? null : norm.recommendation;
+      direccion = norm.prediction === 'UNKNOWN' ? null : norm.prediction;
       martingale = Number.isFinite(norm.martingale) ? norm.martingale : null;
       signalTipo = martingaleToTipo(martingale ?? 0);
-    } else if (base.forecast != null || base.recommendation != null) {
+    } else if (base.forecast != null || base.prediction != null) {
       const norm = normalizeNewSignalPayload(payload);
-      direccion = norm.recommendation === 'UNKNOWN' ? null : norm.recommendation;
+      direccion = norm.prediction === 'UNKNOWN' ? null : norm.prediction;
       martingale = Number.isFinite(norm.martingale) ? norm.martingale : null;
       signalTipo = martingaleToTipo(martingale ?? 0);
     }
@@ -375,19 +393,20 @@ function createEngine() {
   function ingestRelay(type, forClient, meta = {}) {
     const source = meta.source || 'relay';
     if (!meta.fromUpstream) bumpEvent(type);
-    const base = coerceObject(forClient);
+    const mergedSignal = type === 'NEW_SIGNAL' ? mergeRelayNewSignalForInterpreter(forClient) : null;
+    const base = type === 'NEW_SIGNAL' ? coerceObject(mergedSignal) : coerceObject(forClient);
     const ctxDims = extractContext(base);
 
     if (type === 'NEW_SIGNAL') {
-      const norm = normalizeNewSignalPayload(forClient);
+      const norm = normalizeNewSignalPayload(mergedSignal);
       const mesaKey = norm.mesa || '—';
-      const direccion = norm.recommendation === 'UNKNOWN' ? null : norm.recommendation;
+      const direccion = norm.prediction === 'UNKNOWN' ? null : norm.prediction;
       const martingale = Number.isFinite(norm.martingale) ? norm.martingale : null;
       const signalTipo = martingaleToTipo(martingale ?? 0);
       bumpTipo(signalTipo);
 
       openByMesa.set(mesaKey, {
-        recommendation: direccion,
+        prediction: direccion,
         martingale,
         correlationKey: norm.correlationKey,
         round: norm.round,
@@ -437,7 +456,7 @@ function createEngine() {
       }
 
       const open = openByMesa.get(mesaKey);
-      const rec = open?.recommendation === 'BANKER' || open?.recommendation === 'PLAYER' ? open.recommendation : null;
+      const rec = open?.prediction === 'BANKER' || open?.prediction === 'PLAYER' ? open.prediction : null;
       let vigilancia = matchVerdict(rec, resultado);
       if (norm.winStatus === true && vigilancia == null) vigilancia = 'WON';
       if (norm.winStatus === false && vigilancia == null && resultado !== 'TIE') vigilancia = 'LOST';
@@ -518,9 +537,9 @@ export function buildFullSignalStateFromEvent(eventName, payload) {
   let direccion = null;
   let martingale = null;
   let signalTipo = null;
-  if (eventName === 'NEW_SIGNAL' || base.recommendation != null || base.forecast != null) {
+  if (eventName === 'NEW_SIGNAL' || (Array.isArray(base.vector_forecast) && base.vector_forecast.length > 0)) {
     const norm = normalizeNewSignalPayload(payload);
-    direccion = norm.recommendation === 'UNKNOWN' ? null : norm.recommendation;
+    direccion = norm.prediction === 'UNKNOWN' ? null : norm.prediction;
     martingale = Number.isFinite(norm.martingale) ? norm.martingale : null;
     signalTipo = martingaleToTipo(martingale ?? 0);
   }

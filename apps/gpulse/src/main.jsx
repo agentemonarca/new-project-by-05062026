@@ -3,6 +3,7 @@ window.Buffer = Buffer;
 
 import { installMockInjectedProviderIsolation } from './utils/mockInjectedIsolation.js';
 import { publishWeb3ModeToWindow } from './core/web3/web3Core.js';
+import { isWeb3MockMode } from './utils/web3Mode.js';
 
 installMockInjectedProviderIsolation();
 import React, { lazy, Suspense } from 'react';
@@ -19,6 +20,7 @@ import { AdminLoginPage } from './modules/admin/pages/AdminLoginPage.jsx';
 import { AdminRoute } from './modules/admin/AdminRoute.jsx';
 import { AdminProtectedShell, AdminPanelWithNav } from './ui-genesis/AdminCoreApp.jsx';
 import { SignalsControlPage } from './modules/admin/pages/SignalsControlPage.jsx';
+import { LEGACY_DASHBOARD_PATH_REDIRECTS } from './ui-genesis/navigation/genesisPaths.js';
 
 /** Relative path from this file (`src/main.jsx`) — required for stable Vite dynamic chunks */
 const GenesisDesignPreview = lazy(() => import('./ui-genesis/GenesisDesignPreview.jsx'));
@@ -106,7 +108,7 @@ function MainShell() {
         ) : (
           <>
             <App />
-            {import.meta.env.VITE_HIDE_MOCK_WEB3_PANEL !== '1' ? <MockWeb3DevPanel /> : null}
+            {isWeb3MockMode() && import.meta.env.VITE_HIDE_MOCK_WEB3_PANEL !== '1' ? <MockWeb3DevPanel /> : null}
           </>
         )}
       </WalletProvider>
@@ -119,7 +121,7 @@ function GpulseMainApp() {
     <GenesisErrorBoundary>
       <WalletProvider>
         <App />
-        {import.meta.env.VITE_HIDE_MOCK_WEB3_PANEL !== '1' ? <MockWeb3DevPanel /> : null}
+        {isWeb3MockMode() && import.meta.env.VITE_HIDE_MOCK_WEB3_PANEL !== '1' ? <MockWeb3DevPanel /> : null}
       </WalletProvider>
     </GenesisErrorBoundary>
   );
@@ -264,11 +266,29 @@ function GenesisDashboardShell() {
   );
 }
 
+/**
+ * Entrada por `/`:
+ * - `VITE_GENESIS_BACKOFFICE_HOME=1` → Command Center (`/admin`, todas las páginas bajo `/admin/:modulo`)
+ * - si no, `VITE_GENESIS_DASHBOARD_HOME=1` → AiGenesis Dashboard (`/dashboard`)
+ * - si no, shell G-Pulse en `/` y también `/gpulse`
+ */
+const GENESIS_BACKOFFICE_HOME = String(import.meta.env.VITE_GENESIS_BACKOFFICE_HOME ?? '').trim() === '1';
+const GENESIS_DASHBOARD_HOME = String(import.meta.env.VITE_GENESIS_DASHBOARD_HOME ?? '').trim() === '1';
+
+function RootHome() {
+  if (GENESIS_BACKOFFICE_HOME) return <Navigate to="/admin" replace />;
+  if (GENESIS_DASHBOARD_HOME) return <Navigate to="/dashboard" replace />;
+  return <MainShell />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/ping" element={<PingRoute />} />
       <Route path="/gpulse" element={<GpulseMainApp />} />
+      {/* Alias al backoffice Genesis (mismas rutas que `/admin` · login en `/admin/login`) */}
+      <Route path="/backoffice" element={<Navigate to="/admin" replace />} />
+      <Route path="/genesis-admin" element={<Navigate to="/admin" replace />} />
       <Route path="/marketplace" element={<GenesisMarketplaceShell />} />
       <Route path="/marketplace/local" element={<LocalMarketplaceShell />} />
       <Route path="/marketplace/merchant" element={<MerchantOnboardingShell />} />
@@ -297,8 +317,13 @@ function AppRoutes() {
       <Route path="/register" element={<RegisterPreviewShell />} />
       <Route path="/onboarding" element={<OnboardingInviteShell />} />
       <Route path="/dashboard" element={<GenesisDashboardShell />} />
+      {LEGACY_DASHBOARD_PATH_REDIRECTS.map(([path, nav]) => (
+        <Route key={path} path={path} element={<Navigate to={`/dashboard?nav=${encodeURIComponent(nav)}`} replace />} />
+      ))}
+      <Route path="/genesis-lobby" element={<Navigate to="/dashboard?nav=genesis-lobby" replace />} />
+      <Route path="/gpulse-lobby" element={<Navigate to="/dashboard?nav=gpulse-lobby" replace />} />
       {/* Explícito: en algunos despliegues el comodín `*` no dejaba resuelta la raíz correctamente. */}
-      <Route path="/" element={<MainShell />} />
+      <Route path="/" element={<RootHome />} />
       <Route path="*" element={<MainShell />} />
     </Routes>
   );

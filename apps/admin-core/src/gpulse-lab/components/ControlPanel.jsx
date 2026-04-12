@@ -1,9 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { handleResult, handleSignal } from '../engine/executionEngineDispatch.js';
 import {
   getSignalMiddlewareSnapshot,
-  handleResult,
-  handleSignal,
-  middlewareEnabled as mwFlag,
   resetMiddlewareProcessingState,
   setMiddlewareEnabled,
 } from '../middleware/useSignalMiddleware.js';
@@ -12,6 +10,22 @@ import { setValidationEnabled, validationEnabled as valFlag } from '../store/use
 
 function correlationKeyFrom(mesa, round) {
   return `${String(mesa)}|${String(round)}`;
+}
+
+const LAB_SIMULATE_ENABLED = import.meta.env.VITE_GPULSE_ALLOW_LAB_SIMULATE === '1';
+
+/** Preferencia UI: default ON (correlación / cola GPulse Lab). Valores '1' | '0'. */
+const MW_PREF_STORAGE_KEY = 'gpulse_lab_middleware_enabled';
+
+function readMiddlewarePreference() {
+  if (typeof window === 'undefined') return true;
+  try {
+    const v = window.localStorage.getItem(MW_PREF_STORAGE_KEY);
+    if (v === null) return true;
+    return v === '1' || v === 'true';
+  } catch {
+    return true;
+  }
 }
 
 function IndicatorPill({ label, active, activeLabel = 'ACTIVO', inactiveLabel = 'INACTIVO' }) {
@@ -32,9 +46,13 @@ function IndicatorPill({ label, active, activeLabel = 'ACTIVO', inactiveLabel = 
 }
 
 export default function ControlPanel() {
-  const [middlewareOn, setMiddlewareOn] = useState(() => mwFlag);
+  const [middlewareOn, setMiddlewareOn] = useState(readMiddlewarePreference);
   const [validationOn, setValidationOn] = useState(() => valFlag);
   const [mwSnap, setMwSnap] = useState(() => getSignalMiddlewareSnapshot());
+
+  useLayoutEffect(() => {
+    setMiddlewareEnabled(middlewareOn);
+  }, [middlewareOn]);
 
   const selectedMesaId = useLabStore((s) => s.selectedMesaId);
   const mesaIdsKey = useLabStore((s) => JSON.stringify(Object.keys(s.mesas).sort()));
@@ -62,10 +80,16 @@ export default function ControlPanel() {
   const openSet = useMemo(() => new Set(mwSnap.mesaKeysWithOpenCycle ?? []), [mwSnap]);
 
   const toggleMiddleware = useCallback(() => {
-    const next = !middlewareOn;
-    setMiddlewareOn(next);
-    setMiddlewareEnabled(next);
-  }, [middlewareOn]);
+    setMiddlewareOn((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage?.setItem(MW_PREF_STORAGE_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   const toggleValidation = useCallback(() => {
     const next = !validationOn;
@@ -205,13 +229,15 @@ export default function ControlPanel() {
         >
           🧹 Reset mesa seleccionada
         </button>
-        <button
-          type="button"
-          onClick={simulateCycle}
-          className="min-h-[52px] flex-1 rounded-xl border-2 border-violet-500/45 bg-violet-950/35 px-4 py-3 font-mono text-sm font-semibold uppercase tracking-wide text-violet-200 hover:bg-violet-900/40 sm:min-w-[200px]"
-        >
-          🧪 Simular ciclo (mesa elegida o SIM)
-        </button>
+        {LAB_SIMULATE_ENABLED ? (
+          <button
+            type="button"
+            onClick={simulateCycle}
+            className="min-h-[52px] flex-1 rounded-xl border-2 border-violet-500/45 bg-violet-950/35 px-4 py-3 font-mono text-sm font-semibold uppercase tracking-wide text-violet-200 hover:bg-violet-900/40 sm:min-w-[200px]"
+          >
+            🧪 Simular ciclo (mesa elegida o SIM)
+          </button>
+        ) : null}
       </div>
     </section>
   );

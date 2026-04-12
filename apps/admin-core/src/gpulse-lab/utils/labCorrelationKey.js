@@ -9,6 +9,22 @@ export function buildLabCorrelationKey(mesa, round) {
 }
 
 /**
+ * @param {unknown} ck
+ * @returns {{ mesaId: string, round: string } | null}
+ */
+export function parseLabCorrelationKeyParts(ck) {
+  if (ck == null || String(ck).trim() === '') return null;
+  const s = String(ck).trim();
+  const sep = '|round:';
+  const at = s.indexOf(sep);
+  if (at === -1 || !s.startsWith('mesa:')) return null;
+  const mesaId = s.slice('mesa:'.length, at);
+  const round = s.slice(at + sep.length);
+  if (mesaId === '') return null;
+  return { mesaId, round };
+}
+
+/**
  * @param {unknown} key
  * @param {unknown} mesa
  * @param {unknown} round

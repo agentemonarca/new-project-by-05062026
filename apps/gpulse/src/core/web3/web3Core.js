@@ -1,14 +1,27 @@
+import { BrowserProvider, Contract } from 'ethers';
 import { isWeb3MockMode } from '../../utils/web3Mode.js';
 import { mockProvider, mockSigner, mockTokenTransfer } from '../../utils/mockWeb3.js';
 import { installMockInjectedProviderIsolation } from '../../utils/mockInjectedIsolation.js';
-import { getWeb3Config } from './web3PaymentSupport.js';
+import { assertChain, ERC20_ABI, getWeb3Config, switchEthereumChain } from './web3PaymentSupport.js';
 
 /**
- * DEV: mock-only Web3 — no injected wallet, BrowserProvider, or requestAccounts.
+ * Mock: mockProvider/mockSigner. Real: MetaMask u otro EIP-1193 vía `window.ethereum`.
  */
+
+function getWindowEthereum() {
+  if (typeof window === 'undefined') return null;
+  return window.ethereum ?? null;
+}
 
 export function publishWeb3ModeToWindow() {
   if (typeof window === 'undefined') return;
+  if (!isWeb3MockMode()) {
+    window.GPULSE_WEB3_MODE = 'real';
+    if (import.meta.env.DEV && import.meta.env.VITE_VERBOSE_BOOT === '1') {
+      console.debug('[web3] real mode (window.ethereum, no mock isolation)');
+    }
+    return;
+  }
   installMockInjectedProviderIsolation();
   window.GPULSE_WEB3_MODE = 'mock';
   if (import.meta.env.DEV && import.meta.env.VITE_VERBOSE_BOOT === '1') {
@@ -16,44 +29,76 @@ export function publishWeb3ModeToWindow() {
   }
 }
 
-export const getInjectedEthereum = () => null;
+export const getInjectedEthereum = () => (isWeb3MockMode() ? null : getWindowEthereum());
 
 export async function createReadOnlyBrowserProvider() {
-  return null;
+  if (isWeb3MockMode()) return null;
+  const eth = getWindowEthereum();
+  if (!eth) return null;
+  return new BrowserProvider(eth);
 }
 
 export async function connectWallet() {
-  try {
-    const address = await mockSigner.getAddress();
-    return {
-      provider: mockProvider,
-      signer: mockSigner,
-      address,
-      isMock: true,
-    };
-  } catch (e) {
-    console.error('[web3Core.connectWallet]', e);
-    throw e;
+  if (isWeb3MockMode()) {
+    try {
+      const address = await mockSigner.getAddress();
+      return {
+        provider: mockProvider,
+        signer: mockSigner,
+        address,
+        isMock: true,
+      };
+    } catch (e) {
+      console.error('[web3Core.connectWallet]', e);
+      throw e;
+    }
   }
+  const eth = getWindowEthereum();
+  if (!eth?.request) {
+    throw new Error('NO_WALLET');
+  }
+  await eth.request({ method: 'eth_requestAccounts' });
+  const provider = new BrowserProvider(eth);
+  const signer = await provider.getSigner();
+  const address = await signer.getAddress();
+  return { provider, signer, address, isMock: false };
 }
 
 export async function refreshInjectedWalletSession() {
-  try {
-    const address = await mockSigner.getAddress();
-    return {
-      provider: mockProvider,
-      signer: mockSigner,
-      address,
-      isMock: true,
-    };
-  } catch (e) {
-    console.error('[web3Core.refreshInjectedWalletSession]', e);
-    throw e;
+  if (isWeb3MockMode()) {
+    try {
+      const address = await mockSigner.getAddress();
+      return {
+        provider: mockProvider,
+        signer: mockSigner,
+        address,
+        isMock: true,
+      };
+    } catch (e) {
+      console.error('[web3Core.refreshInjectedWalletSession]', e);
+      throw e;
+    }
   }
+  const eth = getWindowEthereum();
+  if (!eth?.request) {
+    throw new Error('NO_WALLET');
+  }
+  const accounts = await eth.request({ method: 'eth_accounts' });
+  if (!accounts || accounts.length === 0) {
+    throw new Error('NO_ACCOUNTS');
+  }
+  const provider = new BrowserProvider(eth);
+  const signer = await provider.getSigner();
+  const address = await signer.getAddress();
+  return { provider, signer, address, isMock: false };
 }
 
-export async function requestSwitchChain() {
-  return;
+/** @param {bigint} expectedChainId */
+export async function requestSwitchChain(expectedChainId) {
+  if (isWeb3MockMode()) return;
+  const eth = getWindowEthereum();
+  if (!eth) throw new Error('NO_WALLET');
+  await switchEthereumChain(eth, expectedChainId);
 }
 
 /**
@@ -73,21 +118,15 @@ export async function sendUsdt(signer, amountRaw) {
     return await mockTokenTransfer(amountRaw);
   }
 
-  /* istanbul ignore next — defensive: mock branch above must return; never reach here in mock */
-  if (isWeb3MockMode()) {
-    throw new Error('MOCK FALLTHROUGH DETECTED');
+  const { usdtContract, receiver, chainId, configured } = getWeb3Config();
+  if (!configured || !usdtContract || !receiver || chainId == null) {
+    throw new Error('CONFIG_MISSING');
   }
-
   try {
-    void signer;
-    const { usdtContract, receiver, configured } = getWeb3Config();
-    if (!configured && !isWeb3MockMode()) {
-      throw new Error('CONFIG_MISSING');
-    }
-    if (!configured || !usdtContract || !receiver) {
-      throw new Error('CONFIG_MISSING');
-    }
-    throw new Error('Real Web3 send disabled in forced mock build.');
+    await assertChain(signer.provider, chainId);
+    const c = new Contract(usdtContract, ERC20_ABI, signer);
+    const tx = await c.transfer(receiver, amountRaw);
+    return await tx.wait();
   } catch (e) {
     console.error('[web3Core.sendUsdt]', e);
     throw e;

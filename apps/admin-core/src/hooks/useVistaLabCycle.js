@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAdminSignalsLiveSnapshot } from '@/realtime/adminSignalsLiveStore.js';
 import {
   LAB_PHASE,
@@ -19,7 +19,22 @@ import {
   martingaleDataFromSignal,
   resultMatchesSignal,
 } from '@/utils/vistaLabCycle.js';
-import { computeFullCardRevealBeforeResultMs } from '@/components/lab/VistaLabCardReveal.jsx';
+import {
+  computeFullCardRevealBeforeResultMs,
+  extractMesaCardsFromResult,
+} from '@/components/lab/VistaLabCardReveal.jsx';
+
+/** Vista estable (cartas/ganador/recvId): evita setState cuando el buffer re-emite la misma fila con nueva ref. */
+function vistaLabResultRowDisplayFp(row) {
+  if (!row || typeof row !== 'object') return '';
+  const { player, banker, ganador } = extractMesaCardsFromResult(row);
+  return JSON.stringify({
+    rid: row.recvId != null ? String(row.recvId) : '',
+    g: ganador,
+    p: player,
+    b: banker,
+  });
+}
 
 /**
  * Motor de ciclo VistaLab (misma máquina de estados que `VistaLabPanel`).
@@ -64,10 +79,12 @@ export function useVistaLabCycle(opts = {}) {
   const resultSansSignalWarnedRef = useRef(false);
   const handledSignalRecvIdsRef = useRef(/** @type {Set<string>} */ (new Set()));
   const lastCycleSignalRecvIdRef = useRef(/** @type {string | null} */ (null));
-  const matchDebugLoggedForSignalRecvIdRef = useRef(/** @type {string | null} */ (null));
-  const matchDebugLastLogMsRef = useRef(0);
+  /** Dedupe MATCHING DEBUG in dev (same correlationKey can be re-checked without log spam). */
+  const matchDebugLoggedKeysRef = useRef(/** @type {Set<string>} */ (new Set()));
   const traceOn = import.meta.env.VITE_ADMIN_SIGNALS_TRACE === '1';
   const pendingResultRef = useRef(/** @type {Record<string, unknown> | null} */ (null));
+  const negativeLatencyWarnedRecvIdsRef = useRef(/** @type {Set<string>} */ (new Set()));
+  const forecastMisalignedWarnedRecvIdsRef = useRef(/** @type {Set<string>} */ (new Set()));
 
   function normMesa(m) {
     return String(m || '')
@@ -82,9 +99,14 @@ export function useVistaLabCycle(opts = {}) {
   /** @param {any} signalRow @param {any[]} resultsBuf */
   function debugMatch(signalRow, resultsBuf) {
     if (!import.meta.env.DEV) return;
-    const now = Date.now();
-    if (now - matchDebugLastLogMsRef.current < 1000) return;
-    matchDebugLastLogMsRef.current = now;
+    const ck =
+      signalRow?.correlationKey != null && String(signalRow.correlationKey).trim() !== ''
+        ? String(signalRow.correlationKey).trim()
+        : signalRow?.recvId != null
+          ? `recv:${String(signalRow.recvId)}`
+          : '';
+    if (ck !== '' && matchDebugLoggedKeysRef.current.has(ck)) return;
+    if (ck !== '') matchDebugLoggedKeysRef.current.add(ck);
     console.log('MATCHING DEBUG', { signal: signalRow, topResults: resultsBuf.slice(0, 3) });
   }
 
@@ -145,6 +167,9 @@ export function useVistaLabCycle(opts = {}) {
     consumedResultRecvIdRef.current = null;
     lastAppliedResultRecvIdRef.current = null;
     resultSansSignalWarnedRef.current = false;
+    negativeLatencyWarnedRecvIdsRef.current.clear();
+    forecastMisalignedWarnedRecvIdsRef.current.clear();
+    matchDebugLoggedKeysRef.current.clear();
     clearAllTimers();
   }, [clearAllTimers]);
 
@@ -186,8 +211,7 @@ export function useVistaLabCycle(opts = {}) {
   const startBettingCountdown = useCallback(() => {
     if (bettingIntervalRef.current != null) clearInterval(bettingIntervalRef.current);
     const startedAt = Date.now();
-    setBettingRemainingMs(HUMAN_BETTING_MS);
-    bettingIntervalRef.current = setInterval(() => {
+    const tick = () => {
       if (!isRunningRef.current) return;
       const elapsed = Date.now() - startedAt;
       const remaining = Math.max(0, HUMAN_BETTING_MS - elapsed);
@@ -198,7 +222,11 @@ export function useVistaLabCycle(opts = {}) {
         // Regla de bloqueo: si termina el betting, forzar fase LOCKED.
         if (phaseRef.current === LAB_PHASE.IN_PROGRESS) setPhase(LAB_PHASE.LOCKED);
       }
-    }, 100);
+    };
+    // La vista solo muestra segundos enteros (Math.ceil(ms/1000)); 100 ms disparaba ~10 re-renders/s
+    // en todo Admin+VistaLab y hacía “temblar” paneles con JSON (p. ej. Ultimate).
+    tick();
+    bettingIntervalRef.current = setInterval(tick, 1000);
   }, []);
 
   const stopBettingCountdown = useCallback(() => {
@@ -288,15 +316,26 @@ export function useVistaLabCycle(opts = {}) {
       const tRes = tsRow(resultRow);
       if (tSig != null && tRes != null) {
         const latency = tRes - tSig;
-        if (latency < 0) console.warn('LATENCIA NEGATIVA signal→result', { latencyMs: latency });
-        else if (import.meta.env.DEV) console.debug('[VistaLab] matchLatencyMs', latency);
+        if (latency < 0) {
+          if (rid && !negativeLatencyWarnedRecvIdsRef.current.has(rid)) {
+            negativeLatencyWarnedRecvIdsRef.current.add(rid);
+            console.warn('LATENCIA NEGATIVA signal→result', {
+              latencyMs: latency,
+              recvId: rid,
+              hint: 'serverTs/ingestTs u orden de ingest; revisar reloj del servidor',
+            });
+          }
+        } else if (import.meta.env.DEV) console.debug('[VistaLab] matchLatencyMs', latency);
       }
 
       const fc = forecastStepMisalignedWithGanador(
         /** @type {Record<string, unknown>} */ (signalRow),
         /** @type {Record<string, unknown>} */ (resultRow),
       );
-      if (fc.misaligned) console.warn('FORECAST DESALINEADO', fc);
+      if (fc.misaligned && rid && !forecastMisalignedWarnedRecvIdsRef.current.has(rid)) {
+        forecastMisalignedWarnedRecvIdsRef.current.add(rid);
+        console.warn('FORECAST DESALINEADO', fc);
+      }
 
       clearAllTimers();
       setActiveResult(resultRow);
@@ -328,8 +367,6 @@ export function useVistaLabCycle(opts = {}) {
       if (!rid || handledSignalRecvIdsRef.current.has(rid)) return;
       handledSignalRecvIdsRef.current.add(rid);
       lastCycleSignalRecvIdRef.current = rid;
-      matchDebugLoggedForSignalRecvIdRef.current = null;
-      matchDebugLastLogMsRef.current = 0;
 
       clearAllTimers();
       setActiveResult(null);
@@ -345,7 +382,9 @@ export function useVistaLabCycle(opts = {}) {
       if (labMode !== 'full') return;
 
       // Emulador de flujo humano por tiros (hasta 6).
-      const shotsTotal = Array.isArray(signalRow?.forecast6) ? signalRow.forecast6.length : HUMAN_FORECAST_MAX_SHOTS;
+      const shotsTotal = Array.isArray(signalRow?.vector_forecast)
+        ? signalRow.vector_forecast.length
+        : HUMAN_FORECAST_MAX_SHOTS;
       runHumanShotLoop(shotsTotal);
     },
     [clearAllTimers, labMode, runHumanShotLoop],
@@ -395,8 +434,16 @@ export function useVistaLabCycle(opts = {}) {
   useEffect(() => {
     if (labMode === 'phase1' || labMode === 'phase3') return;
     if (!isRunning) return;
-    // En modo human-flow buscamos match durante BETTING y también si ya está LOCKED.
-    const phaseOk = phase === LAB_PHASE.IN_PROGRESS || phase === LAB_PHASE.LOCKED || phase === LAB_PHASE.PAUSE;
+    // En modo human-flow buscamos match durante BETTING y LOCKED; con resultado ya vinculado, seguir
+    // fusionando la misma recvId en CARD_REVEAL / RESULT / evaluación / PAUSE (no re-buscar otra fila).
+    const phaseOk =
+      phase === LAB_PHASE.IN_PROGRESS ||
+      phase === LAB_PHASE.LOCKED ||
+      phase === LAB_PHASE.CARD_REVEAL ||
+      phase === LAB_PHASE.RESULT ||
+      phase === LAB_PHASE.EVALUATION_WIN ||
+      phase === LAB_PHASE.EVALUATION_LOSS ||
+      phase === LAB_PHASE.PAUSE;
     if (!phaseOk) return;
     const s = getAdminSignalsLiveSnapshot();
     const sig = activeSignalRef.current;
@@ -431,9 +478,27 @@ export function useVistaLabCycle(opts = {}) {
       return;
     }
 
-    // En modo full (human-flow) NO disparamos la secuencia CARD_REVEAL/EVALUATION;
-    // solo capturamos el match y lo mostramos cuando toque (fase RESULT).
+    // Modo full: timeline humano (betting ~10s → LOCKED → RESULT). El match puede llegar antes;
+    // si solo guardáramos en pendingResult y setActiveResult en RESULT, las cartas no se verían hasta ~14s.
+    // Mostrar datos en cuanto exista match; la fase sigue el reloj (reveal animado en RESULT).
+    // Importante: con varios NEW_RESULT en buffer que cumplen `resultMatchesSignal`, `findMatchingResultForSignal`
+    // alternaba filas al actualizar `consumedResultRecvId` → setState en bucle y parpadeo / NDJSON infinito.
     if (labMode === 'full') {
+      const ridHeld = activeResult?.recvId != null ? String(activeResult.recvId) : '';
+      if (ridHeld !== '') {
+        const latest = s.results.find((r) => r && r.recvId != null && String(r.recvId) === ridHeld);
+        if (latest) {
+          pendingResultRef.current = latest;
+          setActiveResult((prev) => {
+            const fpP = vistaLabResultRowDisplayFp(prev);
+            const fpL = vistaLabResultRowDisplayFp(latest);
+            if (prev != null && fpP === fpL && fpP !== '') return prev;
+            return prev ? { ...prev, ...latest } : latest;
+          });
+        }
+        return;
+      }
+
       debugMatch(sig, s.results);
       if (traceOn) console.log('TRACE: MATCH ATTEMPT', sig, s.results.slice(0, 3));
       const match = findMatchingResultForSignal(sig, s.results, consumedResultRecvIdRef.current);
@@ -442,8 +507,18 @@ export function useVistaLabCycle(opts = {}) {
         return;
       }
       consumedResultRecvIdRef.current = String(match.recvId);
-      pendingResultRef.current = match;
-      if (phaseRef.current === LAB_PHASE.RESULT) setActiveResult(match);
+      setActiveResult((prev) => {
+        pendingResultRef.current = match;
+        const ridP = prev?.recvId != null ? String(prev.recvId) : '';
+        const ridM = match?.recvId != null ? String(match.recvId) : '';
+        const fpP = vistaLabResultRowDisplayFp(prev);
+        const fpM = vistaLabResultRowDisplayFp(match);
+        if (prev != null && ridP === ridM && ridP !== '') {
+          if (fpP === fpM && fpP !== '') return prev;
+          return { ...prev, ...match };
+        }
+        return match;
+      });
       return;
     }
 
@@ -536,28 +611,46 @@ export function useVistaLabCycle(opts = {}) {
     start();
   }, [autoStart, start]);
 
-  const phaseStripOrder = phaseStripOrderFor(labMode, phase);
+  const phaseStripOrder = useMemo(() => phaseStripOrderFor(labMode, phase), [labMode, phase]);
   const phaseIndexRaw = phaseStripOrder.indexOf(phase);
   const phaseIndex = phaseIndexRaw >= 0 ? phaseIndexRaw : phaseStripOrder.length;
 
-  return {
-    phase,
-    activeSignal,
-    activeResult,
-    isRunning,
-    cooldownCount,
-    labNotice,
-    shotIndex,
-    bettingRemainingMs,
-    start,
-    pause,
-    phaseStripOrder,
-    phaseIndex,
-    labMode,
-    setLabNotice,
-    /** Expuesto para diagnósticos avanzados (misma API que antes en el panel). */
-    resultMatchesSignal,
-  };
+  return useMemo(
+    () => ({
+      phase,
+      activeSignal,
+      activeResult,
+      isRunning,
+      cooldownCount,
+      labNotice,
+      shotIndex,
+      bettingRemainingMs,
+      start,
+      pause,
+      phaseStripOrder,
+      phaseIndex,
+      labMode,
+      setLabNotice,
+      /** Expuesto para diagnósticos avanzados (misma API que antes en el panel). */
+      resultMatchesSignal,
+    }),
+    [
+      phase,
+      activeSignal,
+      activeResult,
+      isRunning,
+      cooldownCount,
+      labNotice,
+      shotIndex,
+      bettingRemainingMs,
+      start,
+      pause,
+      phaseStripOrder,
+      phaseIndex,
+      labMode,
+      setLabNotice,
+    ],
+  );
 }
 
 // Re-export fases para consumidores que importan el hook como fuente única.

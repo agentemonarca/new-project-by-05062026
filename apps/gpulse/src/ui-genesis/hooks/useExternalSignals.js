@@ -8,20 +8,34 @@ import {
 } from '../lib/externalSignalsConfig.js';
 import { getApiBaseUrl } from '../api/genesisConfig.js';
 import { useExternalSignalsStore } from '../stores/externalSignalsStore.js';
-import { useAdminSignalsStore } from '../stores/adminSignalsStore.js';
 import { redirectToAdminLogin } from '../lib/adminAuthRedirect.js';
 import { addRawEvent } from '../stores/rawEventsStore.js';
+import { isGpulseFullFlowEnabled, postFullFlowRow } from '../../utils/gpulseFullFlowClient.js';
 
 const EVENT_NEW_SIGNAL = 'NEW_SIGNAL';
 const EVENT_NEW_RESULT = 'NEW_RESULT';
 
-function scheduleIngest(cb) {
-  const ms = Math.max(0, Number(useAdminSignalsStore.getState().delayMs) || 0);
-  if (ms > 0) {
-    window.setTimeout(cb, ms);
-    return;
-  }
-  cb();
+function logRelayDiagnosticsFromApi() {
+  if (String(import.meta.env.VITE_ADMIN_SIGNALS_DEBUG ?? '').trim() !== '1') return;
+  const base = (getApiBaseUrl() || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/$/, '');
+  if (!base) return;
+  const adminKey = String(import.meta.env.VITE_GENESIS_ADMIN_API_KEY || '').trim();
+  /** Misma cabecera que exige `apiSessionAuthMiddleware` para `/api/admin/signals/*` (el socket usa `auth.apiKey`). */
+  const headers = adminKey ? { 'x-admin-api-key': adminKey } : undefined;
+  fetch(`${base}/api/admin/signals/config`, { credentials: 'include', headers })
+    .then(async (r) => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        console.warn('[admin-signals] relayDiagnostics fetch failed', r.status, j?.error || j);
+        return;
+      }
+      if (j?.relayDiagnostics) {
+        console.warn('[admin-signals] relayDiagnostics (sin secretos)', j.relayDiagnostics);
+      }
+    })
+    .catch((e) => {
+      console.warn('[admin-signals] relayDiagnostics fetch error', e?.message || e);
+    });
 }
 
 /**
@@ -94,6 +108,7 @@ export function useExternalSignals(opts = {}) {
           reconnectAttempt: 0,
         });
         pushEvent('socket', 'Conectado a señales externas (directo)');
+        logRelayDiagnosticsFromApi();
       };
 
       const onDisconnect = (reason) => {
@@ -118,25 +133,29 @@ export function useExternalSignals(opts = {}) {
       };
 
       const onNewSignal = (payload) => {
+        if (isGpulseFullFlowEnabled()) {
+          console.log('🔥 FRONT RECEIVED SIGNAL', payload);
+          void postFullFlowRow({ pipeline: 'front_socket', type: 'NEW_SIGNAL', payload });
+        }
         logAdminRaw(EVENT_NEW_SIGNAL, payload);
-        scheduleIngest(() => {
-          try {
-            ingestNewSignal(payload);
-          } catch (e) {
-            pushEvent('parse_error', String(e?.message || e));
-          }
-        });
+        try {
+          ingestNewSignal(payload);
+        } catch (e) {
+          pushEvent('parse_error', String(e?.message || e));
+        }
       };
 
       const onNewResult = (payload) => {
+        if (isGpulseFullFlowEnabled()) {
+          console.log('🔥 FRONT RECEIVED RESULT', payload);
+          void postFullFlowRow({ pipeline: 'front_socket', type: 'NEW_RESULT', payload });
+        }
         logAdminRaw(EVENT_NEW_RESULT, payload);
-        scheduleIngest(() => {
-          try {
-            ingestNewResult(payload);
-          } catch (e) {
-            pushEvent('parse_error', String(e?.message || e));
-          }
-        });
+        try {
+          ingestNewResult(payload);
+        } catch (e) {
+          pushEvent('parse_error', String(e?.message || e));
+        }
       };
 
       socket.on('connect', onConnect);
@@ -181,10 +200,12 @@ export function useExternalSignals(opts = {}) {
     manualCloseRef.current = false;
     setMeta({ connectionStatus: 'connecting', lastError: null, reconnectAttempt: 0 });
 
+    const adminKey = String(import.meta.env.VITE_GENESIS_ADMIN_API_KEY || '').trim();
     const socket = io(`${base}/admin-signals`, {
       path: '/socket.io',
       transports: ['websocket'],
       withCredentials: true,
+      ...(adminKey ? { auth: { apiKey: adminKey } } : {}),
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -202,6 +223,7 @@ export function useExternalSignals(opts = {}) {
         reconnectAttempt: 0,
       });
       pushEvent('socket', 'Conectado a Signals BFF (/admin-signals)');
+      logRelayDiagnosticsFromApi();
     };
 
     const onDisconnect = (reason) => {
@@ -226,25 +248,29 @@ export function useExternalSignals(opts = {}) {
     };
 
     const onNewSignal = (payload) => {
+      if (isGpulseFullFlowEnabled()) {
+        console.log('🔥 FRONT RECEIVED SIGNAL', payload);
+        void postFullFlowRow({ pipeline: 'front_socket', type: 'NEW_SIGNAL', payload });
+      }
       logAdminRaw(EVENT_NEW_SIGNAL, payload);
-      scheduleIngest(() => {
-        try {
-          ingestNewSignal(payload);
-        } catch (e) {
-          pushEvent('parse_error', String(e?.message || e));
-        }
-      });
+      try {
+        ingestNewSignal(payload);
+      } catch (e) {
+        pushEvent('parse_error', String(e?.message || e));
+      }
     };
 
     const onNewResult = (payload) => {
+      if (isGpulseFullFlowEnabled()) {
+        console.log('🔥 FRONT RECEIVED RESULT', payload);
+        void postFullFlowRow({ pipeline: 'front_socket', type: 'NEW_RESULT', payload });
+      }
       logAdminRaw(EVENT_NEW_RESULT, payload);
-      scheduleIngest(() => {
-        try {
-          ingestNewResult(payload);
-        } catch (e) {
-          pushEvent('parse_error', String(e?.message || e));
-        }
-      });
+      try {
+        ingestNewResult(payload);
+      } catch (e) {
+        pushEvent('parse_error', String(e?.message || e));
+      }
     };
 
     socket.on('connect', onConnect);

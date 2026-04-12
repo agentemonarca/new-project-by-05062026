@@ -13,6 +13,7 @@ import {
 import { relayNormalizedAdminSignals } from './normalizeSignal.js';
 import { createSignalEngine } from './signalEngine.js';
 import { startGpulseDemoMode } from './demoEngineBridge.js';
+import { setAdminSignalsRelayContext } from './adminSignalsRelayContext.js';
 
 /**
  * Fase 1 — registra REST en `/api/admin/signals/*` (antes de otros routers /api que no hagan `next()`).
@@ -81,10 +82,13 @@ export function attachAdminSignalsIo({ io, processor, logger, sessionMiddleware 
   console.log('[CHECK] WS URL:', process.env.EXTERNAL_SIGNALS_WS || process.env.EXTERNAL_SIGNALS_URL || '(default)', '→', upstreamUrl);
 
   const relayCtx = { io, processor, logger };
+  setAdminSignalsRelayContext(relayCtx);
   const signalEngine = createSignalEngine();
 
-  const demoModeForced = String(process.env.GPULSE_DEMO_MODE ?? '').trim() === '1';
-  const demoFallbackMs = Math.max(0, Number(process.env.GPULSE_DEMO_FALLBACK_MS || 10_000));
+  /** Explicit demo engine: only when `GPULSE_DEMO_MODE=1`. */
+  const demoModeForced = String(process.env.GPULSE_DEMO_MODE ?? '0').trim() === '1';
+  /** Idle fallback before starting demo: default **0** (off). Set e.g. `10000` to enable. */
+  const demoFallbackMs = Math.max(0, Number(process.env.GPULSE_DEMO_FALLBACK_MS ?? '0'));
   const demoFallbackEnabled = !demoModeForced && demoFallbackMs > 0;
 
   /** @type {number} */
@@ -169,7 +173,7 @@ export function attachAdminSignalsIo({ io, processor, logger, sessionMiddleware 
       '[ADMIN_SIGNALS] TEST EMIT activo cada',
       testIntervalMs,
       'ms | ALWAYS=',
-      String(process.env.ADMIN_SIGNALS_TEST_EMIT_ALWAYS ?? '1'),
+      String(process.env.ADMIN_SIGNALS_TEST_EMIT_ALWAYS ?? '0'),
       '| proveedor opcional',
     );
     testInterval = setInterval(() => {

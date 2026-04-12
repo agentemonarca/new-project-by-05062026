@@ -5,6 +5,7 @@ import { AdminSignalsLivePanel } from '../AdminSignalsLivePanel.jsx';
 import { ProviderLiveFeedPanel } from '../ProviderLiveFeedPanel.jsx';
 import { RawEventsPanel } from '../RawEventsPanel.jsx';
 import { SignalStreamDebugPanel } from '../SignalStreamDebugPanel.jsx';
+import { AdminRealtimeTraceDebugPanel } from './AdminRealtimeTraceDebugPanel.jsx';
 import ResultCasinoScoreBlock from '../ResultCasinoScoreBlock.jsx';
 import { VistaLabPanel } from '../lab/VistaLabPanel.jsx';
 import {
@@ -12,10 +13,12 @@ import {
   getAdminSignalsLiveSnapshot,
   subscribeAdminSignalsLive,
 } from '../../realtime/adminSignalsLiveStore.js';
+import { GlobalIntelQuickLink } from '../../gpulse-lab/components/GlobalIntelQuickLink.jsx';
 
 export const AdminSignalsSection = memo(function AdminSignalsSection() {
   return (
     <div className="space-y-6">
+      <GlobalIntelQuickLink label="Abrir informe" />
       <AdminSignalsProPanel compact={false} />
     </div>
   );
@@ -133,7 +136,7 @@ export const AdminMartingaleSection = memo(function AdminMartingaleSection() {
           <thead>
             <tr className="border-b text-[10px] uppercase tracking-wider text-[#848E9C]" style={{ borderColor: '#2B3139' }}>
               <th className="px-3 py-2 font-semibold">Mesa</th>
-              <th className="px-3 py-2 font-semibold">Predicción</th>
+              <th className="px-3 py-2 font-semibold">vector[0]</th>
               <th className="px-3 py-2 font-semibold">Nivel</th>
               <th className="px-3 py-2 font-semibold">Etiqueta</th>
               <th className="px-3 py-2 font-semibold">Ronda</th>
@@ -143,7 +146,12 @@ export const AdminMartingaleSection = memo(function AdminMartingaleSection() {
             {snap.signals.map((s) => (
               <tr key={s.recvId} className="border-b border-[#2B3139]/80 hover:bg-white/[0.03]">
                 <td className="px-3 py-2.5 font-mono">{String(s.mesa ?? '—')}</td>
-                <td className="px-3 py-2.5">{String(s.predictionLabel ?? s.recommendation ?? '—')}</td>
+                <td className="px-3 py-2.5 font-mono">
+                  {/* DISPLAY ONLY — NOT SOURCE OF TRUTH (operational prediction = contract getPrediction) */}
+                  {Array.isArray(s.vector_forecast) && s.vector_forecast[0] != null
+                    ? String(s.vector_forecast[0])
+                    : '—'}
+                </td>
                 <td className="px-3 py-2.5 font-mono text-[#FCD535]">{String(s.martingaleLevel ?? 0)}</td>
                 <td className="px-3 py-2.5 text-[#B7BDC6]">{String(s.martingale ?? '—')}</td>
                 <td className="px-3 py-2.5 font-mono text-[#848E9C]">{String(s.round ?? '—')}</td>
@@ -165,6 +173,7 @@ export const AdminAnalyticsSection = memo(function AdminAnalyticsSection() {
 
   return (
     <div className="space-y-4">
+      <GlobalIntelQuickLink label="Informe forense" />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { k: 'Buffer señales', v: snap.signals.length },
@@ -190,6 +199,8 @@ export const AdminAnalyticsSection = memo(function AdminAnalyticsSection() {
 export const AdminDebugSection = memo(function AdminDebugSection() {
   return (
     <div className="space-y-6">
+      <GlobalIntelQuickLink label="Ver último análisis" />
+      <AdminRealtimeTraceDebugPanel />
       <RawEventsPanel />
       <SignalStreamDebugPanel />
     </div>
@@ -199,7 +210,14 @@ export const AdminDebugSection = memo(function AdminDebugSection() {
 export const AdminVistaLabSection = memo(function AdminVistaLabSection() {
   return (
     <div className="space-y-6">
-      <ProviderLiveFeedPanel />
+      <details className="rounded-xl border border-[#2F81FF]/25 bg-[rgba(47,129,255,0.04)]">
+        <summary className="cursor-pointer px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-[#B7D4FF] marker:content-none [&::-webkit-details-marker]:hidden">
+          Feed crudo del socket (opcional)
+        </summary>
+        <div className="border-t border-[#2F81FF]/20 px-2 pb-2">
+          <ProviderLiveFeedPanel />
+        </div>
+      </details>
       <VistaLabPanel />
     </div>
   );

@@ -28,23 +28,12 @@ export function AdminRoute({ children }) {
           console.log('AdminRoute /me:', data);
         }
         const serverAdmin = Boolean(data?.admin);
-        const devLsOk =
-          import.meta.env.DEV &&
-          typeof localStorage !== 'undefined' &&
-          localStorage.getItem(ADMIN_AUTH_LS_KEY) === 'true';
-
-        let allow = serverAdmin;
-        if (import.meta.env.DEV) {
-          if (serverAdmin) {
-            localStorage.setItem(ADMIN_AUTH_LS_KEY, 'true');
-          } else if (devLsOk) {
-            /** DEV: carrera cookie tras redirect desde login (mismo origen). */
-            allow = true;
-          } else {
-            localStorage.removeItem(ADMIN_AUTH_LS_KEY);
-          }
+        if (import.meta.env.DEV && typeof localStorage !== 'undefined') {
+          if (serverAdmin) localStorage.setItem(ADMIN_AUTH_LS_KEY, 'true');
+          else localStorage.removeItem(ADMIN_AUTH_LS_KEY);
         }
-        setOk(allow);
+        /** Solo sesión real (cookie). Sin bypass por localStorage en DEV — evita entrar sin contraseña con flag viejo. */
+        setOk(serverAdmin);
         setReady(true);
       })
       .catch(() => {
