@@ -81,6 +81,20 @@ describe('IA Real — Phase 3D validation (deterministic, provider-driven)', () 
       expect(after.visualStepIndex).not.toBe(waiting.visualStepIndex);
       expect(after.activeRow).toBe(bumped);
     });
+
+    it('visualStepIndex follows row.martingale when rawSignal is unchanged (merge from stream / store)', () => {
+      const rawSignal = {
+        vector_forecast: ['P', 'B', 'P', 'B', 'P', 'B'],
+        contador_martingala: 1,
+      };
+      const base = { id: 'y', martingale: 1, rawSignal };
+      const waiting = iaRealStateAfterNewSignal(base, { startedAt: 0 });
+      expect(waiting.visualStepIndex).toBe(0);
+      const bumped = { ...base, martingale: 2, rawSignal };
+      const after = iaRealStateAfterProviderRowRefresh(waiting, bumped);
+      expect(after.visualStepIndex).toBe(1);
+      expect(after.activeRow?.martingale).toBe(2);
+    });
   });
 
   describe('4. Result', () => {

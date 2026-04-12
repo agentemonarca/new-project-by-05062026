@@ -12,13 +12,16 @@ import {
   recommendationSide,
   winnerVectorIndexFromGanador,
 } from '../../utils/iaRealEngineUi.js';
-import { formatPredictionSideLabel, predictionSideFromRawSignal } from '../../utils/providerMartingaleRead.js';
-import { IaRealMartingaleGrid } from './IaRealMartingaleGrid.jsx';
-
+import {
+  formatPredictionSideLabel,
+  predictionSideFromVectorAndContador,
+} from '../../utils/providerMartingaleRead.js';
 /**
  * Visual-only execution layer for IA Real (provider shell). No timers affecting engine state.
+ *
+ * @param {{ status?: string, reconnectAttempt?: number, lastError?: string | null }} [connectionMeta] Optional relay connection snapshot (from parent store reads only).
  */
-export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented }) {
+export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented, connectionMeta = null }) {
   const { status, activeRow, outcomeRow, visualStepIndex } = engine;
   const lastOutcomeFxRef = useRef('');
 
@@ -34,10 +37,11 @@ export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented }
   const stepProgressRatio =
     vfLen > 0 ? Math.min(1, Math.max(0, (Number(visualStepIndex) + 1) / vfLen)) : 0;
 
-  const predictionSide = useMemo(
-    () => predictionSideFromRawSignal(activeRow?.rawSignal ?? null),
-    [activeRow?.rawSignal],
-  );
+  const predictionSide = useMemo(() => {
+    if (!activeRow) return null;
+    const vf = extractVectorForecastFromActiveRow(activeRow);
+    return predictionSideFromVectorAndContador(vf, activeRow.martingale);
+  }, [activeRow, activeRow?.martingale, activeRow?.rawSignal]);
   const predictionLabel = formatPredictionSideLabel(predictionSide);
 
   return (
@@ -51,7 +55,7 @@ export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented }
           <p
             className={`text-center text-sm font-black uppercase tracking-[0.35em] ${isLightMode ? 'text-slate-600' : 'text-white/70'}`}
           >
-            Esperando señal…
+            Listo · esperando señal en vivo
           </p>
         </div>
       ) : null}
@@ -70,6 +74,21 @@ export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented }
             data-layer="ia-real-signal-data"
             data-z="30"
           >
+            {connectionMeta &&
+            (connectionMeta.status === 'reconnecting' ||
+              connectionMeta.status === 'connecting' ||
+              connectionMeta.status === 'error') ? (
+              <p
+                className={`text-center text-[10px] font-mono uppercase tracking-widest ${isLightMode ? 'text-amber-900' : 'text-amber-200/85'}`}
+              >
+                Relay:{' '}
+                {connectionMeta.status === 'error'
+                  ? 'sin enlace'
+                  : connectionMeta.status === 'reconnecting'
+                    ? `reconexión${connectionMeta.reconnectAttempt ? ` · ${connectionMeta.reconnectAttempt}` : ''}`
+                    : 'conectando…'}
+              </p>
+            ) : null}
             {status === 'SYNC' ? (
               <p
                 className={`text-center text-[11px] font-black uppercase tracking-[0.2em] ${isLightMode ? 'text-amber-800' : 'text-amber-200/90'}`}
@@ -140,15 +159,6 @@ export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented }
               </div>
             </div>
 
-            {activeRow ? (
-              <IaRealMartingaleGrid
-                rawSignal={activeRow.rawSignal}
-                rawResult={null}
-                visualStepIndex={visualStepIndex}
-                isLightMode={isLightMode}
-              />
-            ) : null}
-
             {vfLen > 0 ? (
               <div className="max-w-md mx-auto px-1">
                 <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden ring-1 ring-white/5">
@@ -168,25 +178,36 @@ export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented }
             <div className="flex justify-center flex-wrap gap-2.5">
               {extractVectorForecastFromActiveRow(activeRow).map((t, idx) => {
                 const activeIdx = Number(visualStepIndex) || 0;
+                const isActive = idx === activeIdx;
                 const dim = iaRealVectorMaturityDimClass(idx, activeIdx);
                 return (
-                  <motion.div
-                    key={`vf-${idx}`}
-                    className={`will-change-transform ${dim}`}
-                    animate={{ y: [0, -3, 0] }}
-                    transition={{
-                      duration: 3.2,
-                      repeat: Infinity,
-                      ease: 'easeInOut',
-                      delay: idx * 0.14,
-                    }}
-                  >
-                    <div
-                      className={`w-12 h-12 rounded-2xl border-2 flex items-center justify-center text-sm font-black transition-[transform,box-shadow] duration-200 ${iaRealVectorCellToneClasses(t, isLightMode, idx === activeIdx)}`}
+                  <div key={`vf-wrap-${activeRow.id}-${idx}`} className={dim}>
+                    <motion.div
+                      layout
+                      key={`vf-${activeRow.id}-${idx}-${activeIdx}`}
+                      className={`w-12 h-12 rounded-2xl border-2 flex items-center justify-center text-sm font-black ${iaRealVectorCellToneClasses(t, isLightMode, isActive)}`}
+                      animate={
+                        isActive
+                          ? {
+                              y: [0, -4, 0],
+                              scale: [1, 1.06, 1],
+                              boxShadow: [
+                                '0 0 0 0 rgba(34,211,238,0)',
+                                '0 0 20px 1px rgba(34,211,238,0.4)',
+                                '0 0 0 0 rgba(34,211,238,0)',
+                              ],
+                            }
+                          : { y: 0, scale: 1, boxShadow: '0 0 0 0 transparent' }
+                      }
+                      transition={
+                        isActive
+                          ? { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
+                          : { duration: 0.2 }
+                      }
                     >
                       {t}
-                    </div>
-                  </motion.div>
+                    </motion.div>
+                  </div>
                 );
               })}
             </div>
@@ -234,12 +255,6 @@ export function IaRealExecutionLayer({ engine, isLightMode, onOutcomePresented }
 
               return (
                 <div className="space-y-4">
-                  <IaRealMartingaleGrid
-                    rawSignal={(activeRow ?? outcomeRow)?.rawSignal}
-                    rawResult={outcomeRow.rawResult}
-                    visualStepIndex={activeIdx}
-                    isLightMode={isLightMode}
-                  />
                   <div
                     className={`rounded-2xl border px-4 py-3 text-left ${isLightMode ? 'bg-white border-slate-200' : `bg-black/55 border-white/10 ${winFlash}`}`}
                   >

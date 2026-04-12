@@ -3,24 +3,43 @@ import {
   PROVIDER_MARTINGALE_STEPS,
   extractVectorForecastArrayFromSignalRaw,
   extractVectorResultadoAndWinFromResultRaw,
+  forecastStepIndexFromContador,
   parseVectorWinStep,
   pickContadorMartingalaFromSignalRaw,
 } from '../../utils/providerMartingaleRead.js';
 
 /**
  * T1–T6 martingale table: vector_forecast, vector_resultado, vector_win per step (provider fields only).
+ * @param {{ martingaleFromStore?: number }} [props]
  */
-export function IaRealMartingaleGrid({ rawSignal, rawResult, visualStepIndex, isLightMode }) {
+export function IaRealMartingaleGrid({
+  rawSignal,
+  rawResult,
+  martingaleFromStore,
+  visualStepIndex,
+  isLightMode,
+}) {
   const rs = rawSignal && typeof rawSignal === 'object' && !Array.isArray(rawSignal) ? rawSignal : {};
   const vf = extractVectorForecastArrayFromSignalRaw(rs).map((x) => String(x));
-  const contador = pickContadorMartingalaFromSignalRaw(rs);
-  const contadorNum = Number(contador);
-  const contadorLabel = Number.isFinite(contadorNum) && contadorNum > 0 ? Math.min(6, Math.floor(contadorNum)) : '—';
+  const contadorFromRaw = pickContadorMartingalaFromSignalRaw(rs);
+  const contadorNum = Number(contadorFromRaw);
+  const contadorEffective =
+    martingaleFromStore != null && Number.isFinite(Number(martingaleFromStore)) && Number(martingaleFromStore) >= 1
+      ? Number(martingaleFromStore)
+      : contadorNum;
+  const contadorLabel =
+    Number.isFinite(contadorEffective) && contadorEffective > 0 ? Math.min(6, Math.floor(contadorEffective)) : '—';
 
   const rr = rawResult && typeof rawResult === 'object' && !Array.isArray(rawResult) ? rawResult : null;
   const { vector_resultado: vrIn, vector_win: vwIn } = rr
     ? extractVectorResultadoAndWinFromResultRaw(rr)
     : { vector_resultado: [], vector_win: [] };
+
+  const activeIdxFromStore =
+    martingaleFromStore != null && Number.isFinite(Number(martingaleFromStore)) && Number(martingaleFromStore) >= 1
+      ? forecastStepIndexFromContador(martingaleFromStore)
+      : null;
+  const activeIdx = activeIdxFromStore != null ? activeIdxFromStore : Number(visualStepIndex) || 0;
 
   const rows = [];
   for (let i = 0; i < PROVIDER_MARTINGALE_STEPS; i++) {
@@ -29,7 +48,7 @@ export function IaRealMartingaleGrid({ rawSignal, rawResult, visualStepIndex, is
     const wtok = vwIn[i];
     const w = parseVectorWinStep(wtok);
     const statusLabel = w === true ? 'WIN' : w === false ? 'LOSS' : '—';
-    const isCurrent = Number(visualStepIndex) === i && vf.length > 0;
+    const isCurrent = i === activeIdx && vf.length > 0;
     rows.push({ step: i + 1, pred, res, statusLabel, win: w, isCurrent });
   }
 

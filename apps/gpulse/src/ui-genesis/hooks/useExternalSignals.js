@@ -11,9 +11,83 @@ import { useExternalSignalsStore } from '../stores/externalSignalsStore.js';
 import { redirectToAdminLogin } from '../lib/adminAuthRedirect.js';
 import { addRawEvent } from '../stores/rawEventsStore.js';
 import { isGpulseFullFlowEnabled, postFullFlowRow } from '../../utils/gpulseFullFlowClient.js';
+import { normalizeNewResultPayload } from '../lib/externalSignalsTypes.js';
+import {
+  extractVectorResultadoAndWinFromResultRaw,
+  mergeResultEnvelopeForExtract,
+} from '../../utils/providerMartingaleRead.js';
 
 const EVENT_NEW_SIGNAL = 'NEW_SIGNAL';
 const EVENT_NEW_RESULT = 'NEW_RESULT';
+
+/** Mismo paso martingala: evita doble ingesta si NEW_RESULT llega por evento y por `signal_stream_frame`. */
+const resultIngestFingerprints = new Set();
+
+function fingerprintNewResultPayload(raw) {
+  const n = normalizeNewResultPayload(raw);
+  const flat = mergeResultEnvelopeForExtract(raw);
+  const { vector_resultado } = extractVectorResultadoAndWinFromResultRaw(flat);
+  return `${n.correlationKey}|${String(n.winStatus)}|${vector_resultado.join('\x1e')}`;
+}
+
+function tryIngestNewResultOnce(ingestNewResult, raw) {
+  let fp;
+  try {
+    fp = fingerprintNewResultPayload(raw);
+  } catch {
+    fp = `fp_err_${Date.now()}_${Math.random()}`;
+  }
+  if (resultIngestFingerprints.has(fp)) return;
+  resultIngestFingerprints.add(fp);
+  if (resultIngestFingerprints.size > 500) {
+    resultIngestFingerprints.clear();
+  }
+  ingestNewResult(raw);
+}
+
+/**
+ * `signal_stream_frame` puede traer `eventName` upstream (p. ej. dashboardUpdate), no solo NEW_RESULT
+ * (evidencia NDJSON: eventName dashboardUpdate + layers.raw).
+ */
+function streamFrameRawLooksLikeNewResult(raw) {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  try {
+    const flat = mergeResultEnvelopeForExtract(raw);
+    const { vector_resultado, vector_win } = extractVectorResultadoAndWinFromResultRaw(flat);
+    if (vector_win.length > 0 || vector_resultado.length > 0) return true;
+    const n = normalizeNewResultPayload(raw);
+    return n.winStatus === true || n.winStatus === false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ingesta resultados desde `signal_stream_frame`: el relay puede usar `eventName` distinto de NEW_RESULT
+ * (p. ej. `dashboardUpdate`) con `layers.raw` que sí contiene vectores / winStatus.
+ *
+ * @param {unknown} frame
+ * @param {(p: unknown) => void} ingestNewResult
+ * @param {(msg: string) => void} pushEvent
+ */
+function handleSignalStreamFrameForResults(frame, ingestNewResult, pushEvent) {
+  const raw = frame?.layers?.raw;
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return;
+
+  const ev = String(frame?.eventName ?? '');
+  const evU = ev.toUpperCase();
+  if (evU === EVENT_NEW_SIGNAL || evU === 'NEW_SIGNAL') return;
+
+  const nominal = evU === EVENT_NEW_RESULT;
+  const heuristic = !nominal && streamFrameRawLooksLikeNewResult(raw);
+  if (!nominal && !heuristic) return;
+
+  try {
+    tryIngestNewResultOnce(ingestNewResult, raw);
+  } catch (e) {
+    pushEvent('parse_error', String(e?.message || e));
+  }
+}
 
 function logRelayDiagnosticsFromApi() {
   if (String(import.meta.env.VITE_ADMIN_SIGNALS_DEBUG ?? '').trim() !== '1') return;
@@ -152,7 +226,7 @@ export function useExternalSignals(opts = {}) {
         }
         logAdminRaw(EVENT_NEW_RESULT, payload);
         try {
-          ingestNewResult(payload);
+          tryIngestNewResultOnce(ingestNewResult, payload);
         } catch (e) {
           pushEvent('parse_error', String(e?.message || e));
         }
@@ -177,8 +251,14 @@ export function useExternalSignals(opts = {}) {
       };
       socket.onAny(onAnyRaw);
 
+      const onSignalStreamFrame = (frame) => {
+        handleSignalStreamFrameForResults(frame, ingestNewResult, pushEvent);
+      };
+      socket.on('signal_stream_frame', onSignalStreamFrame);
+
       return () => {
         manualCloseRef.current = true;
+        socket.off('signal_stream_frame', onSignalStreamFrame);
         socket.offAny(onAnyRaw);
         socket.off(EVENT_NEW_SIGNAL, onNewSignal);
         socket.off(EVENT_NEW_RESULT, onNewResult);
@@ -267,7 +347,7 @@ export function useExternalSignals(opts = {}) {
       }
       logAdminRaw(EVENT_NEW_RESULT, payload);
       try {
-        ingestNewResult(payload);
+        tryIngestNewResultOnce(ingestNewResult, payload);
       } catch (e) {
         pushEvent('parse_error', String(e?.message || e));
       }
@@ -292,8 +372,14 @@ export function useExternalSignals(opts = {}) {
     };
     socket.onAny(onAnyRaw);
 
+    const onSignalStreamFrameBff = (frame) => {
+      handleSignalStreamFrameForResults(frame, ingestNewResult, pushEvent);
+    };
+    socket.on('signal_stream_frame', onSignalStreamFrameBff);
+
     return () => {
       manualCloseRef.current = true;
+      socket.off('signal_stream_frame', onSignalStreamFrameBff);
       socket.offAny(onAnyRaw);
       socket.off(EVENT_NEW_SIGNAL, onNewSignal);
       socket.off(EVENT_NEW_RESULT, onNewResult);

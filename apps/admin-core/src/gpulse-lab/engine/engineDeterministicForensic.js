@@ -42,7 +42,7 @@ export function logEngineForensicState(engineState) {
 
 /**
  * Reducer rejected an event (no state change). Opt-in via `VITE_GPULSE_FLICKER_FORENSIC=1`.
- * @param {'INVALID_VECTOR' | 'INVALID_OUTCOME' | 'OUT_OF_RANGE' | 'NOT_RUNNING' | 'MISSING_CORRELATION'} reason
+ * @param {'INVALID_VECTOR' | 'INVALID_OUTCOME' | 'OUT_OF_RANGE' | 'NOT_RUNNING' | 'MISSING_CORRELATION' | 'MISSING_VECTOR_WIN'} reason
  * @param {unknown} payload
  * @param {unknown} state
  */

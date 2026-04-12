@@ -7,6 +7,7 @@ import {
   forecastStepIndexFromContador,
   winStatusFromVectorWinLastArray,
 } from '../../utils/forecastMartingaleStep.js';
+import { safeForecastVectorIndex } from '../utils/clampProviderMartingaleVectors.js';
 import { warnEngineReject } from './engineDeterministicForensic.js';
 
 /**
@@ -101,7 +102,8 @@ export function reduce(state, event) {
       }
 
       const cm = effectiveContadorFromSignalPayload(p);
-      const idx = forecastStepIndexFromContador(cm);
+      const idxRaw = forecastStepIndexFromContador(cm);
+      const idx = safeForecastVectorIndex(idxRaw, vector);
       const predCell = vector[idx];
       if (predCell == null || String(predCell).trim() === '') {
         warnEngineReject('INVALID_VECTOR', event.payload, state);
@@ -137,19 +139,11 @@ export function reduce(state, event) {
 
       const ganadorRaw = event.payload?.ganador;
       const winFromVw = winStatusFromVectorWinLastArray(event.payload?.vector_win);
-
-      let isWin;
-      if (winFromVw !== null) {
-        isWin = winFromVw;
-      } else {
-        const g = normalizeOutcome(ganadorRaw);
-        if (g !== 'P' && g !== 'B' && g !== 'T') {
-          warnEngineReject('INVALID_OUTCOME', event.payload, state);
-          return state;
-        }
-        const pred = normalizeOutcome(state.prediction);
-        isWin = pred !== '' && g !== '' && pred === g;
+      if (winFromVw === null) {
+        warnEngineReject('MISSING_VECTOR_WIN', event.payload, state);
+        return state;
       }
+      const isWin = winFromVw;
 
       const newHistory = [
         ...state.history,
@@ -180,10 +174,13 @@ export function reduce(state, event) {
       }
 
       const rawCm = event.payload?.contador_martingala;
-      const idx =
-        rawCm != null && String(rawCm).trim() !== ''
+      const nCm = rawCm != null && String(rawCm).trim() !== '' ? Number(rawCm) : NaN;
+      /** Contador explícito > 0 (Winx 1-based). `0` o ausente: avanzar desde `currentStep` (fallback por `vector_resultado.length` puede ser 0 → no pisar el paso). */
+      const idxRaw =
+        Number.isFinite(nCm) && nCm > 0
           ? forecastStepIndexFromContador(rawCm)
           : Math.min(state.currentStep, state.maxSteps - 1);
+      const idx = safeForecastVectorIndex(idxRaw, state.vector);
       const nextPrediction = state.vector[idx] ?? null;
       if (nextPrediction == null || String(nextPrediction).trim() === '') {
         warnEngineReject('INVALID_VECTOR', event.payload, state);

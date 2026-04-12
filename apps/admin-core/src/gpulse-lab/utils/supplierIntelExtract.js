@@ -97,6 +97,48 @@ export function extractMesaKeyFromRaw(raw) {
   return '';
 }
 
+/**
+ * NEW_RESULT: `contador_martingala` (prioridad: raíz → `mesa_info.martingala` / nested → longitud de `vector_resultado`).
+ * Si faltan contadores explícitos y existe `vector_resultado` (raíz o `mesa_info.martingala`): `length` (0→T1, 1→T2, 2→T3).
+ * Sin array `vector_resultado` en ningún sitio → `undefined` (el motor avanza por `currentStep`).
+ * @param {unknown} payload
+ * @param {{ fallbackVectorResultado?: unknown[] }} [opts] — arrays ya recortados (`clampProviderMartingaleVectors`) para inferir longitud sin basuras del proveedor.
+ * @returns {number | undefined}
+ */
+export function extractContadorMartingalaFromResultPayload(payload, opts) {
+  const p = asRec(payload);
+  if (!p) return undefined;
+  const top = p.contador_martingala;
+  if (top != null && String(top).trim() !== '') {
+    const n = Number(top);
+    if (Number.isFinite(n)) return n;
+  }
+  const mesaFlat =
+    p.mesa_info != null && typeof p.mesa_info === 'object' && !Array.isArray(p.mesa_info) ? asRec(p.mesa_info) : null;
+  const miNested = extractNestedMesaInfo(payload) ?? mesaFlat;
+  const mart =
+    miNested?.martingala != null && typeof miNested.martingala === 'object' && !Array.isArray(miNested.martingala)
+      ? asRec(miNested.martingala)
+      : mesaFlat?.martingala != null && typeof mesaFlat.martingala === 'object' && !Array.isArray(mesaFlat.martingala)
+        ? asRec(mesaFlat.martingala)
+        : null;
+  const cm = mart?.contador_martingala;
+  if (cm != null && String(cm).trim() !== '') {
+    const n = Number(cm);
+    if (Number.isFinite(n)) return n;
+  }
+  if (opts != null && Array.isArray(opts.fallbackVectorResultado) && opts.fallbackVectorResultado.length > 0) {
+    return opts.fallbackVectorResultado.length;
+  }
+  if (Array.isArray(p.vector_resultado) && p.vector_resultado.length > 0) {
+    return p.vector_resultado.length;
+  }
+  if (Array.isArray(mart?.vector_resultado) && mart.vector_resultado.length > 0) {
+    return mart.vector_resultado.length;
+  }
+  return undefined;
+}
+
 /** @param {unknown} v */
 export function formatForecastCell(v) {
   if (v == null) return '?';

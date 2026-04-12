@@ -33,7 +33,6 @@ import { getAdaptiveStreamDeadlineMs, getStreamDelayStatsForMesa } from '../stor
 import { useAlertStore } from '../store/useAlertStore.js';
 import { computeIntelligentWaitingUx } from '../utils/intelligentWaitingUx.js';
 import { useBaccaratLiveDealEngine } from '../hooks/useBaccaratLiveDealEngine.js';
-import { normalizeOutcomeCell } from '../utils/baccaratIntelligence.js';
 import { validateUIUXState } from '../utils/uiUxValidator.js';
 import { validateUIFlow, UI_FLOW_STATES } from '../utils/uiFlowValidator.js';
 import { monitorProviderTruth } from '../utils/providerTruthMonitor.js';
@@ -46,12 +45,14 @@ import { useExecutionReplayStore } from '../store/useExecutionReplayStore.js';
 import { normalizeCorrelationKey } from '../utils/labCorrelationKey.js';
 import ExecutionReplayBar from './ExecutionReplayBar.jsx';
 import { detectAndPreventPreFailure } from '../utils/preFailureDetector.js';
-import { padForecastVector } from '../engine/executionEngine.js';
 import {
-  forecastStepIndexFromContador,
-  mapForecastAtStep,
-  recommendationFromForecastCell,
-} from '../../utils/forecastMartingaleStep.js';
+  buildMartingaleStepRows,
+  MARTINGALE_STEPS,
+  winOutcomeLabelFromCell,
+} from '../utils/providerMartingaleDisplay.js';
+
+/** Referencia estable cuando no hay mesa activa (evita `createEmptyMesaState()` nuevo en cada selector). */
+const EMPTY_MESA_ROW = createEmptyMesaState();
 
 /** Títulos modo casino (es) + fallback inglés en store */
 const TITLE_BY_LIFECYCLE = {
@@ -288,7 +289,7 @@ function PlayingCard({ card, type, isDealt }) {
   );
 }
 
-/** Vector + paso (proveedor: `contador_martingala` → celda; motor como respaldo). */
+/** Vector + paso (solo proveedor: `vector_forecast` + `contador_martingala`). */
 function PatternTracker({ currentStep, maxSteps, vector, predictionLabel, tiroNumber }) {
   const cells = Array.isArray(vector) ? vector : [];
   const ms = typeof maxSteps === 'number' && maxSteps > 0 ? maxSteps : 6;
@@ -335,65 +336,108 @@ function PatternTracker({ currentStep, maxSteps, vector, predictionLabel, tiroNu
   );
 }
 
-/** Historial del motor (`history` ya viene del reducer). */
-function HistoryPanel({ history }) {
-  const rows = Array.isArray(history) ? history : [];
-  if (rows.length === 0) {
-    return <p className="text-xs text-slate-500">Sin entradas en el motor para este ciclo.</p>;
+/** Tabla compacta: predicción / resultado / vector_win por paso (proveedor). */
+function ProviderMartingaleStepTable({ rows }) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return (
+      <p className="max-w-md text-center text-[9px] text-slate-500">Sin vector_forecast del proveedor.</p>
+    );
   }
   return (
-    <>
-      {rows.map((h, i) => {
-        const pred = trackerLabelFromEnginePrediction(h.prediction);
-        const resRaw = h.result;
-        const res = winnerToPlayerBanker(resRaw);
-        const id = `eh-${h.step}-${i}`;
-        return (
-          <GlassPanel key={id} className="group flex cursor-default items-center justify-between p-4 transition-colors hover:bg-indigo-900/20">
+    <div className="mt-2 w-full max-w-md overflow-hidden rounded-lg border border-slate-600/50 bg-slate-900/85 text-[9px] shadow-lg">
+      <div className="grid grid-cols-[1.5rem_1fr_1fr_2.25rem] gap-1 border-b border-slate-700/60 px-2 py-1 font-bold uppercase tracking-tighter text-slate-500">
+        <span>#</span>
+        <span>pred</span>
+        <span>res</span>
+        <span className="text-center">win</span>
+      </div>
+      {rows.map((r) => (
+        <div
+          key={r.step}
+          className={`grid grid-cols-[1.5rem_1fr_1fr_2.25rem] gap-1 border-b border-slate-800/50 px-2 py-0.5 font-mono ${
+            r.isActive ? 'bg-indigo-500/15 ring-1 ring-indigo-400/30' : ''
+          }`}
+        >
+          <span className="text-slate-500">{r.step}</span>
+          <span className="text-cyan-200/95">{r.predLabel ?? '—'}</span>
+          <span className="text-slate-200/90">{r.resultadoShort ?? r.resultado ?? '—'}</span>
+          <span
+            className={`text-center font-bold ${
+              r.winLabel === 'WIN'
+                ? 'text-emerald-400'
+                : r.winLabel === 'LOSS'
+                  ? 'text-rose-400'
+                  : 'text-slate-600'
+            }`}
+          >
+            {r.winLabel ?? '—'}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Drawer: mismo modelo que la tabla central (sin motor). */
+function ProviderMartingaleCycleHistory({ rows }) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return <p className="text-xs text-slate-500">Sin datos de martingala del proveedor para este ciclo.</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {rows.map((r) => (
+        <GlassPanel
+          key={r.step}
+          className={`p-4 ${r.isActive ? 'border-indigo-400/40 bg-indigo-950/20' : 'border-slate-700/40'}`}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-mono text-[10px] font-bold text-slate-500">TIRO {r.step}</span>
+            {r.isActive ? (
+              <span className="rounded border border-indigo-400/40 px-1.5 py-0.5 text-[9px] font-bold text-indigo-300">
+                ACTUAL
+              </span>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px]">
             <div>
-              <div className="mb-1 font-mono text-[10px] font-bold text-slate-500">PASO {h.step}</div>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-                <span>
-                  pred:{' '}
-                  <span className="font-bold text-slate-200">{pred ?? '—'}</span>
-                </span>
-                <span>
-                  res:{' '}
-                  <span
-                    className={`font-black ${
-                      res === 'BANKER'
-                        ? 'text-red-400'
-                        : res === 'PLAYER'
-                          ? 'text-blue-400'
-                          : res === 'TIE'
-                            ? 'text-emerald-400'
-                            : 'text-slate-500'
-                    }`}
-                  >
-                    {res ?? '—'}
-                  </span>
-                </span>
-              </div>
+              <div className="text-[9px] uppercase text-slate-500">Pred</div>
+              <div className="font-bold text-slate-100">{r.predLabel ?? '—'}</div>
             </div>
-            <div className="text-right">
+            <div>
+              <div className="text-[9px] uppercase text-slate-500">Resultado</div>
+              <div className="font-bold text-slate-200">{r.resultadoShort ?? r.resultado ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-[9px] uppercase text-slate-500">Estado</div>
               <div
-                className={`text-xs font-black uppercase ${
-                  h.status === 'WIN' ? 'text-emerald-400' : h.status === 'LOSS' ? 'text-rose-400' : 'text-slate-500'
+                className={`font-black uppercase ${
+                  r.winLabel === 'WIN'
+                    ? 'text-emerald-400'
+                    : r.winLabel === 'LOSS'
+                      ? 'text-rose-400'
+                      : 'text-slate-500'
                 }`}
               >
-                {h.status ?? '—'}
+                {r.winLabel ?? '—'}
               </div>
             </div>
-          </GlassPanel>
-        );
-      })}
-    </>
+          </div>
+        </GlassPanel>
+      ))}
+    </div>
   );
 }
 
 export default function CenterPanel() {
-  const mesas = useLabStore((s) => s.mesas);
   const selectedMesaId = useLabStore((s) => s.selectedMesaId);
+  const mesas = useLabStore((s) => s.mesas);
+
+  const effectiveId = useMemo(() => getEffectiveMesaId(mesas, selectedMesaId), [mesas, selectedMesaId]);
+
+  const row = useMemo(() => {
+    if (!effectiveId) return EMPTY_MESA_ROW;
+    return mesas[effectiveId] ?? EMPTY_MESA_ROW;
+  }, [mesas, effectiveId]);
   const lifecycleState = useLabStore((s) => s.lifecycleState);
   const providerCloseTs = useLabStore((s) => s.providerCloseTs);
   const cycleStartedAt = useLabStore((s) => s.cycleStartedAt);
@@ -402,16 +446,22 @@ export default function CenterPanel() {
   const highlightUntilTs = useGpulseLabUiStore((s) => s.highlightUntilTs);
   const alerts = useAlertStore((s) => s.alerts);
 
-  const effectiveId = useMemo(() => getEffectiveMesaId(mesas, selectedMesaId), [mesas, selectedMesaId]);
-  const row = useMemo(
-    () => (effectiveId ? mesas[effectiveId] : createEmptyMesaState()),
-    [mesas, effectiveId],
-  );
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('RENDER STEP', row.martingala);
+    }
+  }, [row.martingala]);
 
-  const selectedCorrelationKey = useMemo(
-    () => normalizeCorrelationKey(null, row.mesa ?? effectiveId, row.round),
-    [row.mesa, row.round, effectiveId],
-  );
+  const selectedCorrelationKey = useMemo(() => {
+    const mesa = row.mesa ?? effectiveId;
+    const round = row.round;
+    const ck = normalizeCorrelationKey(null, mesa, round);
+    if (ck != null) return ck;
+    if (mesa != null && mesa !== '' && round != null && String(round).trim() !== '') {
+      return `${mesa}|${round}`;
+    }
+    return null;
+  }, [row.mesa, row.round, effectiveId]);
 
   const replayRow = useExecutionReplayStore(
     useCallback(
@@ -439,37 +489,28 @@ export default function CenterPanel() {
 
   useEngineRenderForensic(engineState.correlationKey);
 
-  const providerForecastSideLabel = useMemo(() => {
-    const vf = row.vector_forecast;
-    if (!Array.isArray(vf) || vf.length === 0) return null;
-    const idx = forecastStepIndexFromContador(row.martingala);
-    const cell = mapForecastAtStep(vf, idx);
-    return recommendationFromForecastCell(cell);
-  }, [row.vector_forecast, row.martingala]);
+  /** Cada render: índice desde `forecastStepIndexFromContador(row.martingala)` dentro de `buildMartingaleStepRows`. */
+  const martingaleStepModel = buildMartingaleStepRows(row);
 
-  const patternTrackerVector = useMemo(() => {
-    const vf = row.vector_forecast;
-    if (Array.isArray(vf) && vf.length > 0) return padForecastVector(vf);
-    return Array.isArray(engineState.vector) ? engineState.vector : [];
-  }, [row.vector_forecast, engineState.vector]);
+  const providerForecastSideLabel =
+    martingaleStepModel.rows[martingaleStepModel.activeIdx]?.predLabel ?? null;
 
-  const patternTrackerStep = useMemo(() => {
-    if (Array.isArray(row.vector_forecast) && row.vector_forecast.length > 0) {
-      return forecastStepIndexFromContador(row.martingala) + 1;
-    }
-    return typeof engineState.currentStep === 'number' ? engineState.currentStep : 0;
-  }, [row.vector_forecast, row.martingala, engineState.currentStep]);
+  const patternTrackerVector =
+    Array.isArray(martingaleStepModel.paddedForecast) && martingaleStepModel.paddedForecast.length > 0
+      ? martingaleStepModel.paddedForecast
+      : [];
 
-  const tiroDisplayNumber = useMemo(() => {
-    const c = Number(row.martingala);
-    if (!Number.isFinite(c)) return null;
-    return c + 1;
-  }, [row.martingala]);
+  const patternTrackerStep =
+    martingaleStepModel.rows.length > 0 ? martingaleStepModel.activeIdx + 1 : 0;
 
-  const predictionSideLabel = useMemo(
-    () => providerForecastSideLabel ?? trackerLabelFromEnginePrediction(engineState.prediction),
-    [providerForecastSideLabel, engineState.prediction],
-  );
+  const tiroDisplayNumber =
+    martingaleStepModel.rows.length === 0
+      ? null
+      : Number.isFinite(Number(martingaleStepModel.contador))
+        ? Number(martingaleStepModel.contador) + 1
+        : null;
+
+  const predictionSideLabel = providerForecastSideLabel;
 
   const ganador = row.ganador;
   const mesaInfo = row.supplierMesaInfoFull;
@@ -769,29 +810,23 @@ export default function CenterPanel() {
     };
   }, [visiblePlayer, visibleBanker, winnerForTableLive, winnerForTable, tableData]);
 
-  const martingaleHistoryUi = useMemo(() => {
-    if (!Array.isArray(engineState.history) || engineState.history.length === 0) return [];
-    const t0 = engineState.startedAt ?? Date.now();
-    return engineState.history.map((h, i) => ({
-      id: `eng-${String(engineState.correlationKey ?? 'ck')}-${h.step}-${i}`,
-      status: h.status,
-      step: h.step,
-      time: t0 + i * 100,
-    }));
-  }, [engineState.history, engineState.startedAt, engineState.correlationKey]);
-
   const metricsPair = useMemo(() => {
-    const w = Array.isArray(row.wins) ? row.wins : [];
-    return {
-      wins: w.filter((x) => normalizeOutcomeCell(x) === 'P').length,
-      losses: w.filter((x) => normalizeOutcomeCell(x) === 'B').length,
-    };
-  }, [row.wins]);
+    const vw = Array.isArray(row.vector_win) ? row.vector_win : [];
+    let wins = 0;
+    let losses = 0;
+    for (const cell of vw) {
+      const lab = winOutcomeLabelFromCell(cell);
+      if (lab === 'WIN') wins += 1;
+      if (lab === 'LOSS') losses += 1;
+    }
+    return { wins, losses };
+  }, [row.vector_win]);
 
   const mesaAnalyticsUi = useMemo(() => {
-    const w = Array.isArray(row.wins) ? row.wins : [];
-    const winRate =
-      w.length > 0 ? Math.round((w.filter((x) => normalizeOutcomeCell(x) === 'P').length / w.length) * 100) : 0;
+    const vw = Array.isArray(row.vector_win) ? row.vector_win : [];
+    const decided = vw.filter((c) => winOutcomeLabelFromCell(c) != null).length;
+    const winCount = vw.filter((c) => winOutcomeLabelFromCell(c) === 'WIN').length;
+    const winRate = decided > 0 ? Math.round((winCount / decided) * 100) : 0;
     const errAlerts = alerts.filter((a) => a.severity === 'error').length;
     const avgMs = row.mesaAnalytics?.avgDelayMs ?? streamStats.avgDelay;
     return {
@@ -799,7 +834,7 @@ export default function CenterPanel() {
       anomalies: errAlerts,
       avgDelay: typeof avgMs === 'number' && Number.isFinite(avgMs) ? (avgMs / 1000).toFixed(1) : '—',
     };
-  }, [row.wins, row.mesaAnalytics?.avgDelayMs, streamStats.avgDelay, alerts]);
+  }, [row.vector_win, row.mesaAnalytics?.avgDelayMs, streamStats.avgDelay, alerts]);
 
   const betTotalSec = useMemo(() => {
     if (typeof providerCloseTs === 'number' && Number.isFinite(providerCloseTs) && labSignalTs != null) {
@@ -1023,7 +1058,7 @@ export default function CenterPanel() {
                   <TrendingUp className="h-4 w-4 opacity-50" />
                   {metricsPair.wins}
                 </span>
-                <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Player</span>
+                <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Win</span>
               </div>
               <div className="h-10 w-px bg-indigo-500/20" />
               <div className="flex flex-col items-center">
@@ -1031,16 +1066,16 @@ export default function CenterPanel() {
                   {metricsPair.losses}
                   <TrendingDown className="h-4 w-4 opacity-50" />
                 </span>
-                <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Banker</span>
+                <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-slate-400">Loss</span>
               </div>
             </div>
             <div className="flex items-center justify-between border-t border-indigo-500/20 pt-3">
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Ciclo Actual</span>
               <span className="text-xs font-black text-indigo-300">
-                {engineState.status === 'RUNNING' && tiroDisplayNumber != null
+                {tiroDisplayNumber != null
                   ? `TIRO ${tiroDisplayNumber}`
-                  : engineState.status === 'RUNNING'
-                    ? `${engineState.currentStep}/${engineState.maxSteps}`
+                  : patternTrackerStep > 0
+                    ? `${patternTrackerStep}/${MARTINGALE_STEPS}`
                     : '—'}
               </span>
             </div>
@@ -1081,7 +1116,7 @@ export default function CenterPanel() {
               {engineState.status === 'RUNNING' ? (
                 <span className="text-slate-500">
                   {' '}
-                  · step {patternTrackerStep}/{engineState.maxSteps}
+                  · step {patternTrackerStep}/{MARTINGALE_STEPS}
                 </span>
               ) : null}
             </div>
@@ -1089,38 +1124,40 @@ export default function CenterPanel() {
               Historial Martingala <span className="text-indigo-400">(Ciclo 6)</span>
             </h3>
             <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto pr-1">
-              {martingaleHistoryUi.length === 0 ? (
-                <p className="text-[10px] text-slate-600">Sin eventos RESULT en el ciclo actual.</p>
+              {martingaleStepModel.rows.length === 0 ? (
+                <p className="text-[10px] text-slate-600">Sin vector del proveedor en este ciclo.</p>
               ) : (
-                martingaleHistoryUi.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`flex items-center justify-between rounded-lg border p-3 transition-all ${
-                      item.status === 'WIN'
-                        ? 'border-emerald-500/20 bg-emerald-900/10 hover:bg-emerald-900/20'
-                        : 'border-red-500/20 bg-red-900/10 hover:bg-red-900/20'
-                    }`}
-                  >
-                    <div className="flex flex-col">
-                      <span
-                        className={`text-[11px] font-black tracking-widest ${
-                          item.status === 'WIN' ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
-                        {item.status === 'WIN' ? 'VICTORIA' : 'PÉRDIDA TOTAL'}
-                      </span>
-                      <span className="text-[9px] text-slate-500">{formatTimeAgo(item.time)}</span>
+                martingaleStepModel.rows.map((r) => {
+                  const st = r.winLabel === 'WIN' ? 'WIN' : r.winLabel === 'LOSS' ? 'LOSS' : null;
+                  return (
+                    <div
+                      key={r.step}
+                      className={`flex flex-col gap-1 rounded-lg border p-2 transition-all ${
+                        r.isActive
+                          ? 'border-indigo-400/35 bg-indigo-950/25'
+                          : st === 'WIN'
+                            ? 'border-emerald-500/20 bg-emerald-900/10'
+                            : st === 'LOSS'
+                              ? 'border-red-500/20 bg-red-900/10'
+                              : 'border-slate-700/30 bg-slate-900/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[10px] font-bold text-slate-400">TIRO {r.step}</span>
+                        <span
+                          className={`text-[10px] font-black ${
+                            st === 'WIN' ? 'text-emerald-400' : st === 'LOSS' ? 'text-rose-400' : 'text-slate-500'
+                          }`}
+                        >
+                          {r.winLabel ?? '—'}
+                        </span>
+                      </div>
+                      <div className="text-[9px] text-slate-500">
+                        pred {r.predLabel ?? '—'} · res {r.resultadoShort ?? r.resultado ?? '—'}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 rounded border border-slate-700/50 bg-slate-900/50 px-2 py-1 font-mono text-[11px] text-slate-300">
-                      Tiro{' '}
-                      <span
-                        className={item.status === 'WIN' ? 'font-bold text-emerald-300' : 'font-bold text-red-300'}
-                      >
-                        {item.step}
-                      </span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -1199,14 +1236,15 @@ export default function CenterPanel() {
               </div>
             </div>
 
-            <div className="absolute top-28 z-50">
+            <div className="absolute top-28 z-50 flex flex-col items-center">
               <PatternTracker
                 currentStep={patternTrackerStep}
-                maxSteps={engineState.maxSteps}
+                maxSteps={MARTINGALE_STEPS}
                 vector={patternTrackerVector}
                 predictionLabel={predictionSideLabel}
                 tiroNumber={tiroDisplayNumber}
               />
+              <ProviderMartingaleStepTable rows={martingaleStepModel.rows} />
             </div>
 
             <div className="relative z-40 mb-8 mt-20 flex h-64 w-full items-center justify-center">
@@ -1498,7 +1536,7 @@ export default function CenterPanel() {
                 <div className="text-indigo-200">
                   {engineState.status}
                   {engineState.status === 'RUNNING'
-                    ? ` · paso ${patternTrackerStep}/${engineState.maxSteps}`
+                    ? ` · paso ${patternTrackerStep}/${MARTINGALE_STEPS}`
                     : ''}
                 </div>
                 {engineState.result != null ? (
@@ -1606,7 +1644,7 @@ export default function CenterPanel() {
             </button>
           </div>
           <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-2">
-            <HistoryPanel history={engineState.history} />
+            <ProviderMartingaleCycleHistory rows={martingaleStepModel.rows} />
           </div>
         </div>
       </div>

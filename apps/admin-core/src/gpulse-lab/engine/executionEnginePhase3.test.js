@@ -21,7 +21,7 @@ describe('Phase 3 — NEW_RESULT deduplication', () => {
 
     const r = {
       type: 'NEW_RESULT',
-      normalized: { correlationKey: ck, mesa: 'phase3', ganador: 'P' },
+      normalized: { correlationKey: ck, mesa: 'phase3', ganador: 'P', vector_win: ['W'] },
     };
 
     dispatchToEngine(r);

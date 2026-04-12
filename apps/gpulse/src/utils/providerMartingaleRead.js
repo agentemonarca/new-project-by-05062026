@@ -204,6 +204,85 @@ export function extractVectorResultadoAndWinFromResultRaw(r) {
 }
 
 /**
+ * Aplanar envelope NEW_RESULT (`type`/`data` anidados) para extractores (alineado con admin).
+ * @param {unknown} payload
+ * @returns {Record<string, unknown>}
+ */
+export function mergeResultEnvelopeForExtract(payload) {
+  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return /** @type {Record<string, unknown>} */ ({});
+  }
+  const p = /** @type {Record<string, unknown>} */ (payload);
+  const d =
+    p.data != null && typeof p.data === 'object' && !Array.isArray(p.data)
+      ? /** @type {Record<string, unknown>} */ (p.data)
+      : {};
+  const d2 =
+    d.data != null && typeof d.data === 'object' && !Array.isArray(d.data)
+      ? /** @type {Record<string, unknown>} */ (d.data)
+      : {};
+  return { ...p, ...d, ...d2 };
+}
+
+/**
+ * NEW_RESULT: `contador_martingala` (raíz → `mesa_info.martingala`) o longitud de `vector_resultado`.
+ * @param {unknown} payload
+ * @returns {number | undefined}
+ */
+export function pickContadorMartingalaFromResultRaw(payload) {
+  const r = mergeResultEnvelopeForExtract(payload);
+  const top = r.contador_martingala;
+  if (top != null && String(top).trim() !== '') {
+    const n = Number(top);
+    if (Number.isFinite(n)) return n;
+  }
+  const mart = pickMartingalaBlockFromResultRaw(r);
+  if (mart) {
+    const cm = mart.contador_martingala;
+    if (cm != null && String(cm).trim() !== '') {
+      const n = Number(cm);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  const { vector_resultado } = extractVectorResultadoAndWinFromResultRaw(r);
+  if (vector_resultado.length > 0) return vector_resultado.length;
+  return undefined;
+}
+
+/**
+ * Pérdida intermedia: avanzar martingala sin cerrar la fila pendiente (mismo ciclo proveedor).
+ * @param {unknown} payload
+ * @param {{ martingale: number, rawResult?: Record<string, unknown> | null }} target
+ * @param {boolean} winStatus
+ */
+export function shouldMergeInterimLossIntoPendingRow(payload, target, normalizedWinStatus) {
+  const flat = mergeResultEnvelopeForExtract(payload);
+  /** Victoria explícita en `vector_win` — no fusionar con fila pendiente. */
+  if (winStatusFromVectorWinLast(flat) === true) return false;
+
+  const prevMg = Number(target.martingale) || 1;
+  const nextMg = pickContadorMartingalaFromResultRaw(flat);
+  const { vector_resultado: vrNew } = extractVectorResultadoAndWinFromResultRaw(flat);
+  const prevRaw =
+    target.rawResult != null && typeof target.rawResult === 'object' && !Array.isArray(target.rawResult)
+      ? target.rawResult
+      : {};
+  const { vector_resultado: vrOld } = extractVectorResultadoAndWinFromResultRaw(prevRaw);
+  if (nextMg != null && Number.isFinite(Number(nextMg)) && Number(nextMg) > prevMg) return true;
+  if (vrNew.length > vrOld.length) return true;
+  /** Proveedor reemplaza el vector con la misma longitud pero otra celda (siguiente paso). */
+  if (vrNew.length > 0 && vrNew.length === vrOld.length && vrNew.join('\x1e') !== vrOld.join('\x1e')) {
+    return true;
+  }
+  /**
+   * Sin señal de avance en la escalera: si el relay marca win, no forzar merge
+   * (evita fusionar un acierto final mal correlacionado).
+   */
+  if (normalizedWinStatus === true) return false;
+  return false;
+}
+
+/**
  * WIN / LOSS from `vector_win[last]` when present.
  * @returns {boolean | null} null = not derivable from vector_win
  */

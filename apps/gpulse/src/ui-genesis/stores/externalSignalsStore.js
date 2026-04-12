@@ -5,6 +5,16 @@ import {
   normalizeNewSignalPayload,
 } from '../lib/externalSignalsTypes.js';
 import { isGpulseFullFlowEnabled, postFullFlowRow } from '../../utils/gpulseFullFlowClient.js';
+import {
+  extractVectorForecastArrayFromSignalRaw,
+  extractVectorResultadoAndWinFromResultRaw,
+  mergeResultEnvelopeForExtract,
+  pickContadorMartingalaFromResultRaw,
+  predictionSideFromVectorAndContador,
+  PROVIDER_MARTINGALE_STEPS,
+  shouldMergeInterimLossIntoPendingRow,
+  winStatusFromVectorWinLast,
+} from '../../utils/providerMartingaleRead.js';
 
 /** @typedef {'pending' | 'won' | 'lost'} SignalSettlement */
 
@@ -227,6 +237,16 @@ export const useExternalSignalsStore = create((set, get) => ({
 
   ingestNewResult(payload) {
     const r = normalizeNewResultPayload(payload);
+    const flat = mergeResultEnvelopeForExtract(payload);
+    if (String(import.meta.env.VITE_DEBUG_MG ?? '').trim() === '1') {
+      const { vector_resultado, vector_win } = extractVectorResultadoAndWinFromResultRaw(flat);
+      console.log('DEBUG RESULT INPUT', {
+        contador: pickContadorMartingalaFromResultRaw(flat),
+        vector_resultado,
+        vector_win,
+      });
+    }
+
     const pending = get().activeSignals.filter((s) => s.status === 'pending');
     const target = findPendingForResult(pending, {
       correlationKey: r.correlationKey,
@@ -238,6 +258,71 @@ export const useExternalSignalsStore = create((set, get) => ({
     if (!target) {
       get().pushEvent('NEW_RESULT', `Sin señal pendiente · win=${r.winStatus}`);
       get().recordCorrelationMiss();
+      return;
+    }
+
+    const mergeInterim = shouldMergeInterimLossIntoPendingRow(payload, target, r.winStatus);
+
+    /** Pérdida intermedia: mismo `id` pendiente, contador/vector_resultado avanza — no cerrar aún. */
+    if (mergeInterim) {
+      const prevMg = Number(target.martingale) || 1;
+      const extracted = pickContadorMartingalaFromResultRaw(flat);
+      const { vector_resultado: vrNew } = extractVectorResultadoAndWinFromResultRaw(flat);
+      const prevRaw =
+        target.rawResult != null && typeof target.rawResult === 'object' && !Array.isArray(target.rawResult)
+          ? target.rawResult
+          : {};
+      const { vector_resultado: vrOld } = extractVectorResultadoAndWinFromResultRaw(prevRaw);
+
+      let newMg =
+        extracted != null && Number.isFinite(Number(extracted)) && Number(extracted) > prevMg
+          ? Number(extracted)
+          : vrNew.length > vrOld.length
+            ? Math.min(PROVIDER_MARTINGALE_STEPS, vrNew.length + 1)
+            : Math.min(PROVIDER_MARTINGALE_STEPS, prevMg + 1);
+      newMg = Math.max(1, Math.min(PROVIDER_MARTINGALE_STEPS, newMg));
+
+      const rs =
+        target.rawSignal != null && typeof target.rawSignal === 'object' && !Array.isArray(target.rawSignal)
+          ? target.rawSignal
+          : {};
+      const vf = extractVectorForecastArrayFromSignalRaw(rs);
+      const pred = predictionSideFromVectorAndContador(vf, newMg);
+      const recommendation =
+        pred === 'PLAYER' || pred === 'BANKER' || pred === 'TIE' ? pred : 'UNKNOWN';
+
+      if (String(import.meta.env.VITE_DEBUG_MG ?? '').trim() === '1') {
+        console.log('DEBUG STORE UPDATE (merge loss)', {
+          prevStep: prevMg,
+          nextStep: newMg,
+          prediction: recommendation,
+        });
+      }
+
+      set((s) => {
+        const nextRow = /** @type {ExternalBaccaratSignalRow} */ ({
+          ...target,
+          martingale: newMg,
+          recommendation,
+          rawResult: flat,
+          status: 'pending',
+          settledAt: null,
+          winStatus: null,
+        });
+        const activeSignals = s.activeSignals.map((x) => (x.id === target.id ? nextRow : x));
+        return {
+          streamTick: s.streamTick + 1,
+          activeSignals,
+          stats: {
+            ...s.stats,
+            pending: activeSignals.filter((x) => x.status === 'pending').length,
+          },
+        };
+      });
+      get().pushEvent(
+        'NEW_RESULT',
+        `LOSS_STEP · MG ${prevMg}→${newMg} · ${recommendation} · mesa ${target.mesa}`,
+      );
       return;
     }
 

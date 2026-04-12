@@ -10,13 +10,18 @@ import { useLabStore } from '../store/useLabStore.js';
 import { resolveMesaIdForIntel } from '../store/useLabStore.js';
 import { recordStreamResult, recordStreamSignal } from '../store/useValidationStore.js';
 import { normalizeCorrelationKey } from '../utils/labCorrelationKey.js';
-import { extractMesaKeyFromRaw, extractNestedMesaInfo } from '../utils/supplierIntelExtract.js';
+import {
+  extractContadorMartingalaFromResultPayload,
+  extractMesaKeyFromRaw,
+  extractNestedMesaInfo,
+} from '../utils/supplierIntelExtract.js';
 import { gpulseLabLog } from '../utils/gpulseLabLog.js';
 import { beginGpulseLabWarmupWindow } from '../utils/gpulseLabWarmup.js';
 import { recordOutsideEvent } from '../utils/forensicObservability.js';
 import { auditPayloadMapping, detectMismatch } from '../utils/payloadContractAudit.js';
 import { deriveRecommendation, vectorForecastForDebug } from '../utils/deriveRecommendation.js';
 import { deriveMartingaleFields } from '../utils/martingaleUi.js';
+import { clampProviderMartingaleVectors } from '../utils/clampProviderMartingaleVectors.js';
 
 /** Mismo origen que `getAdminSignalsSocket` / VistaLab (`resolveAdminSignalsIoOrigin.js`). */
 const LAB_IO_ORIGIN = getAdminSignalsIoOrigin();
@@ -272,10 +277,14 @@ export function normalizeNewResultPayload(payload) {
 
   const vr = mart?.vector_resultado;
   const vw = mart?.vector_win;
+  const vfHint = p.vector_forecast ?? mart?.vector_forecast;
   const vector_resultado = Array.isArray(vr) ? vr : [];
   const vector_win = Array.isArray(vw) ? vw : [];
-  const cm = mart?.contador_martingala;
-  const contador_martingala = typeof cm === 'number' ? cm : Number(cm) || 0;
+  const clamped = clampProviderMartingaleVectors({
+    vector_forecast: vfHint,
+    vector_resultado,
+    vector_win,
+  });
 
   let mesa = p.mesa != null && String(p.mesa).trim() !== '' ? p.mesa : null;
   if (mesa == null || mesa === '') {
@@ -314,14 +323,18 @@ export function normalizeNewResultPayload(payload) {
 
   if (mesa == null || mesa === '') return null;
 
+  const contador_martingala = extractContadorMartingalaFromResultPayload(p, {
+    fallbackVectorResultado: clamped.vector_resultado,
+  });
+
   return {
     ganador: ganadorRaw != null ? ganadorRaw : null,
     mesa,
     round: roundDefined ? roundStr : undefined,
     correlationKey,
-    vector_resultado,
-    vector_win,
-    contador_martingala,
+    vector_resultado: clamped.vector_resultado,
+    vector_win: clamped.vector_win,
+    ...(contador_martingala !== undefined ? { contador_martingala } : {}),
   };
 }
 
@@ -466,7 +479,9 @@ export function useLabSocket() {
           correlationKey: /** @type {Record<string, unknown>} */ (p).correlationKey,
         });
       }
-      console.log('RAW PROVIDER RESULT:', JSON.stringify(payload, null, 2));
+      console.log('RAW PROVIDER RESULT:', payload);
+      console.log('CONTADOR RESULT:', payload?.mesa_info?.martingala?.contador_martingala);
+      console.log('VECTOR WIN:', payload?.vector_win);
       gpulseLabLog.debug('📡 RESULT', payload);
       let normalized = normalizeNewResultPayload(payload);
       if (!normalized && payload != null && typeof payload === 'object' && !Array.isArray(payload)) {

@@ -118,13 +118,14 @@ export function recommendationSide(rec) {
 export function forecastStepIndexFromProviderRow(row, len) {
   if (!len) return 0;
   const fromRaw = row?.rawSignal != null ? pickContadorMartingalaFromSignalRaw(row.rawSignal) : null;
-  const fromRow = row?.martingale;
-  const contador =
+  const fromStore = Number(row?.martingale);
+  const rawNum =
     fromRaw != null && String(fromRaw).trim() !== '' && Number.isFinite(Number(fromRaw))
       ? Number(fromRaw)
-      : Number.isFinite(Number(fromRow))
-        ? Number(fromRow)
-        : 1;
+      : null;
+  /** Store (merge NEW_RESULT) gana sobre contador congelado en rawSignal. */
+  const contador =
+    Number.isFinite(fromStore) && fromStore >= 1 ? fromStore : rawNum != null ? rawNum : 1;
   const idx = forecastStepIndexFromContador(contador);
   return Math.min(idx, len - 1);
 }

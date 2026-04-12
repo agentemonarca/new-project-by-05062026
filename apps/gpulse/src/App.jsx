@@ -96,7 +96,9 @@ import { createIdleIaRealVisualState, iaRealStatusToPresentationFase } from './u
 import { extractVectorForecastFromActiveRow, forecastStepIndexFromProviderRow } from './utils/iaRealEngineUi.js';
 import { ProviderRelayStatusStrip } from './components/ProviderRelayStatusStrip.jsx';
 import { IaRealExecutionLayer } from './components/iaReal/IaRealExecutionLayer.jsx';
+import { IaRealSignalFeedPanel } from './components/iaReal/IaRealSignalFeedPanel.jsx';
 import { logIaRealEngineInput } from './utils/iaRealFullFlowLog.js';
+import { useIaRealDisplayStats } from './hooks/useIaRealDisplayStats.js';
 
 // --- CONFIGURACIÓN DE SISTEMA ---
 /** Plan de usuario para reglas de voz G_Pulse (alinear con Access / backend cuando exista). */
@@ -3098,6 +3100,10 @@ export default function App() {
   const extStreamTick = useExternalSignalsStore((s) => s.streamTick);
   const extActiveSignals = useExternalSignalsStore((s) => s.activeSignals);
   const extHistory = useExternalSignalsStore((s) => s.history);
+  const extRecentEvents = useExternalSignalsStore((s) => s.recentEvents);
+  const extConnectionStatus = useExternalSignalsStore((s) => s.connectionStatus);
+  const extReconnectAttempt = useExternalSignalsStore((s) => s.reconnectAttempt);
+  const extLastError = useExternalSignalsStore((s) => s.lastError);
 
   const [db, setDb] = useState(null);
   const [userId, setUserId] = useState(null);
@@ -3144,6 +3150,8 @@ export default function App() {
     return fase;
   }, [isIaRealProviderShell, iaRealEngineState.status, fase]);
 
+  const iaRealDisplayStats = useIaRealDisplayStats(isIaRealProviderShell);
+
   const hideSimulacionUi = String(import.meta.env.VITE_GPULSE_HIDE_SIM_MODE ?? '0').trim() === '1';
   const [activeCycleMode, setActiveCycleMode] = useState(null);
 
@@ -3167,6 +3175,17 @@ export default function App() {
   }, [hideSimulacionUi]);
 
   const [sessionStats, setSessionStats] = useState({ wins: 0, losses: 0, total: 0, distribution: Array(8).fill(0), sessionRewardsNet: 0 });
+  /** IA Real: wins/losses/distribution from relay history (read-only); keeps sessionRewardsNet from local session state. */
+  const sessionStatsForUi = useMemo(() => {
+    if (!isIaRealProviderShell || !iaRealDisplayStats) return sessionStats;
+    return {
+      ...sessionStats,
+      wins: iaRealDisplayStats.wins,
+      losses: iaRealDisplayStats.losses,
+      total: iaRealDisplayStats.total,
+      distribution: iaRealDisplayStats.distribution,
+    };
+  }, [isIaRealProviderShell, iaRealDisplayStats, sessionStats]);
   const [showSessionReport, setShowSessionReport] = useState(false);
   const [isProcessingSequence, setIsProcessingSequence] = useState(false);
   const [aiSpeech, setAiSpeech] = useState({ message: "MI MATRIZ ESTÁ LISTA. ESPERANDO TU COMANDO.", type: "info" });
@@ -3411,8 +3430,8 @@ export default function App() {
       mode,
       fase: presentationFase,
       data: {
-        wins: sessionStats?.wins,
-        losses: sessionStats?.losses,
+        wins: sessionStatsForUi?.wins,
+        losses: sessionStatsForUi?.losses,
         step,
         amount,
         rewardsNet,
@@ -3420,7 +3439,16 @@ export default function App() {
     });
 
     setSystemNarrative(next || '');
-  }, [activeCycleMode, selectedMode, presentationFase, activeShot, stake, sessionStats?.wins, sessionStats?.losses, sessionStats?.sessionRewardsNet]);
+  }, [
+    activeCycleMode,
+    selectedMode,
+    presentationFase,
+    activeShot,
+    stake,
+    sessionStatsForUi?.wins,
+    sessionStatsForUi?.losses,
+    sessionStats?.sessionRewardsNet,
+  ]);
 
   const [ledger, setLedger] = useState([]);
   const demoBalanceRef = useRef(demoBalance);
@@ -4468,16 +4496,16 @@ export default function App() {
 
   // --- MEMOS DE LÓGICA ---
   const neuralInsight = useMemo(() => {
-    if (sessionStats.total === 0) return { interpretation: "ESPERANDO ACTIVIDAD...", recommendation: "INICIA UN CICLO PARA ANALIZAR." };
-    const acc = (sessionStats.wins / sessionStats.total) * 100;
+    if (sessionStatsForUi.total === 0) return { interpretation: "ESPERANDO ACTIVIDAD...", recommendation: "INICIA UN CICLO PARA ANALIZAR." };
+    const acc = (sessionStatsForUi.wins / sessionStatsForUi.total) * 100;
     if (activeCycleMode === MODOS.VISOR) {
         if (acc > 90) return { interpretation: "MESA PREDETERMINADA: Los patrones estadísticos son inusualmente claros.", recommendation: "ANÁLISIS: Alta recurrencia detectada en ciclos de corto plazo." };
         return { interpretation: "OBSERVACIÓN ESTABLE: He validado la sincronía de los últimos bloques.", recommendation: "IA VIVA: Mi análisis técnico confirma una mesa de baja volatilidad." };
     }
     if (acc > 90) return { interpretation: "ESTADO DE GRACIA: He sincronizado perfectamente con el azar de esta mesa.", recommendation: "TÁCTICA: Sugiero mantener el ritmo. La ventaja es nuestra." };
-    if (sessionStats.losses > 0) return { interpretation: "RUIDO EN EL SISTEMA: Detecto un aumento en la desviación estándar.", recommendation: "ADVERTENCIA: Mi análisis sugiere un cambio de entorno inmediato." };
+    if (sessionStatsForUi.losses > 0) return { interpretation: "RUIDO EN EL SISTEMA: Detecto un aumento en la desviación estándar.", recommendation: "ADVERTENCIA: Mi análisis sugiere un cambio de entorno inmediato." };
     return { interpretation: "ESTABILIDAD LOGRADA: He neutralizado la ventaja de la casa efectivamente.", recommendation: "FLUJO: Continuamos operando bajo los parámetros de mi matriz base." };
-  }, [sessionStats, activeCycleMode]);
+  }, [sessionStatsForUi, activeCycleMode]);
 
   const statusUI = useMemo(() => {
     if (isIaRealProviderShell) {
@@ -4603,7 +4631,7 @@ export default function App() {
       const apiKey = "";
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
       const systemPrompt = "Eres Genesis Oracle, una IA viva experta en estadística de casino de lujo. Tu tono es sofisticado, analítico y misterioso.";
-      const userPrompt = `Analiza sesión: [Aciertos: ${sessionStats.wins}, Fallos: ${sessionStats.losses}, Total: ${sessionStats.total}, Recompensas netas (informativo): ${sessionStats.sessionRewardsNet}]. Mesa: ${currentMesa}. Recomendación táctica maestra de 2 párrafos.`;
+      const userPrompt = `Analiza sesión: [Aciertos: ${sessionStatsForUi.wins}, Fallos: ${sessionStatsForUi.losses}, Total: ${sessionStatsForUi.total}, Recompensas netas (informativo): ${sessionStats.sessionRewardsNet}]. Mesa: ${currentMesa}. Recomendación táctica maestra de 2 párrafos.`;
       const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: userPrompt }] }], systemInstruction: { parts: [{ text: systemPrompt }] } }) });
       const result = await response.json();
       setOracleInsight(result.candidates?.[0]?.content?.parts?.[0]?.text || "Mi núcleo está recalibrando.");
@@ -5799,6 +5827,8 @@ export default function App() {
       if (!row) return s;
       const vf = extractVectorForecastFromActiveRow(row);
       const vIdx = forecastStepIndexFromProviderRow(row, vf.length);
+      const martingaleChanged = Number(s.activeRow?.martingale) !== Number(row?.martingale);
+      const rawResultChanged = s.activeRow?.rawResult !== row?.rawResult;
       if (s.activeRow?.id !== row.id) {
         const next = { ...s, activeRow: row, visualStepIndex: vIdx };
         logIaRealEngineInput({
@@ -5810,7 +5840,7 @@ export default function App() {
         });
         return next;
       }
-      if (s.visualStepIndex === vIdx) return s;
+      if (s.visualStepIndex === vIdx && !martingaleChanged && !rawResultChanged) return s;
       const next = { ...s, activeRow: row, visualStepIndex: vIdx };
       logIaRealEngineInput({
         activeRow: next.activeRow,
@@ -5868,7 +5898,7 @@ export default function App() {
   const stopCycle = useCallback(() => {
     if (isProcessingSequence) return; 
     if (isSoundEnabled) SoundEngine.playClick();
-    if (sessionStats.total > 0) setShowSessionReport(true);
+    if (sessionStatsForUi.total > 0) setShowSessionReport(true);
     clearIaRealPhaseTimers();
     logIaRealEngineInput({
       activeRow: null,
@@ -5890,11 +5920,11 @@ export default function App() {
     if (scoreInterval.current) clearInterval(scoreInterval.current);
     engineTimers.current.forEach(t => clearTimeout(t)); engineTimers.current = [];
     SoundEngine.setNoise(false); speak('REINICIO');
-  }, [isProcessingSequence, isSoundEnabled, sessionStats.total, speak, clearIaRealPhaseTimers]);
+  }, [isProcessingSequence, isSoundEnabled, sessionStatsForUi.total, speak, clearIaRealPhaseTimers]);
 
   const startCycle = async () => {
     if (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.IA_REAL) {
-      setSystemMessage('Motor local desactivado: el ciclo avanza solo con NEW_SIGNAL / NEW_RESULT del proveedor.');
+      setSystemMessage('IA Real usa solo datos del relay: la siguiente señal aparecerá cuando el proveedor la envíe.');
       return;
     }
     if (selectedMode === MODOS.IA_REAL) {
@@ -5967,13 +5997,23 @@ export default function App() {
     void startCycle();
   }, [isProcessingSequence, isRunning, ignitionBlocked, stopCycle, startCycle]);
 
-  /** IA Real: optional audio + haptic on first paint of a settled result (event-driven; no logic timers). */
+  /**
+   * IA Real sound map (presentation only; driven by outcome callback):
+   * - hit: resultado release + win soft (aligned with local executeSequence release)
+   * - miss: resultado release + loss soft
+   * Phase-change cues for IA Real use `presentationFase` in the global SoundEngine effect (SEÑAL → signal cue).
+   */
   const iaRealOutcomePresented = useCallback((hit) => {
     if (!isSoundEnabled) return;
     void SoundEngine.init().then(() => {
       try {
-        if (hit) SoundEngine.playSignalCue(0.18);
-        else SoundEngine.playClick();
+        if (hit) {
+          SoundEngine.playResultadoRelease(true);
+          SoundEngine.playWinSoft(0.2);
+        } else {
+          SoundEngine.playResultadoRelease(false);
+          SoundEngine.playLossSoft(0.2);
+        }
       } catch {
         /* ignore */
       }
@@ -6779,7 +6819,10 @@ export default function App() {
                 
                 <div className="relative z-20 flex flex-grow flex-col items-center justify-center w-full min-h-[380px] overflow-visible">
                   <div className="relative mb-8 flex h-[min(480px,92vw)] w-[min(480px,92vw)] max-h-[480px] max-w-[480px] shrink-0 items-center justify-center overflow-visible">
-                    <AIThinkingLayer phase={fase} isLight={isLightMode} />
+                    <AIThinkingLayer
+                      phase={isIaRealProviderShell ? presentationFase : fase}
+                      isLight={isLightMode}
+                    />
                     <motion.button
                       type="button"
                       onClick={handleCoreClick}
@@ -6824,6 +6867,11 @@ export default function App() {
                       engine={iaRealEngineState}
                       isLightMode={isLightMode}
                       onOutcomePresented={iaRealOutcomePresented}
+                      connectionMeta={{
+                        status: extConnectionStatus,
+                        reconnectAttempt: extReconnectAttempt,
+                        lastError: extLastError,
+                      }}
                     />
                   ) : null}
 
@@ -6966,7 +7014,18 @@ export default function App() {
                       mgLevels={mgLevels}
                     />
                   ) : null}
-                  {activeView === 'history' ? <HubHistoryPanel ledger={ledger} /> : null}
+                  {activeView === 'history' ? (
+                    isIaRealProviderShell ? (
+                      <IaRealSignalFeedPanel
+                        engine={iaRealEngineState}
+                        history={extHistory}
+                        recentEvents={extRecentEvents}
+                        isLightMode={isLightMode}
+                      />
+                    ) : (
+                      <HubHistoryPanel ledger={ledger} />
+                    )
+                  ) : null}
                   {activeView === 'access' ? (
                     <GpulseMembershipView
                       gpulse={gpulse}
@@ -6976,7 +7035,7 @@ export default function App() {
                   ) : null}
                   {activeView === 'ai' ? (
                     <HubAiStrategyPanel
-                      fase={fase}
+                      fase={isIaRealProviderShell ? presentationFase : fase}
                       activeWalletKey={activeWalletKey}
                       wallets={wallets}
                       ledger={ledger}
@@ -7764,10 +7823,10 @@ export default function App() {
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="p-5 rounded-2xl bg-white/5 border border-white/5"><p className="armani-label-dynamic text-white mb-1">Aciertos</p><p className="text-3xl font-mono font-black text-cyan-400">{Number(sessionStats.wins)}</p></div>
-              <div className="p-5 rounded-2xl bg-white/5 border border-white/5"><p className="armani-label-dynamic text-white mb-1">Desvíos</p><p className="text-3xl font-mono font-black text-pink-600">{Number(sessionStats.losses)}</p></div>
-              <div className="p-5 rounded-2xl bg-white/5 border border-white/10"><p className="armani-label-dynamic text-white mb-1">Precisión</p><p className="text-3xl font-mono font-black text-white">{sessionStats.total > 0 ? ((sessionStats.wins / sessionStats.total) * 100).toFixed(0) : 0}%</p></div>
-              <div className="p-5 rounded-2xl bg-white/5 border border-white/5"><p className="armani-label-dynamic text-white mb-1">Total</p><p className="text-3xl font-mono font-black text-white/50">{Number(sessionStats.total)}</p></div>
+              <div className="p-5 rounded-2xl bg-white/5 border border-white/5"><p className="armani-label-dynamic text-white mb-1">Aciertos</p><p className="text-3xl font-mono font-black text-cyan-400">{Number(sessionStatsForUi.wins)}</p></div>
+              <div className="p-5 rounded-2xl bg-white/5 border border-white/5"><p className="armani-label-dynamic text-white mb-1">Desvíos</p><p className="text-3xl font-mono font-black text-pink-600">{Number(sessionStatsForUi.losses)}</p></div>
+              <div className="p-5 rounded-2xl bg-white/5 border border-white/10"><p className="armani-label-dynamic text-white mb-1">Precisión</p><p className="text-3xl font-mono font-black text-white">{sessionStatsForUi.total > 0 ? ((sessionStatsForUi.wins / sessionStatsForUi.total) * 100).toFixed(0) : 0}%</p></div>
+              <div className="p-5 rounded-2xl bg-white/5 border border-white/5"><p className="armani-label-dynamic text-white mb-1">Total</p><p className="text-3xl font-mono font-black text-white/50">{Number(sessionStatsForUi.total)}</p></div>
             </div>
             
             {/* Ocultamos Proyección de Capital en Modo Visor */}
@@ -7788,8 +7847,8 @@ export default function App() {
               <div className="grid grid-cols-7 gap-3">
                 {[1,2,3,4,5,6,7].map(i => (
                   <div key={i} className="text-center">
-                    <p className={`text-[10px] font-mono mb-2 ${Number(sessionStats.distribution[i]) > 0 ? 'text-cyan-400' : 'text-white/20'}`}>{i === 7 ? 'FAIL' : `T${i}`}</p>
-                    <div className="h-16 w-full bg-white/5 rounded-lg flex flex-col justify-end items-center overflow-hidden"><div className={`w-full transition-all duration-1000 ${i === 7 ? 'bg-pink-600' : 'bg-cyan-500'}`} style={{ height: `${(Number(sessionStats.distribution[i]) / (Number(sessionStats.wins) || 1)) * 100}%`, minHeight: Number(sessionStats.distribution[i]) > 0 ? '4px' : '0px' }} /></div>
+                    <p className={`text-[10px] font-mono mb-2 ${Number(sessionStatsForUi.distribution[i]) > 0 ? 'text-cyan-400' : 'text-white/20'}`}>{i === 7 ? 'FAIL' : `T${i}`}</p>
+                    <div className="h-16 w-full bg-white/5 rounded-lg flex flex-col justify-end items-center overflow-hidden"><div className={`w-full transition-all duration-1000 ${i === 7 ? 'bg-pink-600' : 'bg-cyan-500'}`} style={{ height: `${(Number(sessionStatsForUi.distribution[i]) / (i === 7 ? (Number(sessionStatsForUi.losses) || 1) : (Number(sessionStatsForUi.wins) || 1))) * 100}%`, minHeight: Number(sessionStatsForUi.distribution[i]) > 0 ? '4px' : '0px' }} /></div>
                   </div>
                 ))}
               </div>
@@ -7890,8 +7949,8 @@ export default function App() {
                 activeWalletKey={activeWalletKey}
                 wallets={wallets}
                 ledger={ledger}
-                fase={fase}
-                sessionStats={sessionStats}
+                fase={isIaRealProviderShell ? presentationFase : fase}
+                sessionStats={sessionStatsForUi}
               />
             ) : null}
             {hubActiveId === 'analytics' ? (
@@ -7905,7 +7964,7 @@ export default function App() {
             ) : null}
             {hubActiveId === 'ai' ? (
               <HubAiStrategyPanel
-                fase={fase}
+                fase={isIaRealProviderShell ? presentationFase : fase}
                 activeWalletKey={activeWalletKey}
                 wallets={wallets}
                 ledger={ledger}
@@ -7932,7 +7991,18 @@ export default function App() {
               />
             ) : null}
             {hubActiveId === 'ecosystem' ? <HubEcosystemPanel /> : null}
-            {hubActiveId === 'history' ? <HubHistoryPanel ledger={ledger} /> : null}
+            {hubActiveId === 'history' ? (
+              isIaRealProviderShell ? (
+                <IaRealSignalFeedPanel
+                  engine={iaRealEngineState}
+                  history={extHistory}
+                  recentEvents={extRecentEvents}
+                  isLightMode={isLightMode}
+                />
+              ) : (
+                <HubHistoryPanel ledger={ledger} />
+              )
+            ) : null}
           </div>
         </>
       ) : null}

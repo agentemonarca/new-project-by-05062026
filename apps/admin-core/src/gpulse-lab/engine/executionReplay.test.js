@@ -14,8 +14,8 @@ describe('replayFold', () => {
           vector_forecast: ['P', 'B'],
         },
       },
-      { type: 'NEW_RESULT', payload: { correlationKey: 'k', ganador: 'B', contador_martingala: 2 } },
-      { type: 'NEW_RESULT', payload: { correlationKey: 'k', ganador: 'B', contador_martingala: 3 } },
+      { type: 'NEW_RESULT', payload: { correlationKey: 'k', ganador: 'B', contador_martingala: 2, vector_win: ['L'] } },
+      { type: 'NEW_RESULT', payload: { correlationKey: 'k', ganador: 'B', contador_martingala: 3, vector_win: ['L'] } },
     ];
 
     let s = createInitialState();

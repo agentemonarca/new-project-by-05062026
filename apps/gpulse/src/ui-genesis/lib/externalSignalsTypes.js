@@ -8,6 +8,7 @@
 
 import {
   extractVectorForecastArrayFromSignalRaw,
+  mergeResultEnvelopeForExtract,
   pickContadorMartingalaFromSignalRaw,
   predictionSideFromVectorAndContador,
   winStatusFromVectorWinLast,
@@ -232,17 +233,23 @@ export function extractProviderSignalAlgorithmName(raw) {
 
 export function normalizeNewResultPayload(raw) {
   const r = raw && typeof raw === 'object' ? /** @type {Record<string, unknown>} */ (raw) : {};
-  const idVal = r.signalId ?? r.id;
-  const w = r.winStatus;
+  /** Aplanado como en el store — `vector_win` / ids a menudo viven bajo `data`. */
+  const flat = mergeResultEnvelopeForExtract(raw);
+  const forKey =
+    flat && typeof flat === 'object' && !Array.isArray(flat) && Object.keys(flat).length
+      ? /** @type {Record<string, unknown>} */ (flat)
+      : r;
+  const idVal = flat.signalId ?? flat.id ?? r.signalId ?? r.id;
+  const w = flat.winStatus ?? flat.win ?? r.winStatus;
   const relayWin = w === true || w === 'true' || w === 1 || w === '1';
-  const fromVectorWin = winStatusFromVectorWinLast(r);
+  const fromVectorWin = winStatusFromVectorWinLast(flat);
   const winStatus = fromVectorWin !== null ? fromVectorWin : relayWin;
   return {
     providerSignalId: idVal != null ? String(idVal) : null,
-    mesa: String(r.mesa ?? r.table ?? r.desk ?? ''),
-    round: r.round != null ? String(r.round) : '',
+    mesa: String(flat.mesa ?? flat.table ?? flat.desk ?? r.mesa ?? r.table ?? r.desk ?? ''),
+    round: (flat.round ?? r.round) != null ? String(flat.round ?? r.round) : '',
     winStatus,
-    correlationKey: buildCorrelationKey(r),
+    correlationKey: buildCorrelationKey(forKey),
     raw: r,
   };
 }

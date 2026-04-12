@@ -29,10 +29,16 @@ describe('executionEngine', () => {
         vector_forecast: ['P', 'B'],
       },
     });
-    s = reduce(s, { type: 'NEW_RESULT', payload: { correlationKey: 'k1', ganador: 'B' } });
+    s = reduce(s, {
+      type: 'NEW_RESULT',
+      payload: { correlationKey: 'k1', ganador: 'B', vector_win: ['L'] },
+    });
     expect(s.status).toBe('RUNNING');
     expect(s.currentStep).toBe(2);
-    s = reduce(s, { type: 'NEW_RESULT', payload: { correlationKey: 'k1', ganador: 'B' } });
+    s = reduce(s, {
+      type: 'NEW_RESULT',
+      payload: { correlationKey: 'k1', ganador: 'B', vector_win: ['W'] },
+    });
     expect(s.status).toBe('SUCCESS');
   });
 
@@ -71,7 +77,7 @@ describe('executionEngine', () => {
     expect(s1.status).toBe('IDLE');
   });
 
-  it('ignores NEW_RESULT with invalid ganador', () => {
+  it('ignores NEW_RESULT without vector_win', () => {
     let s = reduce(createInitialState(), {
       type: 'NEW_SIGNAL',
       payload: {
@@ -83,7 +89,7 @@ describe('executionEngine', () => {
     });
     expect(s.status).toBe('RUNNING');
     const before = s;
-    s = reduce(s, { type: 'NEW_RESULT', payload: { correlationKey: 'k-bad', ganador: 'INVALID' } });
+    s = reduce(s, { type: 'NEW_RESULT', payload: { correlationKey: 'k-bad', ganador: 'B' } });
     expect(s).toBe(before);
   });
 
@@ -100,7 +106,7 @@ describe('executionEngine', () => {
     expect(s.prediction).toBe('PLAYER');
     s = reduce(s, {
       type: 'NEW_RESULT',
-      payload: { correlationKey: 'k-cm', ganador: 'B', contador_martingala: 3 },
+      payload: { correlationKey: 'k-cm', ganador: 'B', contador_martingala: 3, vector_win: ['L'] },
     });
     expect(s.status).toBe('RUNNING');
     expect(s.currentStep).toBe(3);

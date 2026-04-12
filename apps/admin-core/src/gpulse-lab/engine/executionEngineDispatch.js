@@ -7,6 +7,13 @@ import {
   resetEngineForensicProcessCounts,
 } from './engineDeterministicForensic.js';
 import { labApplyResult, labApplySignal } from '../middleware/useSignalMiddleware.js';
+import { extractContadorMartingalaFromResultPayload } from '../utils/supplierIntelExtract.js';
+import { clampArrayToMaxSteps, clampProviderMartingaleVectors } from '../utils/clampProviderMartingaleVectors.js';
+import {
+  buildNewResultBaseFingerprint,
+  buildNewResultFingerprint,
+  resolveResultTemporalId,
+} from '../utils/newResultFingerprint.js';
 import {
   getEngine,
   removeEngine,
@@ -52,12 +59,9 @@ function forensicEventSnapshot(input) {
   return { type: o.type };
 }
 
-/** @type {Map<string, string>} */
-const lastResultFpByCk = new Map();
-
-/** Dedupe aislado por motor: `correlationKey` → Set de `NEW_RESULT-${step}-${ganador}` */
-/** @type {Map<string, Set<string>>} */
-const processedByCk = new Map();
+/** Dedupe por huella base; conserva último temporal por correlación. */
+/** @type {Map<string, { baseFingerprint: string; temporalId: string }>} */
+const lastResultDedupeByCk = new Map();
 
 /** SUCCESS: keep short audit window; FAILED: drop faster to limit memory. */
 const TERMINAL_CLEANUP_MS = {
@@ -67,16 +71,6 @@ const TERMINAL_CLEANUP_MS = {
 
 /** @type {Map<string, ReturnType<typeof setTimeout>>} */
 const terminalCleanupTimers = new Map();
-
-/** @param {string} ck */
-function getProcessedSet(ck) {
-  let s = processedByCk.get(ck);
-  if (s == null) {
-    s = new Set();
-    processedByCk.set(ck, s);
-  }
-  return s;
-}
 
 /** Opt-in: `VITE_GPULSE_PHASE1_TEST=1` — verbose NEW_SIGNAL / engine creation traces. */
 function isPhase1EngineTestEnabled() {
@@ -130,8 +124,7 @@ function scheduleTerminalCleanup(ck, status) {
     logEngineCleanupTrace(ck);
     removeEngine(ck);
     terminalCleanupTimers.delete(ck);
-    lastResultFpByCk.delete(ck);
-    processedByCk.delete(ck);
+    lastResultDedupeByCk.delete(ck);
   }, delayMs);
   terminalCleanupTimers.set(ck, t);
 }
@@ -154,13 +147,14 @@ export function dispatchToEngine(input) {
 
     const ckStr = String(ck).trim();
 
-    const vf = Array.isArray(vectorForecast) && vectorForecast.length > 0
+    let vf = Array.isArray(vectorForecast) && vectorForecast.length > 0
       ? vectorForecast
       : Array.isArray(normalized.vector_forecast) && normalized.vector_forecast.length > 0
         ? normalized.vector_forecast
         : normalized.recommendation
           ? [normalized.recommendation]
           : [];
+    vf = clampArrayToMaxSteps(vf);
 
     const prev = getEngine(ckStr) ?? createInitialState();
     const signalPayload = {
@@ -183,8 +177,7 @@ export function dispatchToEngine(input) {
     }
 
     cancelTerminalCleanup(ckStr);
-    getProcessedSet(ckStr).clear();
-    lastResultFpByCk.delete(ckStr);
+    lastResultDedupeByCk.delete(ckStr);
     resetEngineForensicProcessCounts();
 
     setEngine(ckStr, next);
@@ -223,39 +216,65 @@ export function dispatchToEngine(input) {
     const ck = normalized.correlationKey;
     if (ck == null || String(ck).trim() === '') return;
 
+    const cv = clampProviderMartingaleVectors({
+      vector_forecast: normalized.vector_forecast,
+      vector_resultado: normalized.vector_resultado,
+      vector_win: normalized.vector_win,
+    });
+    const merged = {
+      ...normalized,
+      ...(cv.vector_resultado !== undefined ? { vector_resultado: cv.vector_resultado } : {}),
+      ...(cv.vector_win !== undefined ? { vector_win: cv.vector_win } : {}),
+      ...(cv.vector_forecast.length > 0 ? { vector_forecast: cv.vector_forecast } : {}),
+    };
+
     const ckStr = String(ck).trim();
     const prev = getEngine(ckStr);
     if (prev == null) return;
 
-    const ganador = normalized.ganador;
-    const pset = getProcessedSet(ckStr);
-    const dedupeKey = `NEW_RESULT-${prev.currentStep}-${String(ganador)}`;
+    const ganador = merged.ganador;
+    const mergedRec = /** @type {Record<string, unknown>} */ (merged);
+    const baseFp = buildNewResultBaseFingerprint(mergedRec, { fallbackContador: prev.currentStep });
+    const temporalId = resolveResultTemporalId(mergedRec);
+    const fullFingerprint = buildNewResultFingerprint(mergedRec, { fallbackContador: prev.currentStep });
+
     if (isPhase3EngineTestEnabled()) {
+      const prevDedupe = lastResultDedupeByCk.get(ckStr);
       console.log('DEDUP CHECK', {
-        dedupeKey: `${ckStr}-${prev.currentStep}-${String(ganador)}`,
-        engineDedupeKey: dedupeKey,
-        alreadyProcessed: pset.has(dedupeKey),
+        baseFingerprint: baseFp,
+        temporalId,
+        prevBase: prevDedupe?.baseFingerprint,
+        prevTemporal: prevDedupe?.temporalId,
+        skipDuplicate: baseFp !== '' && prevDedupe?.baseFingerprint === baseFp,
       });
     }
-    if (pset.has(dedupeKey)) return;
+
+    const prevDedupe = lastResultDedupeByCk.get(ckStr);
+    if (baseFp !== '' && prevDedupe?.baseFingerprint === baseFp) {
+      lastResultDedupeByCk.set(ckStr, { baseFingerprint: baseFp, temporalId });
+      return;
+    }
 
     if (prev.status === 'SUCCESS' || prev.status === 'FAILED') {
-      labApplyResult(normalized);
+      labApplyResult(merged);
       logEngineForensicState(useExecutionEngineStore.getState().engineMap[ckStr] ?? prev);
       recordEngineProcess(`NEW_RESULT:terminal:${ckStr}`, ckStr);
+      lastResultDedupeByCk.set(ckStr, { baseFingerprint: baseFp, temporalId });
       return;
     }
 
-    const fp = `${ckStr}|${prev.currentStep}|${String(ganador)}`;
-    if (lastResultFpByCk.get(ckStr) === fp) {
-      return;
-    }
+    const contadorFromPayload =
+      extractContadorMartingalaFromResultPayload(merged, {
+        fallbackVectorResultado: Array.isArray(merged.vector_resultado) ? merged.vector_resultado : undefined,
+      }) ?? merged.contador_martingala;
 
     const resultPayload = {
       correlationKey: ckStr,
       ganador,
-      contador_martingala: normalized.contador_martingala,
-      vector_win: Array.isArray(normalized.vector_win) ? normalized.vector_win : undefined,
+      ...(contadorFromPayload !== undefined && contadorFromPayload !== null
+        ? { contador_martingala: contadorFromPayload }
+        : {}),
+      vector_win: Array.isArray(merged.vector_win) ? merged.vector_win : undefined,
     };
 
     const next = reduce(prev, {
@@ -268,7 +287,6 @@ export function dispatchToEngine(input) {
       console.log('TEST PHASE 2 - RESULT RECEIVED', resultPayload);
     }
 
-    pset.add(dedupeKey);
     setEngine(ckStr, next);
     if (isPhase2EngineTestEnabled()) {
       const engine = getEngine(ckStr);
@@ -287,10 +305,10 @@ export function dispatchToEngine(input) {
       });
     }
     logEngineForensicState(next);
-    lastResultFpByCk.set(ckStr, fp);
+    lastResultDedupeByCk.set(ckStr, { baseFingerprint: baseFp, temporalId });
 
-    labApplyResult(normalized);
-    recordEngineProcess(fp, ckStr);
+    labApplyResult(merged);
+    recordEngineProcess(fullFingerprint, ckStr);
 
     if (next.status === 'SUCCESS' || next.status === 'FAILED') {
       scheduleTerminalCleanup(ckStr, next.status);
@@ -301,7 +319,9 @@ export function dispatchToEngine(input) {
       payload: {
         correlationKey: ckStr,
         ganador,
-        contador_martingala: normalized.contador_martingala,
+        ...(contadorFromPayload !== undefined && contadorFromPayload !== null
+          ? { contador_martingala: contadorFromPayload }
+          : {}),
       },
     });
   }
@@ -335,8 +355,7 @@ export function useSignalMiddleware(event) {
 }
 
 export function resetExecutionEngineDispatchDedupe() {
-  lastResultFpByCk.clear();
-  processedByCk.clear();
+  lastResultDedupeByCk.clear();
   for (const t of terminalCleanupTimers.values()) clearTimeout(t);
   terminalCleanupTimers.clear();
   resetEngineForensicProcessCounts();

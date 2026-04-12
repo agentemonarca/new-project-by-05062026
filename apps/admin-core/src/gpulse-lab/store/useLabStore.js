@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  extractContadorMartingalaFromResultPayload,
   extractMesaKeyFromRaw,
   extractNestedMesaInfo,
   extractNestedSignal,
@@ -7,12 +8,8 @@ import {
 } from '../utils/supplierIntelExtract.js';
 import { deriveMirrorLifecycleFromMesaRow } from '../utils/vistaLabsMirror.js';
 import { getMartingaleLabel } from '../utils/martingaleUi.js';
-import {
-  forecastStepIndexFromContador,
-  mapForecastAtStep,
-  recommendationFromForecastCell,
-  winStatusFromVectorWinLastArray,
-} from '../../utils/forecastMartingaleStep.js';
+import { winStatusFromVectorWinLastArray } from '../../utils/forecastMartingaleStep.js';
+import { buildNewResultBaseFingerprint, resolveResultTemporalId } from '../utils/newResultFingerprint.js';
 
 export const LAB_LIFECYCLE_STATES = {
   IDLE: 'IDLE',
@@ -46,6 +43,8 @@ export function createEmptyMesaState() {
     round: null,
     recommendation: null,
     martingala: 0,
+    /** Contador derivado de NEW_SIGNAL (fallback si NEW_RESULT no trae `contador_martingala`). */
+    martingalaSignal: 0,
     /** Nivel de martingala de la última señal (no sobrescrito por resultado). */
     signalMartingaleLevel: null,
     /** Etiqueta VistaLabs (`señal.tipo`) o derivada (`getMartingaleLabel`). */
@@ -57,6 +56,10 @@ export function createEmptyMesaState() {
     startTime: null,
     /** Copia del vector del ciclo para recalcular `recommendation` tras NEW_RESULT (paso martingala). */
     vector_forecast: null,
+    /** Snapshot proveedor: `NEW_RESULT` → `mesa_info.martingala.vector_resultado` (completo). */
+    vector_resultado: null,
+    /** Snapshot proveedor: `NEW_RESULT` → `mesa_info.martingala.vector_win` (completo). */
+    vector_win: null,
     /** Step-by-step timeline for the active / last completed cycle (GPulse Lab UI). */
     currentCycleHistory: [],
     /** Proveedor: `data.data.signal` (o equivalente). */
@@ -69,6 +72,10 @@ export function createEmptyMesaState() {
     intelResultTs: null,
     /** { label: string, at: number, deltaMs: number | null }[] */
     intelStepDurations: [],
+    /** Dedupe NEW_RESULT: huella base `correlationKey-contador-vector_win_last` (sin tiempo). */
+    lastBaseFingerprint: null,
+    /** Última identidad temporal vía {@link resolveResultTemporalId} (trazabilidad). */
+    lastTemporalId: null,
     /** Live table analytics (señal→resultado por mesa). */
     mesaAnalytics: {
       lastDelays: /** @type {number[]} */ ([]),
@@ -167,30 +174,19 @@ function mirrorSliceFromState(mesas, selectedMesaId) {
   };
 }
 
-function normOutcome(v) {
-  if (v == null) return '';
-  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-  const u = s.trim().toUpperCase();
-  if (u === 'B' || u.startsWith('BANK')) return 'BANKER';
-  if (u === 'P' || u.startsWith('PLAY')) return 'PLAYER';
-  if (u === 'T' || u.startsWith('TIE')) return 'TIE';
-  return u;
-}
-
 /**
- * @param {unknown} recommendation
- * @param {unknown} ganador
- * @returns {boolean | null}
+ * NEW_SIGNAL: `contador_martingala` si viene; si no, `martingale` (0-based) + 1 (misma regla que el motor).
+ * @param {Record<string, unknown>} payload
  */
-function isWinVsRecommendation(recommendation, ganador) {
-  if (ganador == null) return null;
-  if (recommendation == null) return null;
-  const g = normOutcome(ganador);
-  const r = normOutcome(recommendation);
-  if (!r || !g) return null;
-  if (r === g) return true;
-  if (r.length > 0 && g.length > 0 && (r.includes(g) || g.includes(r))) return true;
-  return false;
+function contadorFromSignalPayload(payload) {
+  if (payload?.contador_martingala != null && String(payload.contador_martingala).trim() !== '') {
+    return Number(payload.contador_martingala);
+  }
+  const mg = payload?.martingale;
+  if (mg != null && Number.isFinite(Number(mg))) {
+    return Number(mg) + 1;
+  }
+  return 1;
 }
 
 export const useLabStore = create((set) => ({
@@ -278,6 +274,7 @@ export const useLabStore = create((set) => ({
             round: null,
             recommendation: null,
             martingala: 0,
+            martingalaSignal: 0,
             signalMartingaleLevel: null,
             martingaleType: null,
             ganador: null,
@@ -294,6 +291,8 @@ export const useLabStore = create((set) => ({
             intelResultTs: null,
             intelStepDurations: [],
             vector_forecast: null,
+            vector_resultado: null,
+            vector_win: null,
           },
         },
       };
@@ -317,6 +316,7 @@ export const useLabStore = create((set) => ({
           round: null,
           recommendation: null,
           martingala: 0,
+          martingalaSignal: 0,
           signalMartingaleLevel: null,
           martingaleType: null,
           ganador: null,
@@ -333,6 +333,8 @@ export const useLabStore = create((set) => ({
           intelResultTs: null,
           intelStepDurations: [],
           vector_forecast: null,
+          vector_resultado: null,
+          vector_win: null,
         };
       });
       return {
@@ -405,6 +407,11 @@ export const useLabStore = create((set) => ({
         });
       }
       const nextVf = vectorForecastFromPayload(payload) ?? prev.vector_forecast;
+      const contadorSignal = contadorFromSignalPayload(
+        payload != null && typeof payload === 'object'
+          ? /** @type {Record<string, unknown>} */ (payload)
+          : {},
+      );
       const nextMesas = {
         ...state.mesas,
         [id]: {
@@ -412,11 +419,16 @@ export const useLabStore = create((set) => ({
           round: payload?.round ?? null,
           recommendation: payload?.recommendation ?? null,
           vector_forecast: nextVf,
-          martingala: payload?.martingale ?? 0,
+          martingala: contadorSignal,
+          martingalaSignal: contadorSignal,
           signalMartingaleLevel: mgStep,
           martingaleType: mgType,
           ganador: null,
+          vector_resultado: cycleClosed ? null : prev.vector_resultado,
+          vector_win: cycleClosed ? null : prev.vector_win,
           estado: 'SIGNAL',
+          lastBaseFingerprint: null,
+          lastTemporalId: null,
           startTime: ts,
           currentCycleHistory: nextHistory,
         },
@@ -435,48 +447,82 @@ export const useLabStore = create((set) => ({
     if (!id) return;
     set((state) => {
       const prev = state.mesas[id] ?? createEmptyMesaState();
+      /** Prioridad: `payload.mesa_info.martingala.contador_martingala` (y raíz) vía extractor; si no hay, señal. */
+      const nextContador = extractContadorMartingalaFromResultPayload(payload);
+      const martingala =
+        nextContador !== undefined
+          ? nextContador
+          : prev.martingalaSignal ?? prev.martingala;
+
+      const pRec =
+        payload != null && typeof payload === 'object' ? /** @type {Record<string, unknown>} */ (payload) : {};
+      const baseFingerprint = buildNewResultBaseFingerprint(pRec, {
+        fallbackContador: prev.martingalaSignal ?? prev.martingala,
+      });
+      const temporalId = resolveResultTemporalId(pRec);
+      if (baseFingerprint !== '' && baseFingerprint === prev.lastBaseFingerprint) {
+        if (temporalId !== '' && temporalId !== prev.lastTemporalId) {
+          const nextRow = { ...prev, lastTemporalId: temporalId };
+          const nextMesas = { ...state.mesas, [id]: nextRow };
+          return {
+            mesas: nextMesas,
+            ...mirrorSliceFromState(nextMesas, state.selectedMesaId),
+          };
+        }
+        return state;
+      }
+
+      if (import.meta.env.DEV && nextContador !== undefined && Number(nextContador) !== Number(prev.martingala)) {
+        console.log('CONTADOR CHANGE', prev.martingala, '→', nextContador);
+      }
+
       const ganador = payload?.ganador ?? null;
       const historial = normalizeAppend(prev.historial, payload?.vector_resultado);
       const wins = normalizeAppend(prev.wins, payload?.vector_win);
-      const martingala =
-        payload?.contador_martingala !== undefined && payload?.contador_martingala !== null
-          ? payload.contador_martingala
-          : prev.martingala;
 
-      let recommendation = prev.recommendation;
-      const vf = prev.vector_forecast;
-      if (Array.isArray(vf) && vf.length > 0) {
-        const idx = forecastStepIndexFromContador(martingala);
-        const cell = mapForecastAtStep(vf, idx);
-        const rec = recommendationFromForecastCell(cell);
-        if (rec != null) recommendation = rec;
-      }
+      const vector_resultado = Array.isArray(payload?.vector_resultado)
+        ? [...payload.vector_resultado]
+        : Array.isArray(prev.vector_resultado)
+          ? [...prev.vector_resultado]
+          : prev.vector_resultado;
+      const vector_win = Array.isArray(payload?.vector_win)
+        ? [...payload.vector_win]
+        : Array.isArray(prev.vector_win)
+          ? [...prev.vector_win]
+          : prev.vector_win;
 
-      const winFromVw = winStatusFromVectorWinLastArray(payload?.vector_win);
-      const win =
-        winFromVw !== null ? winFromVw : isWinVsRecommendation(prev.recommendation, ganador);
+      const vector_forecast = Array.isArray(prev.vector_forecast) ? [...prev.vector_forecast] : prev.vector_forecast;
+
+      const win = winStatusFromVectorWinLastArray(payload?.vector_win);
       const nextHistory = [...(prev.currentCycleHistory ?? [])];
       const resultTs = Date.now();
       nextHistory.push({
         type: 'RESULT',
         value: ganador,
         timestamp: resultTs,
-        win,
+        win: win === null ? undefined : win,
       });
+
+      const nextMesaRow = {
+        ...prev,
+        ganador,
+        historial,
+        wins,
+        martingala,
+        vector_forecast,
+        vector_resultado,
+        vector_win,
+        recommendation: prev.recommendation,
+        estado: 'RESULT',
+        lastBaseFingerprint: baseFingerprint,
+        lastTemporalId: temporalId,
+        intelResultTs: resultTs,
+        currentCycleHistory: nextHistory,
+      };
 
       const nextMesas = {
         ...state.mesas,
-        [id]: {
-          ...prev,
-          ganador,
-          historial,
-          wins,
-          martingala,
-          recommendation,
-          estado: 'RESULT',
-          intelResultTs: resultTs,
-          currentCycleHistory: nextHistory,
-        },
+        [id]: nextMesaRow,
       };
       return {
         mesas: nextMesas,
