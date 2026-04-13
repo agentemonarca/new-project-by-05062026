@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { fallbackDeterministicTxHex } from './gpulseRngPolicy.js';
 
 /** Valid checksummed address; shown as mock user wallet */
 export const MOCK_USER_ADDRESS = '0x71BE63F3384f5fb98995898A86B02Fb2426c9118';
@@ -31,8 +32,7 @@ const receiptByHash = new Map();
 const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
 function randomTxHash() {
-  const hex = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-  return '0x' + hex;
+  return '0x' + fallbackDeterministicTxHex(Date.now());
 }
 
 function addressToTopic32(addr) {

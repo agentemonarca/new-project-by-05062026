@@ -393,3 +393,22 @@ body.debug [data-debug-anchor]::after {
     drop-shadow(0 0 25px #7b2cff);
   opacity: 0.9;
 }
+
+/* BaccaratNeonCard — 3D flip (IA Real theater) */
+.gp-baccarat-card-perspective {
+  perspective: 1000px;
+}
+.gp-baccarat-card-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.62s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.gp-baccarat-card-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.gp-baccarat-card-front {
+  transform: rotateY(180deg);
+}
+.gp-baccarat-card-flipped {
+  transform: rotateY(180deg);
+}

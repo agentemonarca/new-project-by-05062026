@@ -123,6 +123,13 @@ function statusBadge(status) {
       </span>
     );
   }
+  if (status === 'intermediate') {
+    return (
+      <span className="rounded-full border border-amber-400/35 bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+        Paso
+      </span>
+    );
+  }
   if (status === 'won') {
     return (
       <span className="rounded-full border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-200">
@@ -130,25 +137,35 @@ function statusBadge(status) {
       </span>
     );
   }
+  if (status === 'lost') {
+    return (
+      <span className="rounded-full border border-rose-400/35 bg-rose-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-rose-200">
+        Loss
+      </span>
+    );
+  }
   return (
-    <span className="rounded-full border border-rose-400/35 bg-rose-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-rose-200">
-      Loss
+    <span className="rounded-full border border-slate-500/35 bg-slate-800/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+      {String(status ?? '—')}
     </span>
   );
 }
 
 function HistoryRow({ row, isLatestSettled, reduceMotion }) {
   const { side: pillSide, label: pillLabel } = sidePillFromRow(row);
+  const intermediate = row.status === 'intermediate';
   const settled = row.status === 'won' || row.status === 'lost';
   const pending = row.status === 'pending';
-  const bar =
-    settled && row.winStatus
+  const bar = intermediate
+    ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.45)]'
+    : settled && row.winStatus
       ? 'bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.5)]'
       : settled && !row.winStatus
         ? 'bg-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.45)]'
         : 'bg-slate-500';
-  const rowBg =
-    settled && row.winStatus
+  const rowBg = intermediate
+    ? 'border-amber-500/25 bg-amber-950/[0.18]'
+    : settled && row.winStatus
       ? 'border-emerald-500/20 bg-emerald-500/[0.06]'
       : settled && !row.winStatus
         ? 'border-rose-500/20 bg-rose-500/[0.06]'
@@ -180,6 +197,11 @@ function HistoryRow({ row, isLatestSettled, reduceMotion }) {
           {pending ? (
             <span className="inline-flex items-center gap-1 text-slate-400">
               <CircleDot className="h-3 w-3" strokeWidth={2} /> MG {row.martingale}
+            </span>
+          ) : intermediate ? (
+            <span className="inline-flex items-center gap-1 text-amber-500/90">
+              <CircleDot className="h-3 w-3" strokeWidth={2} /> T{row.martingale} ·{' '}
+              {new Date(row.settledAt || row.receivedAt).toLocaleTimeString()}
             </span>
           ) : (
             <span className="text-slate-600">{new Date(row.settledAt || row.receivedAt).toLocaleTimeString()}</span>

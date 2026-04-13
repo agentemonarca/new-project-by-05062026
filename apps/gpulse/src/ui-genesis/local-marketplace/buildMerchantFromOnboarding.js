@@ -1,4 +1,5 @@
 import { getDefaultMerchantSchedule, MERCHANT_CATEGORIES } from './mockMerchants.js';
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
 
 /**
  * @typedef {{
@@ -24,7 +25,7 @@ export function buildMerchantFromOnboarding(form, ownerWallet) {
     throw new Error('Invalid coordinates');
   }
   const cat = MERCHANT_CATEGORIES.includes(form.category) ? form.category : 'retail';
-  const id = `loc-usr-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const id = nextOpaqueId('loc-usr');
   const seed = encodeURIComponent(id.slice(-12));
 
   const owner = ownerWallet && String(ownerWallet).trim() ? String(ownerWallet).trim() : undefined;

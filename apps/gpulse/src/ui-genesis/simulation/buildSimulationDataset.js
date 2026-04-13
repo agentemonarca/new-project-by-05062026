@@ -1,6 +1,11 @@
 import { normalizeLedgerEvents } from '../ledger/normalize.js';
 import { getAigPrice } from '../../utils/pricing.js';
 import { ROLE_PRESETS } from '../lib/userPermissions.js';
+import {
+  createDeterministic01,
+  fallbackDeterministicTxHex,
+  isGpulseRealProviderExecution,
+} from '../../utils/gpulseRngPolicy.js';
 
 /** Base spec — binary volumes (points). */
 const BINARY_LEFT = 10000;
@@ -18,7 +23,10 @@ const WALLET_AIG = 12400;
 export function simulationJitter(n, amplitude = 0.035) {
   const x = Number(n);
   if (!Number.isFinite(x)) return 0;
-  return x * (1 + (Math.random() * 2 - 1) * amplitude);
+  const t = isGpulseRealProviderExecution()
+    ? createDeterministic01((Math.floor(x * 1000) ^ 0xabc) >>> 0)() * 2 - 1
+    : Math.random() * 2 - 1;
+  return x * (1 + t * amplitude);
 }
 
 /**
@@ -63,8 +71,13 @@ export function buildFullSimulationDataset(amplitude = 0.035) {
   };
 
   const now = Date.now();
+  let txSeq = 0;
   const tx = () =>
-    `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+    `0x${
+      isGpulseRealProviderExecution()
+        ? fallbackDeterministicTxHex((now + txSeq++) >>> 0)
+        : Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+    }`;
 
   /** Direct bonus ladder (interpreted as USDT rows for stress-friendly UI). */
   const directAmounts = [

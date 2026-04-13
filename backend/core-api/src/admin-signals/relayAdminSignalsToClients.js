@@ -236,7 +236,7 @@ export function relayAdminSignalsToClients(ctx, type, payload, meta = {}) {
     logger?.warn?.('result_real_analysis_error', { message: msg, type, source });
   }
 
-  const baseClient = buildAdminSignalsClientPayload(type, payload);
+  const baseClient = buildAdminSignalsClientPayload(type, payload, meta.providerSnapshot);
   if (!baseClient) {
     if (type === 'NEW_RESULT') {
       console.error('❌ RELAY SKIPPED RESULT', 'client_payload_build_failed', payload);

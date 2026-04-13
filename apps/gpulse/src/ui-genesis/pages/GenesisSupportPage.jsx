@@ -16,6 +16,7 @@ import { GlassCard } from '../components/GlassCard.jsx';
 import { GradientButton } from '../components/GradientButton.jsx';
 import { NewTicketModal } from '../components/support/NewTicketModal.jsx';
 import { fadeUpBlur } from '../motion/variants.js';
+import { isGpulseRealProviderExecution } from '../../utils/gpulseRngPolicy.js';
 
 /** @typedef {'open' | 'closed' | 'waiting_user'} TicketStatus */
 /** @typedef {'low' | 'medium' | 'high'} TicketPriority */
@@ -218,13 +219,19 @@ export function GenesisSupportPage({ hasSession = true }) {
 
   const activeTicket = useMemo(() => tickets.find((t) => t.id === activeId) ?? null, [tickets, activeId]);
 
+  const supportPulseTickRef = useRef(0);
   useEffect(() => {
     const id = window.setInterval(() => {
-      setSystemPulse((s) => ({
-        congestion: Math.random() > 0.88 ? 'alta' : 'baja',
-        gas: Math.random() > 0.85 ? 'alto' : 'normal',
-        network: Math.random() > 0.86 ? 'demora' : 'ok',
-      }));
+      supportPulseTickRef.current += 1;
+      const k = supportPulseTickRef.current;
+      const u = (k * 7919) % 1000 / 1000;
+      const v = (k * 6143) % 1000 / 1000;
+      const w = (k * 4271) % 1000 / 1000;
+      setSystemPulse({
+        congestion: u > 0.88 ? 'alta' : 'baja',
+        gas: v > 0.85 ? 'alto' : 'normal',
+        network: w > 0.86 ? 'demora' : 'ok',
+      });
     }, 11_000);
     return () => window.clearInterval(id);
   }, []);
@@ -274,10 +281,14 @@ export function GenesisSupportPage({ hasSession = true }) {
   const simulateAgentReply = useCallback(
     (ticketId) => {
       const useAi = aiMode;
+      const realProv = isGpulseRealProviderExecution();
+      const ticketSum = String(ticketId).split('').reduce((a, c) => a + c.charCodeAt(0), 0);
       setTyping(true);
       if (useAi) setAiThinking(true);
 
-      const delay = useAi ? 900 + Math.random() * 600 : 2200 + Math.random() * 1200;
+      const delay = useAi
+        ? 900 + (realProv ? ticketSum % 600 : Math.random() * 600)
+        : 2200 + (realProv ? ticketSum % 1200 : Math.random() * 1200);
 
       window.setTimeout(() => {
         setTyping(false);
@@ -289,9 +300,13 @@ export function GenesisSupportPage({ hasSession = true }) {
 
           const agent = useAi
             ? { name: 'Génesis AI', level: 'IA' }
-            : Math.random() > 0.5
-              ? { name: 'Soporte Técnico', level: 'L1' }
-              : { name: 'Equipo Prioridad', level: 'L2' };
+            : realProv
+              ? ticketSum % 2 === 0
+                ? { name: 'Soporte Técnico', level: 'L1' }
+                : { name: 'Equipo Prioridad', level: 'L2' }
+              : Math.random() > 0.5
+                ? { name: 'Soporte Técnico', level: 'L1' }
+                : { name: 'Equipo Prioridad', level: 'L2' };
 
           const replies = useAi
             ? [
@@ -304,7 +319,8 @@ export function GenesisSupportPage({ hasSession = true }) {
                 'Estamos validando con backoffice. Mantén el ticket abierto; te pediremos datos solo si hace falta.',
               ];
 
-          const body = replies[Math.floor(Math.random() * replies.length)];
+          const body =
+            replies[realProv ? ticketSum % replies.length : Math.floor(Math.random() * replies.length)];
           const msg = {
             id: `m-${Date.now()}`,
             body,

@@ -8,7 +8,7 @@ import {
   BarChart3, Gauge, Radio, Waves, AlertTriangle, Binary, Layers,
   Sun, Moon, Volume2, VolumeX, ChevronDown, ChevronUp, Hash, XCircle, FileText, TrendingUp, DollarSign, Power,
   MessageSquareQuote, Lightbulb, ArrowLeft, History, QrCode, Copy, ArrowDownToLine, ArrowUpFromLine, Menu, LayoutDashboard,
-  Globe, Grid3X3,
+  Globe, Grid3X3, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { BrowserProvider, formatEther, getAddress, parseEther } from 'ethers';
@@ -92,13 +92,52 @@ import { computeGPulse } from './core/gpulse/gpulseEngine.js';
 import { unlockAudio, subscribeAudioUnlock, getAudioUnlockEpoch, isAudioUnlocked } from './utils/audioUnlock.js';
 import { useExternalSignals } from './ui-genesis/hooks/useExternalSignals.js';
 import { useExternalSignalsStore } from './ui-genesis/stores/externalSignalsStore.js';
-import { createIdleIaRealVisualState, iaRealStatusToPresentationFase } from './utils/iaRealEngineModel.js';
-import { extractVectorForecastFromActiveRow, forecastStepIndexFromProviderRow } from './utils/iaRealEngineUi.js';
+import {
+  createIdleIaRealVisualState,
+  iaRealStateAfterNewSignal,
+  iaRealStatusToPresentationFase,
+  replayHistoryRowToEngineState,
+} from './utils/iaRealEngineModel.js';
+import { applySignalToUnifiedUI, UNIFIED_SOURCE } from '@/utils/applySignalToUnifiedUI.js';
+import {
+  extractMesaInfoFlexible,
+  extractScoreLabelsFromResultRaw,
+  extractVectorForecastFromActiveRow,
+  forecastStepIndexFromProviderRow,
+  iaRealContadorForStrip,
+  liveScoresFromOutcomeRow,
+  recommendationSide,
+  resolveContadorMartingalaForUi,
+  resolveOutcomeRowResultPayload,
+} from './utils/iaRealEngineUi.js';
+import {
+  isGpulseRealityAuditEnabled,
+  logGpulseRealityAuditEnvPhase1,
+  printGpulseRealityAuditPhase6And7Report,
+} from './utils/gpulseRealityAudit.js';
+import { PROVIDER_MARTINGALE_STEPS } from './utils/providerMartingaleRead.js';
 import { ProviderRelayStatusStrip } from './components/ProviderRelayStatusStrip.jsx';
 import { IaRealExecutionLayer } from './components/iaReal/IaRealExecutionLayer.jsx';
 import { IaRealSignalFeedPanel } from './components/iaReal/IaRealSignalFeedPanel.jsx';
+import { ProviderAuditPanel } from './components/iaReal/ProviderAuditPanel.jsx';
 import { logIaRealEngineInput } from './utils/iaRealFullFlowLog.js';
-import { useIaRealDisplayStats } from './hooks/useIaRealDisplayStats.js';
+import { buildStatsFromHistory, detectHistoryAnomalies, historyRowsForGpulse } from './utils/buildStatsFromHistory.js';
+import { buildIaRealNarrativeLine } from './utils/iaRealNarrativeLine.js';
+import {
+  isIaRealPipeCheckEnabled,
+  logIaRealPipelineHealthTable,
+  logPipeCheck,
+} from './utils/iaRealPipelineDiagnostics.js';
+import {
+  rngCheck,
+  nextOpaqueId,
+  isGpulseRealProviderExecution,
+  fallbackDeterministicTxHex,
+  getDefaultEngineRng,
+} from './utils/gpulseRngPolicy.js';
+
+/** Min delay between IA Real narrative line updates (NeuralReveal smoothness). */
+const IA_REAL_NARRATIVE_MIN_DWELL_MS = 360;
 
 // --- CONFIGURACIÓN DE SISTEMA ---
 /** Plan de usuario para reglas de voz G_Pulse (alinear con Access / backend cuando exista). */
@@ -110,13 +149,13 @@ const GPULSE_FORCE_IA_REAL = String(import.meta.env.VITE_GPULSE_FORCE_IA_REAL ??
  * IA Real: no local phase scheduler / martingale loop — only `externalSignalsStore` NEW_SIGNAL / NEW_RESULT.
  * Set VITE_GPULSE_REAL_PROVIDER_EXECUTION=0 to restore legacy local engine (dev).
  */
-const GPULSE_REAL_PROVIDER_EXECUTION = String(import.meta.env.VITE_GPULSE_REAL_PROVIDER_EXECUTION ?? '1').trim() === '1';
+/**
+ * `1` (default): una sola fuente de datos (proveedor / relay).
+ * DISABLE en producción: `executeSequenceMock`, RNG del motor local, `saveResult` simulado, scheduler `nextPhasePlan`.
+ */
+const GPULSE_REAL_PROVIDER_EXECUTION = isGpulseRealProviderExecution();
 
-/** IA Real: UI-only hold after NEW_RESULT before clearing overlay (ms). */
-const IA_REAL_RESULT_DISPLAY_MS = Math.max(
-  0,
-  Number(String(import.meta.env.VITE_IA_REAL_RESULT_DISPLAY_MS ?? '2500').trim()) || 2500,
-);
+const DEBUG_AUDIT_PANEL = String(import.meta.env.VITE_DEBUG_AUDIT_PANEL ?? '').trim() === '1';
 
 const MODOS = { VISOR: 'VISOR', SIMULACION: 'SIMULACION', IA_REAL: 'IA_REAL' };
 const FASES = PHASES;
@@ -194,9 +233,8 @@ function generateMockTxHash() {
       return `0x${Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')}`;
     }
   } catch (e) {}
-  // Fallback (non-cryptographic) for environments without WebCrypto.
-  const hex = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-  return `0x${hex}`;
+  // Deterministic fallback (no Math.random) when WebCrypto is unavailable.
+  return `0x${fallbackDeterministicTxHex(Date.now())}`;
 }
 const DEMO_WALLET_ADDRESS_AIG = '0xA1G7425739c8F7c8E2B4c9d1eF3a5B6c7D8e9F0aB1c2';
 const DEMO_WALLET_ADDRESS_USDT = '0xUSdT9283c1F4a6E8b2D0e5F7a9C1B3D4E6F8a0B2c4';
@@ -214,6 +252,7 @@ const RESULT_EMOTIONS = {
 };
 
 // --- MOTOR DE SONIDO EN CAPAS (consciencia / fases; tempo fijo, sin Go Pulse) ---
+let _soundGlitchSeq = 0;
 const SoundEngine = {
   isInitialized: false,
   isGold: false,
@@ -375,8 +414,10 @@ const SoundEngine = {
     const warm = ['G4', 'A4', 'B4', 'D5'];
     const notes = this.isGold ? warm : cold;
     this.tickSynth?.triggerAttackRelease(notes[i % 4], '32n', undefined, 0.02);
-    if (Math.random() > 0.45) {
-      const g = this.isGold ? (Math.random() > 0.5 ? 'B5' : 'D6') : (Math.random() > 0.5 ? 'F#6' : 'A6');
+    const branch = i % 10;
+    if (branch < 5) {
+      const hi = (i >> 2) & 1;
+      const g = this.isGold ? (hi ? 'B5' : 'D6') : (hi ? 'F#6' : 'A6');
       this.glitchSynth?.triggerAttackRelease(g, '128n', undefined, 0.012);
     }
   },
@@ -393,7 +434,8 @@ const SoundEngine = {
     const n2 = this.isGold ? 'G6' : 'B6';
     const now = Tone.now();
     this.glitchSynth?.triggerAttackRelease(n1, '128n', now, 0.008);
-    if (Math.random() > 0.5) this.glitchSynth?.triggerAttackRelease(n2, '128n', now + 0.04, 0.006);
+    _soundGlitchSeq += 1;
+    if ((_soundGlitchSeq & 1) === 0) this.glitchSynth?.triggerAttackRelease(n2, '128n', now + 0.04, 0.006);
   },
 
   playSignalStep(shot) {
@@ -774,7 +816,20 @@ const NeuralAnalytics = React.memo(({ stats, isRunning, enginesReady, isLight, i
 });
 
 // --- EL OJO CON PROYECCIÓN HOLOGRÁFICA (V9.0) ---
-const LivingPortal = React.memo(({ mode, enginesReady, isLight, isGoPulseActive, isGoldMode, isFaseResult = false, lastWinningShot = null, isRunning, activeAlert = null }) => {
+const LivingPortal = React.memo(
+  ({
+    mode,
+    enginesReady,
+    isLight,
+    isGoPulseActive,
+    isGoldMode,
+    isFaseResult = false,
+    lastWinningShot = null,
+    isRunning,
+    activeAlert = null,
+    iaRealWaitingBreath = false,
+    iaRealSequenceActive = false,
+  }) => {
   const isSim = mode === MODOS.SIMULACION; 
   const isGold = Boolean(isGoldMode);
   const baseColor = enginesReady === 4 ? '#00EDFF' : mode === MODOS.VISOR ? '#10b981' : isSim ? '#8A2BE2' : '#00EDFF';
@@ -812,6 +867,9 @@ const LivingPortal = React.memo(({ mode, enginesReady, isLight, isGoPulseActive,
   const armaniCurve = "all 1500ms cubic-bezier(0.22, 1, 0.36, 1)";
   const portalGlowBlur = isGoPulseActive ? (isGold ? 'blur(104px)' : 'blur(96px)') : 'blur(60px)';
 
+  const breathAmbient =
+    Boolean(iaRealWaitingBreath) && !iaRealSequenceActive && !activeAlert;
+  const sequenceCharge = Boolean(iaRealSequenceActive) && !activeAlert;
   // Función de proyección usando HTML/React Icons sobre la pupila negra
   const renderHologram = () => {
     if (!isFaseResult) return null;
@@ -836,25 +894,36 @@ const LivingPortal = React.memo(({ mode, enginesReady, isLight, isGoPulseActive,
       data-z="10"
       style={{ width: '256px', height: '256px', transition: armaniCurve, transform: isGoPulseActive ? 'scale(1.05)' : 'scale(1)' }}
     >
-      
       {/* Background Glow */}
       <motion.div
         className="absolute inset-0 rounded-full"
         animate={
           intensity === 'high'
             ? { scale: [1, 1.15, 1] }
-            : intensity === 'medium'
-              ? { scale: [1, 1.08, 1] }
-              : { scale: 1 }
+            : breathAmbient
+              ? { scale: [1, 1.07, 1], opacity: [0.16, 0.32, 0.16] }
+              : sequenceCharge
+                ? { scale: [1, 1.12, 1], opacity: [0.24, 0.42, 0.32] }
+                : intensity === 'medium'
+                  ? { scale: [1, 1.08, 1] }
+                  : { scale: 1 }
         }
         transition={{
-          repeat: Infinity,
-          duration: intensity === 'high' ? 1 : intensity === 'medium' ? 1.6 : 2.2,
-          ease: 'easeInOut',
+          repeat: breathAmbient || sequenceCharge || intensity === 'high' || intensity === 'medium' ? Infinity : 0,
+          duration: breathAmbient
+            ? 3.4
+            : sequenceCharge
+              ? 1.75
+              : intensity === 'high'
+                ? 1
+                : intensity === 'medium'
+                  ? 1.6
+                  : 2.2,
+          ease: [0.4, 0, 0.2, 1],
         }}
         style={{
-          transition: 'all 0.4s ease',
-          opacity: isGoPulseActive ? 0.35 : 0.2,
+          transition: 'background-color 0.4s ease, filter 0.4s ease',
+          opacity: isGoPulseActive ? 0.35 : breathAmbient || sequenceCharge ? undefined : 0.2,
           filter: portalGlowBlur,
           transform: isGoPulseActive ? 'scale(1.05)' : 'scale(1.0)',
           backgroundColor: effectiveColor,
@@ -1239,7 +1308,8 @@ const WalletSlidePanel = React.memo(function WalletSlidePanel({
 
   const DEBUG_MOCK_TX_FAIL =
     import.meta.env.DEV && typeof window !== 'undefined' && window.DEBUG_MOCK_TX_FAIL === true;
-  const shouldFail = () => DEBUG_MOCK_TX_FAIL && Math.random() < 0.2;
+  const shouldFail = () =>
+    DEBUG_MOCK_TX_FAIL && !GPULSE_REAL_PROVIDER_EXECUTION && Math.random() < 0.2;
 
   const mockDeposit = async (amount, userAddress) => {
     const txHash = generateMockTxHash();
@@ -3095,6 +3165,10 @@ const HubEcosystemPanel = React.memo(function HubEcosystemPanel() {
 });
 
 export default function App() {
+  useEffect(() => {
+    rngCheck('App:legacy-math-random', !GPULSE_REAL_PROVIDER_EXECUTION);
+  }, []);
+
   /** Relay BFF → core-api upstream (Winx u otro proveedor en EXTERNAL_SIGNALS_*). Sin demo en servidor. */
   useExternalSignals();
   const extStreamTick = useExternalSignalsStore((s) => s.streamTick);
@@ -3104,6 +3178,8 @@ export default function App() {
   const extConnectionStatus = useExternalSignalsStore((s) => s.connectionStatus);
   const extReconnectAttempt = useExternalSignalsStore((s) => s.reconnectAttempt);
   const extLastError = useExternalSignalsStore((s) => s.lastError);
+  const extSignalIntelMetrics = useExternalSignalsStore((s) => s.signalIntelMetrics);
+  const extAdminRawFeed = useExternalSignalsStore((s) => s.adminRawFeed);
 
   const [db, setDb] = useState(null);
   const [userId, setUserId] = useState(null);
@@ -3133,27 +3209,179 @@ export default function App() {
   const [mgLevels, setMgLevels] = useState(6);
   const [selectedMode, setSelectedMode] = useState(resolveUiDefaultMode);
   const [iaRealEngineState, setIaRealEngineState] = useState(() => createIdleIaRealVisualState());
+  const iaRealEngineStateRef = useRef(iaRealEngineState);
+  iaRealEngineStateRef.current = iaRealEngineState;
   const iaRealPhaseTimersRef = useRef(/** @type {ReturnType<typeof setTimeout>[]} */ ([]));
   const clearIaRealPhaseTimers = useCallback(() => {
     iaRealPhaseTimersRef.current.forEach(clearTimeout);
     iaRealPhaseTimersRef.current = [];
   }, []);
-
   const isIaRealProviderShell = useMemo(
     () => selectedMode === MODOS.IA_REAL && GPULSE_REAL_PROVIDER_EXECUTION,
     [selectedMode],
   );
 
-  /** Legacy phase enum for non–IA-Real UI; when IA Real provider shell is on, derived only from `iaRealEngineState.status`. */
-  const presentationFase = useMemo(() => {
-    if (isIaRealProviderShell) return iaRealStatusToPresentationFase(iaRealEngineState.status);
-    return fase;
-  }, [isIaRealProviderShell, iaRealEngineState.status, fase]);
+  /** Relay-driven UI: IA Real, Visor y Simulación (replay) leen la misma tubería de store / índice local. */
+  const isRelayPresentationShell = useMemo(
+    () =>
+      GPULSE_REAL_PROVIDER_EXECUTION &&
+      (selectedMode === MODOS.IA_REAL ||
+        selectedMode === MODOS.VISOR ||
+        selectedMode === MODOS.SIMULACION),
+    [selectedMode],
+  );
 
-  const iaRealDisplayStats = useIaRealDisplayStats(isIaRealProviderShell);
+  useEffect(() => {
+    if (!import.meta.env.DEV || !isIaRealProviderShell) return;
+    console.log('🧠 STATE', iaRealEngineState);
+  }, [isIaRealProviderShell, iaRealEngineState]);
+
+  /** IaRealSignalFeedPanel diag (FASE 1–2): consola — quitar cuando termine el diagnóstico. */
+  useEffect(() => {
+    if (!import.meta.env.DEV || !isIaRealProviderShell) return;
+    console.log('📊 extHistory RAW', extHistory);
+    const n = extHistory.length;
+    if (n > 0) {
+      const head = extHistory[0];
+      console.info('[diag extHistory] length', n, {
+        headHasStatus: head?.status != null && head?.status !== '',
+        headHasWinStatus: head?.winStatus !== undefined && head?.winStatus !== null,
+        headHasMesa: head?.mesa != null && String(head.mesa).trim() !== '',
+        headHasRound: head?.round != null && String(head.round).trim() !== '',
+      });
+    }
+    console.table(
+      extHistory.map((r) => ({
+        id: r.id,
+        status: r.status,
+        winStatus: r.winStatus,
+      })),
+    );
+  }, [isIaRealProviderShell, extHistory]);
+
+  const realStats = useMemo(() => buildStatsFromHistory(extHistory), [extHistory]);
+
+  /** `VITE_GPULSE_REALITY_AUDIT=1` — Fases 1, 3, 4 (logs demostrables; Fase 5 tras wallets). */
+  useEffect(() => {
+    if (!isGpulseRealityAuditEnabled()) return;
+    logGpulseRealityAuditEnvPhase1();
+    printGpulseRealityAuditPhase6And7Report();
+  }, []);
+
+  useEffect(() => {
+    if (!isGpulseRealityAuditEnabled()) return;
+    console.log('📊 HISTORY', extHistory.length);
+    console.log('[REALITY-AUDIT Fase3] pipeline', {
+      NEW_SIGNAL_store: extActiveSignals.length,
+      NEW_RESULT_store_history: extHistory.length,
+      connectionStatus: extConnectionStatus,
+    });
+  }, [extHistory.length, extActiveSignals.length, extStreamTick, extConnectionStatus]);
+
+  useEffect(() => {
+    if (!isGpulseRealityAuditEnabled()) return;
+    if (!isIaRealProviderShell) return;
+    const or = iaRealEngineState?.outcomeRow;
+    if (or == null) return;
+    const resolved = resolveOutcomeRowResultPayload(or) ?? or.rawResult;
+    const labels = extractScoreLabelsFromResultRaw(resolved);
+    console.log('🃏 RAW RESULT', or?.rawResult);
+    console.log('[REALITY-AUDIT Fase4] extractScoreLabelsFromResultRaw', labels);
+  }, [isIaRealProviderShell, iaRealEngineState?.outcomeRow]);
 
   const hideSimulacionUi = String(import.meta.env.VITE_GPULSE_HIDE_SIM_MODE ?? '0').trim() === '1';
   const [activeCycleMode, setActiveCycleMode] = useState(null);
+
+  /** Opt-in: `VITE_GPULSE_RUNTIME_AUDIT=1` + DEV → console.table env + modo + store (sin NDJSON). */
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (String(import.meta.env.VITE_GPULSE_RUNTIME_AUDIT ?? '').trim() !== '1') return;
+    console.table({
+      VITE_GPULSE_REAL_PROVIDER_EXECUTION: String(import.meta.env.VITE_GPULSE_REAL_PROVIDER_EXECUTION ?? '1'),
+      VITE_WEB3_MODE: String(import.meta.env.VITE_WEB3_MODE ?? 'mock'),
+      VITE_EXTERNAL_SIGNALS_URL: String(import.meta.env.VITE_EXTERNAL_SIGNALS_URL || '').trim() || '(vacío: modo directo usa default en getExternalSignalsSocketUrl)',
+      VITE_API_URL: String(import.meta.env.VITE_API_URL || '').trim(),
+      VITE_BACKEND_URL: String(import.meta.env.VITE_BACKEND_URL || '').trim(),
+      VITE_EXTERNAL_SIGNALS_BFF: String(import.meta.env.VITE_EXTERNAL_SIGNALS_BFF ?? '(dev: BFF activo salvo 0)'),
+      VITE_EXTERNAL_SIGNALS_ENABLED: String(import.meta.env.VITE_EXTERNAL_SIGNALS_ENABLED || '').trim(),
+      VITE_CYCLE_DEBUG: String(import.meta.env.VITE_CYCLE_DEBUG || '').trim(),
+    });
+    const t = window.setTimeout(() => {
+      const st = useExternalSignalsStore.getState();
+      console.table({
+        connectionStatus: st.connectionStatus,
+        lastError: st.lastError || '',
+        reconnectAttempt: st.reconnectAttempt ?? 0,
+        activeSignals: st.activeSignals?.length ?? 0,
+        history: st.history?.length ?? 0,
+      });
+    }, 3000);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (String(import.meta.env.VITE_GPULSE_RUNTIME_AUDIT ?? '').trim() !== '1') return;
+    console.table({
+      selectedMode,
+      activeCycleMode,
+      isIaRealProviderShell,
+      GPULSE_REAL_PROVIDER_EXECUTION,
+    });
+  }, [selectedMode, activeCycleMode, isIaRealProviderShell]);
+
+  /** Marco temporal señal (ventana 60s en capa IA Real); la UI vive en `iaRealEngineState.status`. */
+  const [cycleStartTs, setCycleStartTs] = useState(null);
+  /** Simulación + proveedor: índice local para replay de `extHistory` (no modifica store). */
+  const [simReplayIndex, setSimReplayIndex] = useState(0);
+
+  useEffect(() => {
+    console.log('🧠 MODE SOURCE', {
+      mode: selectedMode,
+      activeCycleMode,
+      usingProvider: GPULSE_REAL_PROVIDER_EXECUTION,
+      usingMock: !GPULSE_REAL_PROVIDER_EXECUTION,
+    });
+  }, [selectedMode, activeCycleMode]);
+
+  useEffect(() => {
+    if (!GPULSE_REAL_PROVIDER_EXECUTION || selectedMode !== MODOS.SIMULACION) return;
+    setSimReplayIndex((i) => {
+      if (!extHistory.length) return 0;
+      return Math.min(Math.max(0, i), extHistory.length - 1);
+    });
+  }, [extHistory.length, selectedMode]);
+
+  /** Motor mostrado: live (IA/Visor) o replay índice local (Simulación) — misma forma que `extHistory`. */
+  const relayEngineForDisplay = useMemo(() => {
+    if (!GPULSE_REAL_PROVIDER_EXECUTION) return iaRealEngineState;
+    if (selectedMode === MODOS.SIMULACION) {
+      if (!extHistory.length) return createIdleIaRealVisualState();
+      const row = extHistory[simReplayIndex] ?? extHistory[0];
+      return replayHistoryRowToEngineState(row);
+    }
+    return iaRealEngineState;
+  }, [
+    iaRealEngineState,
+    selectedMode,
+    extHistory,
+    simReplayIndex,
+  ]);
+
+  /** Legacy phase enum: con relay unificado, derivado del motor mostrado (no del scheduler local). */
+  const presentationFase = useMemo(() => {
+    if (isRelayPresentationShell) return iaRealStatusToPresentationFase(relayEngineForDisplay.status);
+    return fase;
+  }, [isRelayPresentationShell, relayEngineForDisplay.status, fase]);
+
+  useEffect(() => {
+    console.log('🧠 SYSTEM MODE', {
+      mode: selectedMode,
+      activeCycleMode,
+      providerActive: GPULSE_REAL_PROVIDER_EXECUTION,
+      mockActive: !GPULSE_REAL_PROVIDER_EXECUTION,
+    });
+  }, [selectedMode, activeCycleMode]);
 
   useEffect(() => {
     if (hideSimulacionUi && selectedMode === MODOS.SIMULACION) setSelectedMode(MODOS.IA_REAL);
@@ -3175,17 +3403,30 @@ export default function App() {
   }, [hideSimulacionUi]);
 
   const [sessionStats, setSessionStats] = useState({ wins: 0, losses: 0, total: 0, distribution: Array(8).fill(0), sessionRewardsNet: 0 });
-  /** IA Real: wins/losses/distribution from relay history (read-only); keeps sessionRewardsNet from local session state. */
+  /** IA Real: wins/losses/distribution desde `extHistory` (`buildStatsFromHistory`); simulación: estado local. */
   const sessionStatsForUi = useMemo(() => {
-    if (!isIaRealProviderShell || !iaRealDisplayStats) return sessionStats;
+    if (!isIaRealProviderShell) return sessionStats;
     return {
       ...sessionStats,
-      wins: iaRealDisplayStats.wins,
-      losses: iaRealDisplayStats.losses,
-      total: iaRealDisplayStats.total,
-      distribution: iaRealDisplayStats.distribution,
+      wins: realStats.wins,
+      losses: realStats.losses,
+      total: realStats.total,
+      distribution: realStats.distribution,
+      precisionPct: realStats.precisionPct,
     };
-  }, [isIaRealProviderShell, iaRealDisplayStats, sessionStats]);
+  }, [isIaRealProviderShell, sessionStats, realStats]);
+
+  useEffect(() => {
+    if (String(import.meta.env.VITE_IA_REAL_HISTORY_TABLE ?? '').trim() !== '1') return;
+    if (!isIaRealProviderShell) return;
+    console.table({
+      history: extHistory.length,
+      wins: realStats.wins,
+      losses: realStats.losses,
+      distribution: realStats.distribution,
+    });
+  }, [isIaRealProviderShell, extHistory.length, realStats]);
+
   const [showSessionReport, setShowSessionReport] = useState(false);
   const [isProcessingSequence, setIsProcessingSequence] = useState(false);
   const [aiSpeech, setAiSpeech] = useState({ message: "MI MATRIZ ESTÁ LISTA. ESPERANDO TU COMANDO.", type: "info" });
@@ -3306,6 +3547,11 @@ export default function App() {
   const [syncTarget, setSyncTarget] = useState(5);
   const [systemMessage, setSystemMessage] = useState('');
   const [systemNarrative, setSystemNarrative] = useState('');
+  const iaRealNarrativeTimerRef = useRef(null);
+  const iaRealNarrativeLastApplyRef = useRef(0);
+  useEffect(() => {
+    if (!isIaRealProviderShell) iaRealNarrativeLastApplyRef.current = 0;
+  }, [isIaRealProviderShell]);
   const [coreVisual, setCoreVisual] = useState('IDLE');
   /** ON: exige sync mínimo en executeSequence; OFF: sin bloqueo por sync (toggle del usuario). */
   const [syncMode, setSyncMode] = useState(true);
@@ -3375,37 +3621,57 @@ export default function App() {
     switch (presentationFase) {
       case FASES.ANALISIS:
         setSyncTarget(30);
-        setSystemMessage('Escaneando entorno...');
         break;
       case FASES.DETECCION:
         setSyncTarget(60);
-        setSystemMessage('Detectando patrón...');
         break;
       case FASES.SEÑAL:
         setSyncTarget(85);
-        setSystemMessage('Ejecutando señal...');
         break;
       case FASES.RESULTADO:
         setSyncTarget(100);
-        setSystemMessage('Sincronización completada');
         break;
       case FASES.REINICIO:
         setSyncTarget(5);
-        setSystemMessage('Recalibrando sistema...');
         break;
       default:
         setSyncTarget(5);
+    }
+
+    if (isIaRealProviderShell) return;
+
+    switch (presentationFase) {
+      case FASES.ANALISIS:
+        setSystemMessage('Escaneando entorno...');
+        break;
+      case FASES.DETECCION:
+        setSystemMessage('Detectando patrón...');
+        break;
+      case FASES.SEÑAL:
+        setSystemMessage('Ejecutando señal...');
+        break;
+      case FASES.RESULTADO:
+        setSystemMessage('Sincronización completada');
+        break;
+      case FASES.REINICIO:
+        setSystemMessage('Recalibrando sistema...');
+        break;
+      default:
         setSystemMessage('Sistema en espera');
     }
-  }, [presentationFase]);
+  }, [presentationFase, isIaRealProviderShell]);
 
   useEffect(() => {
+    if (isIaRealProviderShell) {
+      setSystemMessage(syncMode ? 'Sync ON' : 'Modo libre');
+      return;
+    }
     setSystemMessage(
       syncMode
         ? 'Modo sincronización activo'
         : 'Modo libre activo (sin validación de sincronización)',
     );
-  }, [syncMode]);
+  }, [syncMode, isIaRealProviderShell]);
 
   useEffect(() => {
     console.log('FASE:', fase);
@@ -3419,12 +3685,59 @@ export default function App() {
     console.log('FASE CAMBIO →', fase);
   }, [fase]);
 
-  // Narrative by mode (keeps existing systemMessage intact for sync/system status).
+  // Narrative by mode — IA Real shell: single line from buildIaRealNarrativeLine + min dwell between updates.
   useEffect(() => {
     const mode = String(activeCycleMode || selectedMode || '');
     const step = Number(activeShot || 0);
     const amount = step > 0 ? Number(computeBetForStep(stake, step) || 0) : 0;
     const rewardsNet = Number(sessionStats?.sessionRewardsNet || 0);
+
+    const applyLine = (next) => {
+      setSystemNarrative(next || '');
+      iaRealNarrativeLastApplyRef.current = Date.now();
+    };
+
+    if (isRelayPresentationShell) {
+      const next = buildIaRealNarrativeLine({
+        status: relayEngineForDisplay?.status,
+        activeRow: relayEngineForDisplay?.activeRow ?? null,
+        outcomeRow: relayEngineForDisplay?.outcomeRow ?? null,
+        visualStepIndex: relayEngineForDisplay?.visualStepIndex,
+        phaseVisual: relayEngineForDisplay?.phaseVisual ?? null,
+        connectionMeta: {
+          status: extConnectionStatus,
+          reconnectAttempt: extReconnectAttempt,
+          lastError: extLastError,
+        },
+        sessionSnapshot: {
+          wins: sessionStatsForUi?.wins,
+          losses: sessionStatsForUi?.losses,
+          rewardsNet,
+        },
+      });
+
+      clearTimeout(iaRealNarrativeTimerRef.current);
+      if (GPULSE_REAL_PROVIDER_EXECUTION) {
+        applyLine(next);
+        return undefined;
+      }
+      const now = Date.now();
+      const elapsed = now - iaRealNarrativeLastApplyRef.current;
+      const schedule = () => {
+        iaRealNarrativeTimerRef.current = null;
+        applyLine(next);
+      };
+      if (iaRealNarrativeLastApplyRef.current === 0 || elapsed >= IA_REAL_NARRATIVE_MIN_DWELL_MS) {
+        schedule();
+      } else {
+        iaRealNarrativeTimerRef.current = setTimeout(schedule, IA_REAL_NARRATIVE_MIN_DWELL_MS - elapsed);
+      }
+
+      return () => {
+        clearTimeout(iaRealNarrativeTimerRef.current);
+        iaRealNarrativeTimerRef.current = null;
+      };
+    }
 
     const next = buildNarrative({
       mode,
@@ -3439,6 +3752,7 @@ export default function App() {
     });
 
     setSystemNarrative(next || '');
+    return undefined;
   }, [
     activeCycleMode,
     selectedMode,
@@ -3448,6 +3762,15 @@ export default function App() {
     sessionStatsForUi?.wins,
     sessionStatsForUi?.losses,
     sessionStats?.sessionRewardsNet,
+    isRelayPresentationShell,
+    relayEngineForDisplay?.status,
+    relayEngineForDisplay?.activeRow,
+    relayEngineForDisplay?.outcomeRow,
+    relayEngineForDisplay?.visualStepIndex,
+    relayEngineForDisplay?.phaseVisual,
+    extConnectionStatus,
+    extReconnectAttempt,
+    extLastError,
   ]);
 
   const [ledger, setLedger] = useState([]);
@@ -3554,6 +3877,8 @@ export default function App() {
   const scoreInterval = useRef(null);
   const engineTimers = useRef([]);
   const isSequenceTriggered = useRef(false);
+  /** IA Real + proveedor: tras `executeSequenceProvider` (sin bucle local), esperamos NEW_RESULT. */
+  const isAwaitingProviderResultRef = useRef(false);
   /** Patrón guardado si executeSequence difiere por sync bajo (reintento al subir sync o SYNC OFF). */
   const syncBlockedPatternRef = useRef(null);
   /** True desde SYNC_BLOCK hasta que syncPercent >= syncTarget y executeSequence continúa (evita bucle scheduler). */
@@ -3563,7 +3888,96 @@ export default function App() {
   const isGoldModeRef = useRef(false);
   /** Latest external signal row id driving IA Real (provider-only execution). */
   const lastProviderSignalIdRef = useRef(null);
+  /** Evita doble RESULT_SEQUENCE si el efecto de extHistory dispara dos veces con el mismo `done.id` (mismo ciclo NEW_RESULT). */
+  const providerNewResultShellHandledRef = useRef(/** @type {Set<string>} */ (new Set()));
+
+  /** Cuando `engine.activeRow` es null: misma fila en Zustand por id/correlationKey/provider o por `lastProviderSignalIdRef` (NDJSON: slotsFromFallbackEnrichment -2). En **RESULT_SEQUENCE**, priorizar fila del store alineada con `outcomeRow` sobre `activeRow` (pending puede quedar stale tras NEW_RESULT). Debe ir **después** de `lastProviderSignalIdRef`. */
+  const iaRealAugmentSourceRow = useMemo(() => {
+    if (!isRelayPresentationShell) return null;
+    if (selectedMode === MODOS.SIMULACION && extHistory.length) {
+      return extHistory[simReplayIndex] ?? extHistory[0] ?? null;
+    }
+    const st = relayEngineForDisplay.status;
+    const ar = relayEngineForDisplay.activeRow;
+    const or = relayEngineForDisplay.outcomeRow;
+
+    const bySid = () => {
+      const sid = lastProviderSignalIdRef.current;
+      if (!sid) return null;
+      return (
+        extHistory.find((h) => h && String(h.id) === String(sid)) ??
+        extActiveSignals.find((a) => a && String(a.id) === String(sid)) ??
+        null
+      );
+    };
+
+    const peelOutcomeRowIds = (row) => {
+      if (!row || typeof row !== 'object') return { oid: '', ock: '', opid: '' };
+      let oid = row.id != null ? String(row.id).trim() : '';
+      let ock = row.correlationKey != null ? String(row.correlationKey).trim() : '';
+      let opid = row.providerSignalId != null ? String(row.providerSignalId).trim() : '';
+      const rr = row.rawResult;
+      if (rr != null && typeof rr === 'object' && !Array.isArray(rr)) {
+        const rro = /** @type {Record<string, unknown>} */ (rr);
+        if (!oid && rro.id != null) oid = String(rro.id).trim();
+        if (!ock && rro.correlationKey != null) ock = String(rro.correlationKey).trim();
+        if (!opid && rro.providerSignalId != null) opid = String(rro.providerSignalId).trim();
+      }
+      return { oid, ock, opid };
+    };
+
+    const findStoreRowByPeeledIds = ({ oid, ock, opid }) => {
+      if (!oid && !ock && !opid) return null;
+      const matches = (row) => {
+        if (!row || typeof row !== 'object') return false;
+        if (oid && String(row.id ?? '').trim() === oid) return true;
+        if (ock && String(row.correlationKey ?? '').trim() === ock) return true;
+        if (opid && String(row.providerSignalId ?? '').trim() === opid) return true;
+        return false;
+      };
+      return extHistory.find(matches) ?? extActiveSignals.find(matches) ?? null;
+    };
+
+    const resultPhase =
+      st === 'RESULT' || st === 'RESULT_SEQUENCE' || st === 'SUCCESS' || st === 'FAILED';
+
+    if (resultPhase && or && typeof or === 'object') {
+      const peeled = peelOutcomeRowIds(or);
+      const aligned = findStoreRowByPeeledIds(peeled) ?? bySid();
+      if (aligned) {
+        return aligned;
+      }
+    }
+
+    if (ar) return ar;
+
+    if (!or || typeof or !== 'object') return bySid();
+    const peeled = peelOutcomeRowIds(or);
+    if (!peeled.oid && !peeled.ock && !peeled.opid) return bySid();
+    return findStoreRowByPeeledIds(peeled) ?? bySid();
+  }, [
+    isRelayPresentationShell,
+    selectedMode,
+    simReplayIndex,
+    relayEngineForDisplay.status,
+    relayEngineForDisplay.activeRow,
+    relayEngineForDisplay.outcomeRow,
+    extHistory,
+    extActiveSignals,
+    extStreamTick,
+  ]);
+
+  /** VISOR: dedupe unified UI application from relay (separate from IA Real pipeline). */
+  const lastVisorExternalSignalIdRef = useRef(null);
+  /** Cross-source ordering: last admitted unified signal `{ source, ts }` (IA / VISOR / SIM). */
+  const lastAppliedSignalRef = useRef(null);
+  /** Snapshot for TRIGGER_SEQUENCE → {@link buildSimulatedSignalRowFromEnginePattern} (mesa/ronda at SEÑAL). */
+  const engineTableRef = useRef({ mesa: BACCARAT_TABLES[0], ronda: 1 });
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'genesis-oracle-v9-0';
+
+  useEffect(() => {
+    engineTableRef.current = { mesa: currentMesa, ronda: currentRonda };
+  }, [currentMesa, currentRonda]);
 
   // Hoisted function; refs above are initialized before any call site runs.
   function clearEngineTimers() {
@@ -4331,12 +4745,17 @@ export default function App() {
       return;
     }
     setRoundSteps(
-      seq.slice(0, 6).map((sig, idx) => ({
-        step: idx + 1,
-        signal: String(sig).toUpperCase() === 'BANKER' ? 'BANKER' : 'PLAYER',
-        result: undefined,
-        status: 'PENDING',
-      })),
+      seq.slice(0, 6).map((sig, idx) => {
+        const low = String(sig).toLowerCase();
+        const signal =
+          low === 'banker' || low === 'b' ? 'BANKER' : low === 'tie' || low === 't' ? 'TIE' : 'PLAYER';
+        return {
+          step: idx + 1,
+          signal,
+          result: undefined,
+          status: 'PENDING',
+        };
+      }),
     );
   }, [pattern, currentMesa, currentRonda]);
 
@@ -4496,24 +4915,62 @@ export default function App() {
 
   // --- MEMOS DE LÓGICA ---
   const neuralInsight = useMemo(() => {
+    if (isIaRealProviderShell) {
+      if (!extHistory.length) {
+        return {
+          interpretation: 'STREAM CONECTADO — SIN HISTORIAL ASENTADO AÚN.',
+          recommendation: 'ESPERANDO NEW_SIGNAL / NEW_RESULT DEL PROVEEDOR.',
+        };
+      }
+      const corrErr = Number(extSignalIntelMetrics?.correlationErrors ?? 0) || 0;
+      if (corrErr > 0) {
+        return {
+          interpretation: `ANOMALÍAS DE CORRELACIÓN: ${corrErr} desajuste(s) relay vs señal pendiente (ver Signal Intel).`,
+          recommendation: 'AFINIDAD: Prioriza mesa estable; valida correlación antes de escalar martingala.',
+        };
+      }
+      const an = detectHistoryAnomalies(extHistory);
+      if (an.lossStreak >= 3) {
+        return {
+          interpretation: `ANOMALÍA: racha de ${an.lossStreak} pérdidas recientes (extHistory).`,
+          recommendation: 'Congela stake o cambia mesa; valida vector_forecast antes del siguiente escalón.',
+        };
+      }
+      if (an.alternating && extHistory.length >= 6) {
+        return {
+          interpretation: 'Patrón alternante W/L en ventana corta — volatilidad elevada.',
+          recommendation: 'Modo observación: reduce tamaño o espera 2–3 manos.',
+        };
+      }
+    }
     if (sessionStatsForUi.total === 0) return { interpretation: "ESPERANDO ACTIVIDAD...", recommendation: "INICIA UN CICLO PARA ANALIZAR." };
     const acc = (sessionStatsForUi.wins / sessionStatsForUi.total) * 100;
     if (activeCycleMode === MODOS.VISOR) {
         if (acc > 90) return { interpretation: "MESA PREDETERMINADA: Los patrones estadísticos son inusualmente claros.", recommendation: "ANÁLISIS: Alta recurrencia detectada en ciclos de corto plazo." };
         return { interpretation: "OBSERVACIÓN ESTABLE: He validado la sincronía de los últimos bloques.", recommendation: "IA VIVA: Mi análisis técnico confirma una mesa de baja volatilidad." };
     }
+    if (isIaRealProviderShell && acc > 0) {
+      return {
+        interpretation: `AFINIDAD ${acc.toFixed(0)}% sobre ${sessionStatsForUi.total} manos (proveedor / extHistory).`,
+        recommendation:
+          sessionStatsForUi.losses > 0
+            ? 'Riesgo acumulado: revisa vector_forecast y paso T antes de reentrar.'
+            : 'Racha positiva: mantén disciplina de stake según vector actual.',
+      };
+    }
     if (acc > 90) return { interpretation: "ESTADO DE GRACIA: He sincronizado perfectamente con el azar de esta mesa.", recommendation: "TÁCTICA: Sugiero mantener el ritmo. La ventaja es nuestra." };
     if (sessionStatsForUi.losses > 0) return { interpretation: "RUIDO EN EL SISTEMA: Detecto un aumento en la desviación estándar.", recommendation: "ADVERTENCIA: Mi análisis sugiere un cambio de entorno inmediato." };
     return { interpretation: "ESTABILIDAD LOGRADA: He neutralizado la ventaja de la casa efectivamente.", recommendation: "FLUJO: Continuamos operando bajo los parámetros de mi matriz base." };
-  }, [sessionStatsForUi, activeCycleMode]);
+  }, [sessionStatsForUi, activeCycleMode, isIaRealProviderShell, extHistory, extSignalIntelMetrics]);
 
   const statusUI = useMemo(() => {
-    if (isIaRealProviderShell) {
-      const st = iaRealEngineState.status;
+    if (isRelayPresentationShell) {
+      const st = relayEngineForDisplay.status;
       if (st === 'IDLE') return { title: 'EN REPOSO', sub: 'Esperando señal...' };
       if (st === 'SYNC') return { title: 'SINCRONIZACIÓN', sub: 'Sincronizando...' };
       if (st === 'WAITING_RESULT') return { title: 'SEÑAL ACTIVA', sub: 'Esperando resultado...' };
       if (st === 'RESULT_ANIMATION') return { title: 'RESULTADO', sub: 'Mano resuelta' };
+      if (st === 'RESULT' || st === 'RESULT_SEQUENCE') return { title: 'RESULTADO', sub: 'Mano resuelta' };
       if (st === 'SUCCESS') return { title: 'SEÑAL ACERTADA', sub: 'Mano resuelta' };
       if (st === 'FAILED') return { title: 'SEÑAL FALLIDA', sub: 'Mano resuelta' };
       return { title: 'IA REAL', sub: '' };
@@ -4523,7 +4980,7 @@ export default function App() {
       title: Number(enginesReady) === 4 ? 'SINC_TOTAL' : fase === FASES.ANALISIS ? 'PENSANDO...' : enginesReady > 0 ? 'CALCULANDO' : 'EN REPOSO', 
       sub: isRunning ? `MODO: ${activeCycleMode || 'SYNC'}` : 'ESPERANDO TU SEÑAL' 
     };
-  }, [isIaRealProviderShell, iaRealEngineState.status, fase, lastWinningShot, enginesReady, isRunning, activeCycleMode]);
+  }, [isRelayPresentationShell, relayEngineForDisplay.status, fase, lastWinningShot, enginesReady, isRunning, activeCycleMode]);
 
   const isGoldMode = useMemo(() => isGoPulseActive && pulseCharge === 100, [isGoPulseActive, pulseCharge]);
   const goPulseSpeedFactor = useMemo(() => (isGoPulseActive ? 0.6 : 1), [isGoPulseActive]);
@@ -4681,7 +5138,7 @@ export default function App() {
         }
       }
       return [
-        { id: `w-${now}-${Math.random().toString(36).slice(2, 9)}`, ...row, at: now },
+        { id: nextOpaqueId('w'), ...row, at: now },
         ...safePrev,
       ].slice(0, 60);
     });
@@ -4690,7 +5147,7 @@ export default function App() {
   const logTransaction = useCallback((entry) => {
     const ts = Date.now();
     const row = {
-      id: `l-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+      id: nextOpaqueId('l'),
       timestamp: ts,
       walletType: entry.walletType, // 'AIG' | 'DUAL'
       action: entry.action, // deposit | withdraw | bet | win | loss
@@ -4699,9 +5156,224 @@ export default function App() {
       usdtAmount: Number(entry.usdtAmount) || 0,
       balanceAfter: Number(entry.balanceAfter) || 0,
       walletAddress: String(entry.walletAddress || ''),
+      source: entry.source != null ? String(entry.source) : 'APP',
+      result: entry.result != null ? String(entry.result) : '',
+      stake: entry.stake != null ? Number(entry.stake) : undefined,
+      winStatus: entry.winStatus === true ? true : entry.winStatus === false ? false : undefined,
+      martingale: entry.martingale != null ? Number(entry.martingale) : undefined,
     };
     setLedger((prev) => [row, ...(Array.isArray(prev) ? prev : [])].slice(0, 200));
   }, []);
+
+  /** Evita doble asiento si el effect se re-ejecuta (Strict Mode / re-renders). */
+  const providerEconomicSettledByIdRef = useRef(/** @type {Set<string>} */ (new Set()));
+  /** Neural Ledger: una fila por `done.id` aunque `handleProviderResultEconomic` quede acotado por `st`. */
+  const providerNeuralLedgerLoggedRef = useRef(/** @type {Set<string>} */ (new Set()));
+
+  /**
+   * Misma fila que el tail de `saveResult` (Neural Ledger + colección `history`), sin tocar `stats/main`
+   * (en IA Real proveedor los agregados de sesión vienen de `extHistory` / `realStats`).
+   */
+  const appendNeuralLedgerProviderRound = useCallback(
+    async ({
+      mesa,
+      ronda,
+      shot,
+      side,
+      ganador = null,
+      cartasPlayer = null,
+      cartasBanker = null,
+      puntajePlayer = null,
+      puntajeBanker = null,
+    }) => {
+      const cp = Array.isArray(cartasPlayer) ? cartasPlayer.map((c) => String(c ?? '').trim()).filter(Boolean) : [];
+      const cb = Array.isArray(cartasBanker) ? cartasBanker.map((c) => String(c ?? '').trim()).filter(Boolean) : [];
+      const entry = {
+        mesa: String(mesa),
+        ronda: Number(ronda),
+        shot: Number(shot),
+        side: String(side || 'FAIL'),
+        ganador: ganador != null && String(ganador).trim() !== '' ? String(ganador).trim() : null,
+        cartasPlayer: cp.length ? cp : null,
+        cartasBanker: cb.length ? cb : null,
+        puntajePlayer: puntajePlayer != null && String(puntajePlayer).trim() !== '' ? String(puntajePlayer) : null,
+        puntajeBanker: puntajeBanker != null && String(puntajeBanker).trim() !== '' ? String(puntajeBanker) : null,
+      };
+      const ts = Date.now();
+      setHistory((prev) => {
+        const row = {
+          id: nextOpaqueId('local'),
+          ...entry,
+          timestamp: { toMillis: () => ts },
+        };
+        const logs = [row, ...prev];
+        logs.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+        return logs.slice(0, 30);
+      });
+      if (db && userId) {
+        try {
+          await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'history'), {
+            mesa: entry.mesa,
+            ronda: entry.ronda,
+            shot: entry.shot,
+            side: entry.side,
+            ...(entry.ganador != null ? { ganador: entry.ganador } : {}),
+            ...(entry.cartasPlayer != null ? { cartasPlayer: entry.cartasPlayer } : {}),
+            ...(entry.cartasBanker != null ? { cartasBanker: entry.cartasBanker } : {}),
+            ...(entry.puntajePlayer != null ? { puntajePlayer: entry.puntajePlayer } : {}),
+            ...(entry.puntajeBanker != null ? { puntajeBanker: entry.puntajeBanker } : {}),
+            timestamp: serverTimestamp(),
+          });
+        } catch (e) {}
+      }
+    },
+    [db, userId, appId, setHistory],
+  );
+
+  /**
+   * Asienta apuesta acumulada + pago (IA Real proveedor) sin `executeSequence`.
+   * Usa el mismo escalón martingala que la UI (`iaRealContadorForStrip` + `computeTotalLoss` / `computeBetForStep`).
+   */
+  const handleProviderResultEconomic = useCallback(
+    (done, snap) => {
+      if (!done || !snap) return;
+      const oid = done.id != null ? String(done.id) : '';
+      if (!oid || providerEconomicSettledByIdRef.current.has(oid)) return;
+
+      const isWin = done.winStatus === true;
+
+      const rawStep = iaRealContadorForStrip(
+        snap.activeRow,
+        done,
+        'RESULT',
+        'RESULT',
+      );
+      const L = Math.min(
+        Math.max(1, Math.floor(Number(mgLevels) || 6)),
+        PROVIDER_MARTINGALE_STEPS,
+      );
+      const step = Math.min(Math.max(1, Math.floor(Number(rawStep) || 1)), L);
+
+      const baseStake = Number(stake);
+      if (!(baseStake > 0)) return;
+
+      const totalDebited = computeTotalLoss(baseStake, step);
+      const lastBet = computeBetForStep(baseStake, step);
+
+      const rec = recommendationSide(snap.activeRow?.recommendation);
+      const sideLower = rec === 'BANKER' ? 'banker' : 'player';
+      const winAmount = lastBet * (sideLower === 'banker' ? 1.95 : 2.0);
+
+      const isDual = activeTradingWallet === WALLET_MODE.MULTI;
+      const preA = Number(walletAigRef.current);
+      const preU = Number(walletUsdtRef.current);
+
+      let afterA = preA;
+      let afterU = preU;
+      const applyDebitToSim = (amt) => {
+        if (activeTradingWallet === WALLET_MODE.AIG) afterA -= amt;
+        else {
+          const h = amt / 2;
+          afterA -= h;
+          afterU -= h;
+        }
+      };
+      const applyCreditToSim = (amt) => {
+        if (activeTradingWallet === WALLET_MODE.AIG) afterA += amt;
+        else {
+          const h = amt / 2;
+          afterA += h;
+          afterU += h;
+        }
+      };
+
+      providerEconomicSettledByIdRef.current.add(oid);
+
+      applyDebitToSim(totalDebited);
+      if (isWin) applyCreditToSim(winAmount);
+
+      if (isWin) {
+        applyIaRealStakeDebit(activeTradingWallet, totalDebited, setWalletBalanceAig, setWalletBalanceUsdt);
+        applyIaRealWinCredit(activeTradingWallet, winAmount, setWalletBalanceAig, setWalletBalanceUsdt);
+        applyWagerVolume(isDual ? 'DUAL' : 'AIG', totalDebited);
+        logTransaction({
+          source: 'PROVIDER',
+          result: oid,
+          stake: lastBet,
+          martingale: step,
+          winStatus: true,
+          walletType: isDual ? 'DUAL' : 'AIG',
+          action: 'win',
+          amount: winAmount,
+          aigAmount: isDual ? winAmount / 2 : winAmount,
+          usdtAmount: isDual ? winAmount / 2 : 0,
+          balanceAfter: isDual ? multiMaxUsable(afterA, afterU) : afterA,
+          walletAddress: isDual
+            ? `AIG:${DEMO_WALLET_ADDRESS_AIG} | USDT:${DEMO_WALLET_ADDRESS_USDT}`
+            : DEMO_WALLET_ADDRESS_AIG,
+        });
+      } else {
+        applyIaRealStakeDebit(activeTradingWallet, totalDebited, setWalletBalanceAig, setWalletBalanceUsdt);
+        applyWagerVolume(isDual ? 'DUAL' : 'AIG', totalDebited);
+        logTransaction({
+          source: 'PROVIDER',
+          result: oid,
+          stake: totalDebited,
+          martingale: step,
+          winStatus: false,
+          walletType: isDual ? 'DUAL' : 'AIG',
+          action: 'loss',
+          amount: totalDebited,
+          aigAmount: isDual ? totalDebited / 2 : totalDebited,
+          usdtAmount: isDual ? totalDebited / 2 : 0,
+          balanceAfter: isDual ? multiMaxUsable(afterA, afterU) : afterA,
+          walletAddress: isDual
+            ? `AIG:${DEMO_WALLET_ADDRESS_AIG} | USDT:${DEMO_WALLET_ADDRESS_USDT}`
+            : DEMO_WALLET_ADDRESS_AIG,
+        });
+      }
+
+      setBalanceAnimate(true);
+      setTimeout(() => setBalanceAnimate(false), 300);
+    },
+    [
+      stake,
+      mgLevels,
+      activeTradingWallet,
+      logTransaction,
+      applyWagerVolume,
+      setWalletBalanceAig,
+      setWalletBalanceUsdt,
+    ],
+  );
+
+  const realityAuditLedgerSigRef = useRef('');
+  useEffect(() => {
+    if (!isGpulseRealityAuditEnabled() || !GPULSE_REAL_PROVIDER_EXECUTION) return;
+    const len = Array.isArray(ledger) ? ledger.length : 0;
+    const top = len ? ledger[0] : null;
+    const sig = `${len}:${top?.id != null ? String(top.id) : ''}`;
+    if (sig === realityAuditLedgerSigRef.current) return;
+    realityAuditLedgerSigRef.current = sig;
+    console.log('[REALITY-AUDIT Fase5] ECONOMY', {
+      ledgerLen: len,
+      head: top
+        ? {
+            action: top.action,
+            source: top.source,
+            result: top.result,
+          }
+        : null,
+      walletAig: Number(walletBalanceAig),
+      walletUsdt: Number(walletBalanceUsdt),
+      stakeConfigured: Number(stake) > 0,
+    });
+    if (isIaRealProviderShell && !(Number(stake) > 0)) {
+      console.warn(
+        '[REALITY-AUDIT Fase5] stake ≤ 0 → `handleProviderResultEconomic` no aplica débito/crédito (App.jsx).',
+      );
+    }
+  }, [ledger, walletBalanceAig, walletBalanceUsdt, stake, isIaRealProviderShell]);
 
   const ledgerOutcomesDesc = useMemo(() => {
     // ledger is already newest-first, but ensure correct numeric timestamp ordering
@@ -4731,6 +5403,88 @@ export default function App() {
     [ledger],
   );
   const winRatePct = useMemo(() => (ledgerBetCount > 0 ? (ledgerWinCount / ledgerBetCount) * 100 : 0), [ledgerBetCount, ledgerWinCount]);
+
+  useEffect(() => {
+    if (!isIaRealProviderShell) return;
+    if (extHistory.length > 0) return;
+    console.info('[IA REAL] extHistory vacío — aún no hay NEW_RESULT correlacionado con señal pendiente.');
+  }, [isIaRealProviderShell, extHistory.length]);
+
+  useEffect(() => {
+    if (!isIaRealProviderShell || !GPULSE_REAL_PROVIDER_EXECUTION) return;
+    const sid = lastProviderSignalIdRef.current;
+    if (!sid) return;
+    const pend = extActiveSignals.find((s) => s.id === sid && s.status === 'pending');
+    const st = iaRealEngineState.status;
+    if (
+      pend &&
+      (st === 'WAITING_RESULT' || st === 'SYNC') &&
+      iaRealEngineState.activeRow?.id !== sid
+    ) {
+      console.error('[IA REAL ENGINE] activeRow desincronizado con relay', {
+        sid,
+        engineActiveId: iaRealEngineState.activeRow?.id,
+        status: st,
+      });
+    }
+  }, [isIaRealProviderShell, extStreamTick, extActiveSignals, iaRealEngineState]);
+
+  useEffect(() => {
+    if (!isIaRealPipeCheckEnabled() || !isIaRealProviderShell) return;
+    const sid = lastProviderSignalIdRef.current;
+    const storeRow =
+      (sid && extHistory.find((h) => h.id === sid)) ??
+      (sid && extActiveSignals.find((a) => a.id === sid)) ??
+      null;
+    logPipeCheck({
+      layer: 'ui',
+      event: 'render',
+      socket: undefined,
+      normalized: undefined,
+      storeRow,
+      activeRow: iaRealEngineState.activeRow,
+    });
+  }, [extStreamTick, isIaRealProviderShell, iaRealEngineState.activeRow, extHistory, extActiveSignals]);
+
+  useEffect(() => {
+    if (!isIaRealPipeCheckEnabled() || !isIaRealProviderShell || !GPULSE_REAL_PROVIDER_EXECUTION) return;
+    const sid = lastProviderSignalIdRef.current;
+    let engineCoherent = true;
+    if (sid) {
+      const pend = extActiveSignals.find((s) => s.id === sid && s.status === 'pending');
+      const st = iaRealEngineState.status;
+      if (pend && (st === 'WAITING_RESULT' || st === 'SYNC') && iaRealEngineState.activeRow?.id !== sid) {
+        engineCoherent = false;
+      }
+    }
+    const ledger0 = Array.isArray(ledger) ? ledger[0] : null;
+    const ledgerProviderTagged =
+      extHistory.length === 0 || (ledger0 && String(ledger0.source || '') === 'PROVIDER');
+    logIaRealPipelineHealthTable({
+      connected: extConnectionStatus === 'connected',
+      storeHasData: extActiveSignals.length > 0 || extHistory.length > 0,
+      engineCoherent,
+      theaterLikelyOk:
+        (iaRealEngineState.status !== 'RESULT' && iaRealEngineState.status !== 'RESULT_SEQUENCE') ||
+        Boolean(iaRealEngineState.outcomeRow?.rawResult),
+      panelHasStats:
+        !isIaRealProviderShell || extHistory.length === 0 || sessionStatsForUi.total > 0,
+      statsBrainOk:
+        !isIaRealProviderShell || extHistory.length === 0 || sessionStatsForUi.total > 0,
+      ledgerProviderTagged,
+    });
+  }, [
+    extStreamTick,
+    isIaRealProviderShell,
+    iaRealEngineState.status,
+    iaRealEngineState.activeRow,
+    iaRealEngineState.outcomeRow,
+    extActiveSignals,
+    extHistory,
+    extConnectionStatus,
+    ledger,
+    sessionStatsForUi.total,
+  ]);
 
   const exposureLevel = useMemo(() => {
     const s = Number(stake);
@@ -4877,6 +5631,23 @@ export default function App() {
   }, [aiPopup, diagnostics]);
 
   const gpulseStats = useMemo(() => {
+    if (isIaRealProviderShell) {
+      if (!extHistory.length) return null;
+      const rs = buildStatsFromHistory(extHistory);
+      const total = rs.total;
+      const wins = rs.wins;
+      const winrate = total ? wins / total : 0;
+      return {
+        total,
+        wins,
+        winrate,
+        zoneWinrate: {
+          hot: winrate,
+          neutral: winrate,
+          cold: winrate,
+        },
+      };
+    }
     if (!gpulseHistory.length) return null;
 
     let total = 0;
@@ -4916,7 +5687,7 @@ export default function App() {
       winrate,
       zoneWinrate,
     };
-  }, [gpulseHistory]);
+  }, [isIaRealProviderShell, extHistory, gpulseHistory]);
 
   useEffect(() => {
     console.log('G_PULSE_STATS', gpulseStats);
@@ -4941,9 +5712,16 @@ export default function App() {
     return weights;
   }, [gpulseStats]);
 
+  const gpulseHistorySource = useMemo(() => {
+    if (isIaRealProviderShell && extHistory.length) {
+      return historyRowsForGpulse(extHistory, 36);
+    }
+    return history;
+  }, [isIaRealProviderShell, extHistory, history]);
+
   const gpulse = useMemo(() => {
-    return computeGPulse(history, dynamicWeights || undefined);
-  }, [history, dynamicWeights]);
+    return computeGPulse(gpulseHistorySource, dynamicWeights || undefined);
+  }, [gpulseHistorySource, dynamicWeights]);
 
   // Live refs for async gate checks (executeSequence may await; keep freshest values).
   const gpulseLiveRef = useRef(gpulse);
@@ -5112,6 +5890,7 @@ export default function App() {
   );
 
   const saveResult = useCallback(async (shot, lastBet, side) => {
+    if (GPULSE_REAL_PROVIDER_EXECUTION) return;
     setStats(prev => { 
       const newT = [...(Array.isArray(prev?.totals) ? prev.totals : Array(8).fill(0))]; 
       if (Number(shot) > 0) newT[Number(shot)]++; else newT[7]++; 
@@ -5158,7 +5937,7 @@ export default function App() {
     const entry = { mesa: String(currentMesa), ronda: Number(currentRonda), shot: Number(shot), side: String(side || 'FAIL') };
     const ts = Date.now();
     setHistory((prev) => {
-      const row = { id: `local-${ts}-${Math.random().toString(16).slice(2, 10)}`, ...entry, timestamp: { toMillis: () => ts } };
+      const row = { id: nextOpaqueId('local'), ...entry, timestamp: { toMillis: () => ts } };
       const logs = [row, ...prev];
       logs.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
       return logs.slice(0, 30);
@@ -5193,12 +5972,273 @@ export default function App() {
     });
   }
 
-  const executeSequence = useCallback(async (pat) => {
-    if (GPULSE_REAL_PROVIDER_EXECUTION && activeCycleMode === MODOS.IA_REAL) {
-      setIsProcessingSequence(false);
-      setCoreVisual('READY');
+  /**
+   * IA Real + relay: sin bucle T1–T6 ni `setTimeout` — solo gates (sync/G_Pulse), fondos al tiro actual
+   * (`activeRow.martingale` vía store) y `isAwaitingProviderResultRef` hasta NEW_RESULT.
+   */
+  const executeSequenceProvider = useCallback(async (pat) => {
+    if (import.meta.env.DEV) {
+      console.log('EXECUTE SEQUENCE (PROVIDER)');
+      console.log('SYNC CHECK:', { syncMode, isSyncRequired, syncPercent });
+    }
+    setCoreVisual('EXECUTING');
+    if (import.meta.env.DEV) logWalletSync('BEFORE_EXECUTE_SEQUENCE');
+
+    const executionContext = {
+      gpulseForced: false,
+      syncForced: false,
+      fundsCapped: false,
+    };
+    const executionId = Date.now();
+    let executionConfidence = 1;
+    const getExecutionQuality = (conf) =>
+      conf > 0.85 ? 'HIGH' : conf > 0.6 ? 'MEDIUM' : 'LOW';
+    const logExecutionFinal = () => {
+      console.info('EXECUTION CONTEXT', {
+        executionId,
+        executionContext,
+        executionConfidence,
+        executionQuality: getExecutionQuality(executionConfidence),
+      });
+    };
+    const logExecutionInterrupted = ({ reason, step }) => {
+      console.warn('EXECUTION INTERRUPTED', {
+        executionId,
+        reason,
+        step,
+        executionContext,
+        executionConfidence,
+        executionQuality: getExecutionQuality(executionConfidence),
+      });
+    };
+
+    const DEBUG_BYPASS_GPULSE =
+      import.meta.env.DEV && typeof window !== 'undefined' && window.DEBUG_BYPASS_GPULSE === true;
+    const DEBUG_FORCE_SYNC_READY =
+      import.meta.env.DEV && typeof window !== 'undefined' && window.DEBUG_FORCE_SYNC_READY === true;
+
+    if (isSyncRequired && !DEBUG_FORCE_SYNC_READY && syncPercent < syncTarget) {
+      console.warn('⛔ Sync insuficiente (sin timeout — no se fuerza ejecución)', { syncPercent, syncTarget });
+      setCoreVisual('BLOCKED_SYNC');
+      setSystemMessage(
+        'Sincronización por debajo del umbral. Esperando mejora del relay; no se fuerza la operación.',
+      );
+      syncBlockedPatternRef.current = Array.isArray(pat) ? pat : null;
+      executionBlockedBySyncRef.current = true;
+      setIsBlocked(true);
+      isSequenceTriggered.current = false;
+      setPattern([]);
+      logExecutionInterrupted({ reason: 'SYNC_BLOCK', step: null });
       return;
     }
+
+    syncBlockedPatternRef.current = null;
+    executionBlockedBySyncRef.current = false;
+    if (isSyncRequired && syncPercent >= syncTarget) {
+      setIsBlocked(false);
+    }
+
+    if (isSyncRequired && syncPercent >= 60 && syncPercent < 85) {
+      setAiSpeech({
+        message: 'Sincronización por debajo del óptimo — operando con precaución.',
+        type: 'warning',
+      });
+    }
+
+    const gpNow = gpulseLiveRef.current;
+
+    const GPULSE_MIN_CONFIDENCE = 0.55;
+    const GPULSE_MIN_HOT = 0.5;
+
+    const enforceGpulseGate = activeCycleMode === MODOS.IA_REAL;
+
+    const isValidByGPulse =
+      !enforceGpulseGate ||
+      (Number(gpNow.confidence) >= GPULSE_MIN_CONFIDENCE && Number(gpNow.score) >= GPULSE_MIN_HOT);
+
+    const gpulseOk = isValidByGPulse;
+
+    if (!gpulseOk && enforceGpulseGate && DEBUG_BYPASS_GPULSE) {
+      executionContext.gpulseForced = true;
+      executionConfidence *= 0.7;
+    }
+
+    if (!gpulseOk && !(DEBUG_BYPASS_GPULSE && enforceGpulseGate)) {
+      console.log('⛔ Señal bloqueada por G_Pulse', gpNow);
+      setCoreVisual('BLOCKED_GPULSE');
+      setGpulseHistory((prev) => [
+        ...prev,
+        {
+          timestamp: Date.now(),
+          score: gpNow.score,
+          zone: gpNow.zone,
+          phase: gpNow.phase,
+          suggestion: gpNow.suggestion,
+          executed: false,
+          result: null,
+        },
+      ]);
+      isSequenceTriggered.current = false;
+      gpulseBlockedPatternRef.current = enforceGpulseGate && Array.isArray(pat) ? pat : null;
+      setPattern([]);
+      if (enforceGpulseGate) {
+        setSystemMessage('Condiciones no óptimas… esperando alineación G_Pulse');
+      }
+      logExecutionInterrupted({ reason: 'GPULSE_BLOCK', step: null });
+      return;
+    }
+
+    setGpulseHistory((prev) => [
+      ...prev,
+      {
+        timestamp: Date.now(),
+        score: gpulse.score,
+        zone: gpulse.zone,
+        phase: gpulse.phase,
+        suggestion: gpulse.suggestion,
+        executed: true,
+        result: null,
+      },
+    ]);
+
+    const requestedLevels = Math.max(1, Math.floor(Number(mgLevels) || 1));
+    let effectiveLevels = requestedLevels;
+    if (activeCycleMode === MODOS.IA_REAL) {
+      let playable = 0;
+      for (let k = 1; k <= requestedLevels; k++) {
+        const bet = computeBetForStep(stake, k);
+        const fundsChk = canExecuteShot({
+          activeCycleMode: 'IA_REAL',
+          activeTradingWallet,
+          walletModeAigConst: WALLET_MODE.AIG,
+          aig: walletAigRef.current,
+          usdt: walletUsdtRef.current,
+          bet,
+        });
+        if (!fundsChk.ok) break;
+        playable = k;
+      }
+      effectiveLevels = Math.max(1, playable);
+      if (effectiveLevels < requestedLevels) {
+        console.warn('⚠️ FUNDS CAP', { requestedLevels, effectiveLevels });
+        setSystemMessage(`Fondos limitan progresión: ejecutando hasta T${effectiveLevels} (de T${requestedLevels}).`);
+        executionContext.fundsCapped = true;
+        executionConfidence *= 0.9;
+      }
+    }
+
+    const MULTI_INSUFFICIENT = 'Insufficient balance in one of the assets to execute this operation';
+
+    const abortSequenceFunds = (msg, meta = {}) => {
+      console.warn('⛔ IA_REAL ABORT (FUNDS)', {
+        msg,
+        meta,
+        activeTradingWallet,
+        walletAIG: Number(walletAigRef.current),
+        walletUSDT: Number(walletUsdtRef.current),
+        stake: Number(stake),
+        mgLevels: Number(mgLevels),
+      });
+      logExecutionInterrupted({ reason: 'ABORT_FUNDS', step: meta?.step ?? null });
+      setCoreVisual('ERROR_FUNDS');
+      if (scoreInterval.current) clearInterval(scoreInterval.current);
+      SoundEngine.setNoise(false);
+      setAiSpeech({ message: msg, type: 'error' });
+      setSystemMessage(msg);
+      setIsProcessingSequence(false);
+      setIsRunning(false);
+      setFase(FASES.STANDBY);
+      setActiveCycleMode(null);
+      setEnginesReady(0);
+      isSequenceTriggered.current = false;
+      setWinnerSide(null);
+      setActiveShot(null);
+    };
+
+    if (!isRunning) {
+      setCoreVisual('INTERRUPTED');
+      logExecutionInterrupted({ reason: 'NOT_RUNNING', step: null });
+      setIsProcessingSequence(false);
+      return;
+    }
+
+    const sid = lastProviderSignalIdRef.current;
+    const stStore = useExternalSignalsStore.getState();
+    const pend = sid
+      ? stStore.activeSignals.find((r) => r.id === sid)
+      : [...stStore.activeSignals].filter((s) => s.status === 'pending').pop();
+    const mgRaw = resolveContadorMartingalaForUi(pend ?? null);
+    const mgStep = Math.max(1, Math.floor(Number(mgRaw)) || 1);
+    if (mgStep > effectiveLevels) {
+      abortSequenceFunds('Fondos insuficientes para el tiro actual de martingala.', {
+        step: mgStep,
+        effectiveLevels,
+      });
+      return;
+    }
+    const stepClamped = Math.min(mgStep, PROVIDER_MARTINGALE_STEPS, effectiveLevels);
+    const currentBet = computeBetForStep(stake, stepClamped);
+    const funds = canExecuteShot({
+      activeCycleMode: activeCycleMode === MODOS.IA_REAL ? 'IA_REAL' : String(activeCycleMode),
+      activeTradingWallet,
+      walletModeAigConst: WALLET_MODE.AIG,
+      aig: walletAigRef.current,
+      usdt: walletUsdtRef.current,
+      bet: currentBet,
+    });
+    if (!funds.ok) {
+      abortSequenceFunds(
+        funds.reason === 'INSUFFICIENT_AIG' ? 'RESERVA INSUFICIENTE PARA OPERAR.' : MULTI_INSUFFICIENT,
+        { step: stepClamped, bet: Number(currentBet), reason: funds.reason },
+      );
+      return;
+    }
+
+    setActiveShot(stepClamped);
+    if (isSoundEnabled) SoundEngine.playSignalStep(stepClamped);
+    speak('TIRO', { shot: stepClamped });
+
+    clearInterval(scoreInterval.current);
+
+    setWinnerSide(null);
+    const ls = liveScoresFromOutcomeRow(pend);
+    const np = ls.player;
+    const nb = ls.banker;
+    const hasPair = np != null && nb != null;
+    setScores({
+      player: hasPair ? np : 0,
+      banker: hasPair ? nb : 0,
+      rolling: false,
+    });
+
+    isAwaitingProviderResultRef.current = true;
+    setSystemMessage('Esperando resultado del proveedor…');
+    setCoreVisual('READY');
+    logExecutionFinal();
+    setIsProcessingSequence(false);
+  }, [
+    gpulse,
+    isRunning,
+    activeCycleMode,
+    activeTradingWallet,
+    mgLevels,
+    stake,
+    isSoundEnabled,
+    speak,
+    setAiSpeech,
+    isSyncRequired,
+    syncPercent,
+    syncTarget,
+    syncMode,
+  ]);
+
+  /**
+   * Motor mock (solo dev: `VITE_GPULSE_REAL_PROVIDER_EXECUTION=0`). Con proveedor activo no corre: sin RNG,
+   * sin `saveResult` (también guardado en `saveResult`), sin pasos simulados — fuente única = relay.
+   */
+  const executeSequenceMock = useCallback(async (pat, opts = {}) => {
+    if (GPULSE_REAL_PROVIDER_EXECUTION) return;
+
     if (import.meta.env.DEV) {
       console.log('EXECUTE SEQUENCE TRIGGERED');
       console.log('SYNC CHECK:', { syncMode, isSyncRequired, syncPercent });
@@ -5239,20 +6279,12 @@ export default function App() {
     const DEBUG_FORCE_SYNC_READY =
       import.meta.env.DEV && typeof window !== 'undefined' && window.DEBUG_FORCE_SYNC_READY === true;
 
-    // SYNC stabilization: allow a slow fallback so IA_REAL never deadlocks on impossible sync targets.
-    const syncBlockStartRef = executeSequence._syncBlockStartRef || (executeSequence._syncBlockStartRef = { at: 0 });
     if (isSyncRequired && !DEBUG_FORCE_SYNC_READY && syncPercent < syncTarget) {
-      if (!syncBlockStartRef.at) syncBlockStartRef.at = Date.now();
-      const waitedMs = Date.now() - syncBlockStartRef.at;
-      if (waitedMs > 45_000) {
-        console.warn('⚠️ SYNC TIMEOUT → FORCED EXECUTION', { waitedMs, syncPercent, syncTarget });
-        executionContext.syncForced = true;
-        executionConfidence *= 0.8;
-      } else {
-      console.warn('⛔ Sync insuficiente');
-      console.warn('SYNC BLOCK', { syncPercent, syncTarget });
+      console.warn('⛔ Sync insuficiente (sin timeout — no se fuerza ejecución)', { syncPercent, syncTarget });
       setCoreVisual('BLOCKED_SYNC');
-      setSystemMessage('Esperando sincronización óptima...');
+      setSystemMessage(
+        'Sincronización por debajo del umbral. Esperando mejora del relay; no se fuerza la operación.',
+      );
       syncBlockedPatternRef.current = Array.isArray(pat) ? pat : null;
       executionBlockedBySyncRef.current = true;
       setIsBlocked(true);
@@ -5260,9 +6292,6 @@ export default function App() {
       setPattern([]);
       logExecutionInterrupted({ reason: 'SYNC_BLOCK', step: null });
       return;
-      }
-    } else {
-      syncBlockStartRef.at = 0;
     }
 
     syncBlockedPatternRef.current = null;
@@ -5525,8 +6554,18 @@ export default function App() {
       setScores({ player: 0, banker: 0, rolling: true });
       if (isSoundEnabled) SoundEngine.setNoise(true);
       let ticks = 0;
-      scoreInterval.current = setInterval(() => { if (!isRunning) return; setScores(prev => ({ ...prev, player: Math.floor(Math.random()*10), banker: Math.floor(Math.random()*10) })); if (isSoundEnabled) SoundEngine.playRollingTick(); if (++ticks > 12) clearInterval(scoreInterval.current); }, COGNITIVE_ROLL_TICK_MS);
-      await new Promise(r => setTimeout(r, 1800 * speedFactor));
+      scoreInterval.current = setInterval(() => {
+        if (!isRunning) return;
+        ticks += 1;
+        setScores((prev) => ({
+          ...prev,
+          player: (ticks * 3 + 2) % 10,
+          banker: (ticks * 5 + 1) % 10,
+        }));
+        if (isSoundEnabled) SoundEngine.playRollingTick();
+        if (ticks > 12) clearInterval(scoreInterval.current);
+      }, COGNITIVE_ROLL_TICK_MS);
+      await new Promise((r) => setTimeout(r, 1800 * speedFactor));
       if (!isRunning) {
         console.warn('⛔ LOOP BREAK', { step: i, fase, reason: 'isRunning false (after wait)' });
         setCoreVisual('INTERRUPTED');
@@ -5534,6 +6573,7 @@ export default function App() {
         break;
       }
       clearInterval(scoreInterval.current);
+
 
       const isWinner = isWinningStep(i, winAt);
       const side = isWinner ? pat[i-1] : (pat[i-1] === 'player' ? 'banker' : 'player');
@@ -5621,6 +6661,26 @@ export default function App() {
     syncMode,
   ]);
 
+
+  /**
+   * Proveedor activo: solo `fromProviderSignal` (IA Real). Visor/Sim no invocan secuencia; Sim usa replay de `extHistory`.
+   */
+  const executeSequence = useCallback(
+    async (pat, opts = {}) => {
+      if (opts.fromProviderSignal === true) {
+        return executeSequenceProvider(pat, opts);
+      }
+      if (GPULSE_REAL_PROVIDER_EXECUTION) {
+        if (import.meta.env.DEV) {
+          console.warn('[executeSequence] omitido sin `fromProviderSignal` (solo IA Real + relay).');
+        }
+        return;
+      }
+      return executeSequenceMock(pat, opts);
+    },
+    [executeSequenceProvider, executeSequenceMock],
+  );
+
   useEffect(() => {
     executeSequenceRef.current = executeSequence;
   }, [executeSequence]);
@@ -5633,15 +6693,31 @@ export default function App() {
     if (pending.length === 0) return;
     const latest = pending[pending.length - 1];
     if (lastProviderSignalIdRef.current === latest.id) return;
+
+    const unifiedTs = Number.isFinite(Number(latest.receivedAt))
+      ? Number(latest.receivedAt)
+      : Date.now();
+    const patch = applySignalToUnifiedUI(latest, {
+      setCurrentMesa,
+      setCurrentRonda,
+      setPattern,
+      setActiveShot,
+      setWinnerSide,
+      setScores,
+      mesaFallback: BACCARAT_TABLES[0],
+      unifiedSource: UNIFIED_SOURCE.IA,
+      unifiedTs,
+      lastAppliedSignalRef,
+    });
     lastProviderSignalIdRef.current = latest.id;
+    providerNewResultShellHandledRef.current.clear();
+    if (patch.discarded) return;
+
+    setCycleStartTs(Date.now());
 
     clearIaRealPhaseTimers();
     setIsRunning(true);
     setActiveCycleMode(MODOS.IA_REAL);
-    const mesaStr = String(latest.mesa ?? '').trim();
-    setCurrentMesa(mesaStr || BACCARAT_TABLES[0]);
-    const r = latest.round;
-    setCurrentRonda(r != null && r !== '' ? Number(r) || 1 : 1);
     if (!isIaRealProviderShell) {
       setFase(FASES.SEÑAL);
     }
@@ -5649,47 +6725,34 @@ export default function App() {
     syncBlockedPatternRef.current = null;
     gpulseBlockedPatternRef.current = null;
     setSystemMessage('Señal recibida · esperando NEW_RESULT del proveedor.');
-    setWinnerSide(null);
-    setActiveShot(null);
-    setPattern([]);
     setIsProcessingSequence(false);
 
+    if (Array.isArray(patch.pattern) && patch.pattern.length > 0) {
+      queueMicrotask(() => {
+        executeSequenceRef.current?.(patch.pattern, { fromProviderSignal: true });
+      });
+    }
+
     if (isIaRealProviderShell) {
-      const vf0 = extractVectorForecastFromActiveRow(latest);
-      const vIdx = forecastStepIndexFromProviderRow(latest, vf0.length);
-      const t0 = Date.now();
-      if (isSyncRequired && isBlocked) {
-        logIaRealEngineInput({
-          activeRow: latest,
-          outcomeRow: null,
+      if (import.meta.env.DEV) {
+        console.log('🔁 NEW SIGNAL → RESET STATE', {
+          id: latest.id,
           correlationKey: latest.correlationKey,
-          nextStatus: 'SYNC',
-        });
-        setIaRealEngineState({
-          status: 'SYNC',
-          activeRow: latest,
-          outcomeRow: null,
-          visualStepIndex: vIdx,
-          visualProgress: 0,
-          startedAt: t0,
-        });
-      } else {
-        /** WAITING_RESULT immediately on NEW_SIGNAL — no artificial delay (only real events). */
-        logIaRealEngineInput({
-          activeRow: latest,
-          outcomeRow: null,
-          correlationKey: latest.correlationKey,
-          nextStatus: 'WAITING_RESULT',
-        });
-        setIaRealEngineState({
-          status: 'WAITING_RESULT',
-          activeRow: latest,
-          outcomeRow: null,
-          visualStepIndex: vIdx,
-          visualProgress: 0,
-          startedAt: t0,
         });
       }
+      const t0 = Date.now();
+      const syncBlocked = isSyncRequired && isBlocked;
+      const next = iaRealStateAfterNewSignal(latest, {
+        isSyncBlocked: syncBlocked,
+        startedAt: t0,
+      });
+      logIaRealEngineInput({
+        activeRow: latest,
+        outcomeRow: null,
+        correlationKey: latest.correlationKey,
+        nextStatus: next.status,
+      });
+      setIaRealEngineState(next);
     }
   }, [
     extStreamTick,
@@ -5701,8 +6764,80 @@ export default function App() {
     clearIaRealPhaseTimers,
   ]);
 
+  /**
+   * VISOR: solo lectura del relay (NEW_SIGNAL / NEW_RESULT vía store). Sin `executeSequence`, sin pasos ni RNG;
+   * solo refleja mesa/ronda/vector en UI para auditoría.
+   */
   useEffect(() => {
-    if (!GPULSE_REAL_PROVIDER_EXECUTION || selectedMode !== MODOS.IA_REAL) return;
+    if (selectedMode !== MODOS.VISOR) return;
+
+    const pending = extActiveSignals.filter((s) => s.status === 'pending');
+    if (pending.length === 0) return;
+    const latest = pending[pending.length - 1];
+    if (lastVisorExternalSignalIdRef.current === latest.id) return;
+
+    const unifiedTs = Number.isFinite(Number(latest.receivedAt))
+      ? Number(latest.receivedAt)
+      : Date.now();
+    const patch = applySignalToUnifiedUI(latest, {
+      setCurrentMesa,
+      setCurrentRonda,
+      setPattern,
+      setActiveShot,
+      setWinnerSide,
+      setScores,
+      mesaFallback: BACCARAT_TABLES[0],
+      unifiedSource: UNIFIED_SOURCE.VISOR,
+      unifiedTs,
+      lastAppliedSignalRef,
+    });
+    lastVisorExternalSignalIdRef.current = latest.id;
+    if (patch.discarded) return;
+
+    setCycleStartTs(Date.now());
+
+    if (GPULSE_REAL_PROVIDER_EXECUTION) {
+      lastProviderSignalIdRef.current = latest.id;
+      providerNewResultShellHandledRef.current.clear();
+      const t0 = Date.now();
+      const syncBlocked = isSyncRequired && isBlocked;
+      const next = iaRealStateAfterNewSignal(latest, {
+        isSyncBlocked: syncBlocked,
+        startedAt: t0,
+      });
+      logIaRealEngineInput({
+        activeRow: latest,
+        outcomeRow: null,
+        correlationKey: latest.correlationKey,
+        nextStatus: next.status,
+        reason: 'VISOR_NEW_SIGNAL',
+      });
+      setIaRealEngineState(next);
+    }
+
+    setIsRunning(true);
+    setActiveCycleMode(MODOS.VISOR);
+    setFase(GPULSE_REAL_PROVIDER_EXECUTION ? FASES.STANDBY : FASES.SEÑAL);
+    if (!GPULSE_REAL_PROVIDER_EXECUTION) {
+      isSequenceTriggered.current = true;
+    }
+    syncBlockedPatternRef.current = null;
+    gpulseBlockedPatternRef.current = null;
+    setSystemMessage(
+      GPULSE_REAL_PROVIDER_EXECUTION
+        ? 'Visor: datos del relay · esperando NEW_RESULT.'
+        : 'Señal recibida · esperando resultado…',
+    );
+    setIsProcessingSequence(false);
+  }, [extStreamTick, extActiveSignals, selectedMode, isSyncRequired, isBlocked]);
+
+  useEffect(() => {
+    if (
+      !GPULSE_REAL_PROVIDER_EXECUTION ||
+      (selectedMode !== MODOS.IA_REAL && selectedMode !== MODOS.VISOR)
+    ) {
+      return;
+    }
 
     const sid = lastProviderSignalIdRef.current;
     if (!sid) return;
@@ -5711,48 +6846,137 @@ export default function App() {
     const done = extHistory.find((h) => h.id === sid);
     if (!done || done.settledAt == null) return;
 
-    if (isIaRealProviderShell) {
-      const st = iaRealEngineState.status;
+    const wasAwaitingHybrid = isAwaitingProviderResultRef.current;
+    if (wasAwaitingHybrid && selectedMode === MODOS.IA_REAL) {
+      isAwaitingProviderResultRef.current = false;
+      isSequenceTriggered.current = false;
+      if (isSoundEnabled) {
+        void SoundEngine.init().then(() => {
+          try {
+            if (done.winStatus) {
+              SoundEngine.playResultadoRelease(true);
+              SoundEngine.playWinSoft(0.2);
+            } else {
+              SoundEngine.playResultadoRelease(false);
+              SoundEngine.playLossSoft(0.2);
+            }
+          } catch {
+            /* ignore */
+          }
+        });
+      }
+      try {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(done.winStatus ? [10, 38, 12] : [18, 22, 18]);
+        }
+      } catch {
+        /* ignore */
+      }
+      updateLastGpulseResult(done.winStatus ? 'win' : 'loss');
+    }
+
+    const isRelayResultMirrorUi =
+      isIaRealProviderShell || (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.VISOR);
+
+    if (isRelayResultMirrorUi) {
+      const snap = iaRealEngineStateRef.current;
+      const st = snap.status;
+      /** Live Control: always reflect relay puntajes when `done` is settled — do not gate on `st` (WAITING_RESULT/SYNC can lag NEW_RESULT). */
+      const lsDone = liveScoresFromOutcomeRow(done);
+      const hasDonePair = lsDone.player != null && lsDone.banker != null;
+      setScores(
+        hasDonePair
+          ? { player: lsDone.player, banker: lsDone.banker, rolling: false }
+          : { player: 0, banker: 0, rolling: false },
+      );
+
+      const resultId = done.id != null ? String(done.id) : '';
+      if (
+        selectedMode === MODOS.IA_REAL &&
+        resultId &&
+        !providerNeuralLedgerLoggedRef.current.has(resultId)
+      ) {
+        providerNeuralLedgerLoggedRef.current.add(resultId);
+        const rawStepL = iaRealContadorForStrip(
+          snap.activeRow,
+          done,
+          'RESULT',
+          'RESULT',
+        );
+        const Lg = Math.min(
+          Math.max(1, Math.floor(Number(mgLevels) || 6)),
+          PROVIDER_MARTINGALE_STEPS,
+        );
+        const stepL = Math.min(Math.max(1, Math.floor(Number(rawStepL) || 1)), Lg);
+        const recL = recommendationSide(snap.activeRow?.recommendation);
+        const sideLowerL = recL === 'BANKER' ? 'banker' : 'player';
+        const isWinL = done.winStatus === true;
+        const mesaStrL = String(done.mesa ?? snap.activeRow?.mesa ?? currentMesa ?? '—');
+        const rrL =
+          done.round != null && String(done.round).trim() !== ''
+            ? done.round
+            : done.ronda != null && String(done.ronda).trim() !== ''
+              ? done.ronda
+              : snap.activeRow?.round ?? snap.activeRow?.ronda ?? currentRonda;
+        const rondaNumL = Number(rrL) || 0;
+        const rawForLedger = resolveOutcomeRowResultPayload(done) ?? done.rawResult;
+        const mesaCards = extractMesaInfoFlexible(rawForLedger);
+        const scoreLbl = extractScoreLabelsFromResultRaw(rawForLedger);
+        void appendNeuralLedgerProviderRound({
+          mesa: mesaStrL,
+          ronda: rondaNumL,
+          shot: isWinL ? stepL : 0,
+          side: sideLowerL,
+          ganador: mesaCards.ganador ?? null,
+          cartasPlayer: Array.isArray(mesaCards.cartas_player) ? mesaCards.cartas_player : [],
+          cartasBanker: Array.isArray(mesaCards.cartas_banker) ? mesaCards.cartas_banker : [],
+          puntajePlayer: scoreLbl.puntajePlayer,
+          puntajeBanker: scoreLbl.puntajeBanker,
+        });
+      }
+
       if (st !== 'WAITING_RESULT' && st !== 'SYNC') return;
+
+      const shellHandledKey = done.id != null ? String(done.id) : '';
+      if (!shellHandledKey) return;
+      if (providerNewResultShellHandledRef.current.has(shellHandledKey)) return;
+      providerNewResultShellHandledRef.current.add(shellHandledKey);
+
+      if (selectedMode === MODOS.IA_REAL) {
+        handleProviderResultEconomic(done, snap);
+      }
 
       if (done.winStatus) {
         setLastWinningShot(1);
       } else {
         setLastWinningShot(null);
       }
-      setScores({ player: done.winStatus ? 9 : 1, banker: done.winStatus ? 1 : 9, rolling: false });
       setIsProcessingSequence(false);
       setCoreVisual('READY');
       setSystemMessage(done.winStatus ? 'Resultado: acierto.' : 'Resultado: sin acierto.');
 
       clearIaRealPhaseTimers();
-      const hit = done.winStatus === true;
+
+      if (import.meta.env.DEV) {
+        console.log('📡 RESULT STEP', {
+          id: done.id,
+          martingale: done.martingale,
+          correlationKey: done.correlationKey,
+        });
+      }
+
       logIaRealEngineInput({
-        activeRow: iaRealEngineState.activeRow,
+        activeRow: snap.activeRow,
         outcomeRow: done,
-        correlationKey: String(done.correlationKey ?? iaRealEngineState.activeRow?.correlationKey ?? ''),
-        nextStatus: hit ? 'SUCCESS' : 'FAILED',
+        correlationKey: String(done.correlationKey ?? snap.activeRow?.correlationKey ?? ''),
+        nextStatus: 'RESULT',
       });
       setIaRealEngineState((prev) => ({
         ...prev,
-        status: hit ? 'SUCCESS' : 'FAILED',
+        status: 'RESULT',
         outcomeRow: done,
+        phaseVisual: 'RESULT',
       }));
-      const t = setTimeout(() => {
-        logIaRealEngineInput({
-          activeRow: null,
-          outcomeRow: null,
-          correlationKey: null,
-          nextStatus: 'IDLE',
-          reason: 'ia_real_result_display_elapsed',
-        });
-        setIaRealEngineState(createIdleIaRealVisualState());
-        setIsRunning(false);
-        lastProviderSignalIdRef.current = null;
-        setCoreVisual('IDLE');
-        setSystemMessage('Sistema en espera');
-      }, IA_REAL_RESULT_DISPLAY_MS);
-      iaRealPhaseTimersRef.current.push(t);
       return;
     }
 
@@ -5763,7 +6987,13 @@ export default function App() {
     } else {
       setLastWinningShot(null);
     }
-    setScores({ player: done.winStatus ? 9 : 1, banker: done.winStatus ? 1 : 9, rolling: false });
+    const lsLegacy = liveScoresFromOutcomeRow(done);
+    const hasLegacyPair = lsLegacy.player != null && lsLegacy.banker != null;
+    setScores(
+      hasLegacyPair
+        ? { player: lsLegacy.player, banker: lsLegacy.banker, rolling: false }
+        : { player: 0, banker: 0, rolling: false },
+    );
     setFase(FASES.RESULTADO);
     setIsProcessingSequence(false);
     setCoreVisual('READY');
@@ -5775,19 +7005,33 @@ export default function App() {
     fase,
     selectedMode,
     isIaRealProviderShell,
-    iaRealEngineState.status,
     clearIaRealPhaseTimers,
+    handleProviderResultEconomic,
+    updateLastGpulseResult,
+    isSoundEnabled,
+    mgLevels,
+    currentMesa,
+    currentRonda,
+    appendNeuralLedgerProviderRound,
   ]);
 
-  /** IA Real: sync guard overlays WAITING when blocked. */
+  /** IA Real / Visor: sync guard overlays WAITING when blocked. */
   useEffect(() => {
-    if (!isIaRealProviderShell) return;
+    if (!GPULSE_REAL_PROVIDER_EXECUTION) return;
+    if (selectedMode !== MODOS.IA_REAL && selectedMode !== MODOS.VISOR) return;
     if (!lastProviderSignalIdRef.current) return;
     const cur = extActiveSignals.find((x) => x.id === lastProviderSignalIdRef.current && x.status === 'pending');
     if (!cur) return;
     if (isSyncRequired && isBlocked) {
       setIaRealEngineState((s) => {
-        if (s.status === 'SUCCESS' || s.status === 'FAILED' || s.status === 'RESULT_ANIMATION') return s;
+        if (
+          s.status === 'SUCCESS' ||
+          s.status === 'FAILED' ||
+          s.status === 'RESULT_ANIMATION' ||
+          s.status === 'RESULT' ||
+          s.status === 'RESULT_SEQUENCE'
+        )
+          return s;
         const vf = extractVectorForecastFromActiveRow(cur);
         const vIdx = forecastStepIndexFromProviderRow(cur, vf.length);
         const next = { ...s, status: 'SYNC', activeRow: cur, visualStepIndex: vIdx };
@@ -5814,11 +7058,12 @@ export default function App() {
         return next;
       });
     }
-  }, [isIaRealProviderShell, isSyncRequired, isBlocked, extActiveSignals]);
+  }, [isSyncRequired, isBlocked, extActiveSignals, selectedMode]);
 
   /** Provider-only: martingale / contador updates on the pending row → visual step index (no local T1–T6 loop). */
   useEffect(() => {
-    if (!isIaRealProviderShell) return;
+    if (!GPULSE_REAL_PROVIDER_EXECUTION) return;
+    if (selectedMode !== MODOS.IA_REAL && selectedMode !== MODOS.VISOR) return;
     const sid = lastProviderSignalIdRef.current;
     if (!sid) return;
     setIaRealEngineState((s) => {
@@ -5851,11 +7096,11 @@ export default function App() {
       });
       return next;
     });
-  }, [extStreamTick, extActiveSignals, isIaRealProviderShell]);
+  }, [extStreamTick, extActiveSignals, selectedMode]);
 
   /** Reintenta la secuencia cuando syncPercent >= syncTarget (mismo umbral que SYNC_BLOCK), sin re-disparar el scheduler. */
   useEffect(() => {
-    if (GPULSE_REAL_PROVIDER_EXECUTION && activeCycleMode === MODOS.IA_REAL) return;
+    if (GPULSE_REAL_PROVIDER_EXECUTION) return;
     if (!isRunning || fase !== FASES.SEÑAL) return;
     const pat = syncBlockedPatternRef.current;
     if (!pat || !Array.isArray(pat) || pat.length === 0) return;
@@ -5868,7 +7113,7 @@ export default function App() {
 
   /** Reintenta la secuencia cuando G_Pulse vuelve a ser válido (IA_REAL), sin tocar scheduler ni sync. */
   useEffect(() => {
-    if (GPULSE_REAL_PROVIDER_EXECUTION && activeCycleMode === MODOS.IA_REAL) return;
+    if (GPULSE_REAL_PROVIDER_EXECUTION) return;
     if (!isRunning || fase !== FASES.SEÑAL) return;
     if (activeCycleMode !== MODOS.IA_REAL) return;
     const pat = gpulseBlockedPatternRef.current;
@@ -5911,7 +7156,11 @@ export default function App() {
     setIsRunning(false); setFase(FASES.STANDBY); setActiveCycleMode(null); setEnginesReady(0);
     setCoreVisual('IDLE');
     isSequenceTriggered.current = false;
+    isAwaitingProviderResultRef.current = false;
     lastProviderSignalIdRef.current = null;
+    lastVisorExternalSignalIdRef.current = null;
+    lastAppliedSignalRef.current = null;
+    setCycleStartTs(null);
     syncBlockedPatternRef.current = null;
     executionBlockedBySyncRef.current = false;
     setIsBlocked(false);
@@ -5925,6 +7174,14 @@ export default function App() {
   const startCycle = async () => {
     if (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.IA_REAL) {
       setSystemMessage('IA Real usa solo datos del relay: la siguiente señal aparecerá cuando el proveedor la envíe.');
+      return;
+    }
+    if (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.VISOR) {
+      setSystemMessage('Visor: solo lectura del relay (NEW_SIGNAL / NEW_RESULT). Sin motor local.');
+      return;
+    }
+    if (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.SIMULACION) {
+      setSystemMessage('Simular: use el replay de manos del historial del relay (solo lectura).');
       return;
     }
     if (selectedMode === MODOS.IA_REAL) {
@@ -5956,7 +7213,11 @@ export default function App() {
     }
 
     if (isSoundEnabled) { await SoundEngine.init(); SoundEngine.playBoot(); }
-    setSessionStats({ wins: 0, losses: 0, total: 0, distribution: Array(8).fill(0), sessionRewardsNet: 0 });
+    if (!isIaRealProviderShell) {
+      setSessionStats({ wins: 0, losses: 0, total: 0, distribution: Array(8).fill(0), sessionRewardsNet: 0 });
+    } else if (GPULSE_REAL_PROVIDER_EXECUTION) {
+      setSessionStats((p) => ({ ...p, sessionRewardsNet: 0 }));
+    }
     if (selectedMode !== MODOS.IA_REAL) setDemoBalance(1000.00);
     isSequenceTriggered.current = false;
     setActiveCycleMode(selectedMode); setIsRunning(true); setFase(FASES.ANALISIS);
@@ -6028,8 +7289,8 @@ export default function App() {
   }, [isSoundEnabled]);
 
   // --- Core (nucleus) interaction laws (UI/UX only; motor intact) ---
-  const isCoreLocked = isIaRealProviderShell
-    ? iaRealEngineState.status === 'WAITING_RESULT' || iaRealEngineState.status === 'SYNC'
+  const isCoreLocked = isRelayPresentationShell
+    ? relayEngineForDisplay.status === 'WAITING_RESULT' || relayEngineForDisplay.status === 'SYNC'
     : fase === FASES.SEÑAL || fase === FASES.DETECCION;
   const coreRejectAnimRef = useRef(null);
   const [coreRejectAnim, setCoreRejectAnim] = useState(false);
@@ -6059,16 +7320,18 @@ export default function App() {
       return;
     }
 
-    if (isIaRealProviderShell) {
-      if (iaRealEngineState.status === 'IDLE') {
+    if (isRelayPresentationShell) {
+      if (relayEngineForDisplay.status === 'IDLE') {
         setSystemMessage('Listo para iniciar…');
         void startCycle();
         return;
       }
       if (
-        iaRealEngineState.status === 'RESULT_ANIMATION' ||
-        iaRealEngineState.status === 'SUCCESS' ||
-        iaRealEngineState.status === 'FAILED'
+        relayEngineForDisplay.status === 'RESULT_ANIMATION' ||
+        relayEngineForDisplay.status === 'RESULT' ||
+        relayEngineForDisplay.status === 'RESULT_SEQUENCE' ||
+        relayEngineForDisplay.status === 'SUCCESS' ||
+        relayEngineForDisplay.status === 'FAILED'
       ) {
         setSystemMessage('Puedes detener el sistema cuando quieras');
         stopCycle();
@@ -6095,8 +7358,8 @@ export default function App() {
   }, [
     fase,
     isCoreLocked,
-    isIaRealProviderShell,
-    iaRealEngineState.status,
+    isRelayPresentationShell,
+    relayEngineForDisplay.status,
     startCycle,
     stopCycle,
     triggerPulseFeedback,
@@ -6117,16 +7380,15 @@ export default function App() {
   useEffect(() => {
     if (!isRunning) return;
     if (isEnginePaused) return;
-    if (GPULSE_REAL_PROVIDER_EXECUTION && selectedMode === MODOS.IA_REAL) {
-      return () => {};
-    }
+    /** Proveedor: sin `nextPhasePlan` / scheduler local — solo relay + capas por modo. */
+    if (GPULSE_REAL_PROVIDER_EXECUTION) return;
     if (import.meta.env.DEV) console.log('SCHEDULER RUN:', { fase, isRunning });
     const speedFactor = goPulseSpeedFactor;
     const plan = nextPhasePlan(fase, {
       speedFactor,
       tables: BACCARAT_TABLES,
       isSequenceTriggered: isSequenceTriggered.current,
-      rng: Math.random,
+      rng: getDefaultEngineRng(),
     });
     console.log('PROGRAMANDO ACCIONES:', plan.actions);
     console.log('NEXT PHASE:', plan.nextPhase);
@@ -6156,6 +7418,7 @@ export default function App() {
       executeSequence: (p) => executeSequenceRef.current?.(p),
       shouldTriggerSequence,
       guardTriggerSequence: () => {
+        if (isAwaitingProviderResultRef.current) return false;
         const g = triggerSequenceGuardInputsRef.current;
         if (!g.isSyncRequired) return true;
         if (syncBlockedPatternRef.current != null) return false;
@@ -6170,6 +7433,9 @@ export default function App() {
       setPattern,
       setWinnerSide,
       setActiveShot,
+      setScores,
+      engineTableRef,
+      lastAppliedSignalRef,
     };
 
     // ANALISIS has a known reset on entry (kept behavior identical).
@@ -6756,7 +8022,13 @@ export default function App() {
                       <span className={Number(log.shot) === 0 ? "text-red-500" : "text-cyan-600"}>
                         {Number(log.shot) === 0 ? 'ANOMALIA_DETECTADA' : 'SINC_LOGRADA'}
                       </span>
-                      <span className="opacity-30">0x{Math.random().toString(16).slice(2, 6)}</span>
+                      <span className="opacity-30">
+                        0x
+                        {String(log.id || '')
+                          .replace(/\W/g, '')
+                          .slice(-4)
+                          .padStart(4, '0') || String(idx).padStart(4, '0')}
+                      </span>
                     </div>
                     <div className="text-[10px] flex justify-between font-mono text-white">
                         <span className="opacity-50 text-[9px] font-bold">{String(log.mesa)}</span>
@@ -6764,6 +8036,61 @@ export default function App() {
                             {Number(log.shot) === 0 ? 'FAIL' : `${String(log.side || 'FAIL').toUpperCase()} T${log.shot}`}
                         </span>
                     </div>
+                    {(log.ganador != null && String(log.ganador).trim() !== '') ||
+                    (Array.isArray(log.cartasPlayer) && log.cartasPlayer.length > 0) ||
+                    (Array.isArray(log.cartasBanker) && log.cartasBanker.length > 0) ||
+                    (log.puntajePlayer != null && String(log.puntajePlayer).trim() !== '') ||
+                    (log.puntajeBanker != null && String(log.puntajeBanker).trim() !== '') ? (
+                      <div
+                        className={`mt-1.5 space-y-0.5 border-t pt-1.5 text-[9px] font-mono leading-snug ${
+                          isLightMode ? 'border-slate-200 text-slate-600' : 'border-white/10 text-white/70'
+                        }`}
+                      >
+                        {log.ganador != null && String(log.ganador).trim() !== '' ? (
+                          <div>
+                            <span className="opacity-50">Mesa </span>
+                            <span className="font-bold">{String(log.ganador)}</span>
+                          </div>
+                        ) : null}
+                        {(Array.isArray(log.cartasPlayer) && log.cartasPlayer.length > 0) ||
+                        (Array.isArray(log.cartasBanker) && log.cartasBanker.length > 0) ? (
+                          <div className="break-words">
+                            {Array.isArray(log.cartasPlayer) && log.cartasPlayer.length > 0 ? (
+                              <span>
+                                <span className="opacity-45">P </span>
+                                {log.cartasPlayer.map((c) => String(c)).join(' ')}
+                              </span>
+                            ) : null}
+                            {Array.isArray(log.cartasPlayer) &&
+                            log.cartasPlayer.length > 0 &&
+                            Array.isArray(log.cartasBanker) &&
+                            log.cartasBanker.length > 0 ? (
+                              <span className="opacity-35"> · </span>
+                            ) : null}
+                            {Array.isArray(log.cartasBanker) && log.cartasBanker.length > 0 ? (
+                              <span>
+                                <span className="opacity-45">B </span>
+                                {log.cartasBanker.map((c) => String(c)).join(' ')}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {(log.puntajePlayer != null && String(log.puntajePlayer).trim() !== '') ||
+                        (log.puntajeBanker != null && String(log.puntajeBanker).trim() !== '') ? (
+                          <div className="opacity-90">
+                            {log.puntajePlayer != null && String(log.puntajePlayer).trim() !== '' ? (
+                              <span>
+                                pts P {String(log.puntajePlayer)}
+                                {log.puntajeBanker != null && String(log.puntajeBanker).trim() !== '' ? ' · ' : ''}
+                              </span>
+                            ) : null}
+                            {log.puntajeBanker != null && String(log.puntajeBanker).trim() !== '' ? (
+                              <span>pts B {String(log.puntajeBanker)}</span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 )) : (
                   <div className="h-full flex items-center justify-center opacity-20 flex-col gap-2">
@@ -6820,7 +8147,7 @@ export default function App() {
                 <div className="relative z-20 flex flex-grow flex-col items-center justify-center w-full min-h-[380px] overflow-visible">
                   <div className="relative mb-8 flex h-[min(480px,92vw)] w-[min(480px,92vw)] max-h-[480px] max-w-[480px] shrink-0 items-center justify-center overflow-visible">
                     <AIThinkingLayer
-                      phase={isIaRealProviderShell ? presentationFase : fase}
+                      phase={isRelayPresentationShell ? presentationFase : fase}
                       isLight={isLightMode}
                     />
                     <motion.button
@@ -6848,25 +8175,38 @@ export default function App() {
                       aria-label={isCoreLocked ? 'Núcleo bloqueado: ejecución en curso' : 'Núcleo IA'}
                     >
                       {/* EL OJO V9.0 - Holograma proyectado de forma absoluta sobre la pupila */}
-                      <LivingPortal 
-                        isRunning={isRunning} 
-                        mode={activeCycleMode || selectedMode} 
-                        enginesReady={enginesReady} 
-                        isLight={isLightMode} 
-                        isGoPulseActive={isGoPulseActive} 
+                      <LivingPortal
+                        isRunning={isRunning}
+                        mode={activeCycleMode || selectedMode}
+                        enginesReady={enginesReady}
+                        isLight={isLightMode}
+                        isGoPulseActive={isGoPulseActive}
                         isGoldMode={isGoldMode}
-                        isFaseResult={isIaRealProviderShell ? presentationFase === FASES.RESULTADO : fase === FASES.RESULTADO}
+                        isFaseResult={isRelayPresentationShell ? presentationFase === FASES.RESULTADO : fase === FASES.RESULTADO}
                         lastWinningShot={lastWinningShot}
                         activeAlert={activeAlert}
+                        iaRealWaitingBreath={
+                          isRelayPresentationShell &&
+                          (relayEngineForDisplay.status === 'WAITING_RESULT' ||
+                            relayEngineForDisplay.status === 'SYNC')
+                        }
+                        iaRealSequenceActive={
+                          isRelayPresentationShell &&
+                          (relayEngineForDisplay.status === 'RESULT' ||
+                            relayEngineForDisplay.status === 'RESULT_SEQUENCE')
+                        }
                       />
                     </motion.button>
                   </div>
 
-                  {isIaRealProviderShell ? (
+                  {isRelayPresentationShell ? (
                     <IaRealExecutionLayer
-                      engine={iaRealEngineState}
+                      engine={relayEngineForDisplay}
+                      augmentSourceRow={iaRealAugmentSourceRow}
                       isLightMode={isLightMode}
                       onOutcomePresented={iaRealOutcomePresented}
+                      suppressStoryText
+                      cycleStartTs={cycleStartTs}
                       connectionMeta={{
                         status: extConnectionStatus,
                         reconnectAttempt: extReconnectAttempt,
@@ -6893,11 +8233,35 @@ export default function App() {
                         </div>
                       </div>
                       <div className="flex justify-center flex-wrap gap-4">
-                        {pattern.map((type, idx) => (
-                          <div key={idx} className={`w-14 h-14 rounded-2xl border-2 flex items-center justify-center text-sm font-black transition-all ${activeShot === idx + 1 ? 'border-cyan-500 bg-cyan-500 text-white scale-110 shadow-lg' : type === 'player' ? 'border-cyan-500 text-cyan-600 bg-cyan-500/5' : 'border-pink-500 text-pink-600 bg-pink-500/5'}`}>
-                            {activeShot === idx + 1 && scores.rolling ? <Loader2 size={18} className="animate-spin" /> : (type === 'player' ? 'P' : 'B')}
-                          </div>
-                        ))}
+                        {pattern.map((type, idx) => {
+                          const isActive = activeShot === idx + 1;
+                          const baseRing =
+                            type === 'player'
+                              ? 'border-cyan-500 text-cyan-600 bg-cyan-500/5'
+                              : type === 'tie'
+                                ? 'border-amber-400 text-amber-700 bg-amber-500/10'
+                                : 'border-pink-500 text-pink-600 bg-pink-500/5';
+                          const activeRing =
+                            type === 'tie'
+                              ? 'border-amber-300 bg-amber-500 text-white scale-110 shadow-lg shadow-amber-500/40 ring-2 ring-amber-300/80'
+                              : 'border-cyan-500 bg-cyan-500 text-white scale-110 shadow-lg';
+                          return (
+                            <div
+                              key={idx}
+                              className={`w-14 h-14 rounded-2xl border-2 flex items-center justify-center text-sm font-black transition-all ${isActive ? activeRing : baseRing}`}
+                            >
+                              {isActive && scores.rolling ? (
+                                <Loader2 size={18} className="animate-spin" />
+                              ) : type === 'player' ? (
+                                'P'
+                              ) : type === 'tie' ? (
+                                'T'
+                              ) : (
+                                'B'
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -7015,12 +8379,14 @@ export default function App() {
                     />
                   ) : null}
                   {activeView === 'history' ? (
-                    isIaRealProviderShell ? (
+                    isRelayPresentationShell ? (
                       <IaRealSignalFeedPanel
-                        engine={iaRealEngineState}
+                        engine={relayEngineForDisplay}
                         history={extHistory}
                         recentEvents={extRecentEvents}
                         isLightMode={isLightMode}
+                        connectionStatus={extConnectionStatus}
+                        pendingSignalCount={extActiveSignals.filter((s) => s.status === 'pending').length}
                       />
                     ) : (
                       <HubHistoryPanel ledger={ledger} />
@@ -7035,7 +8401,7 @@ export default function App() {
                   ) : null}
                   {activeView === 'ai' ? (
                     <HubAiStrategyPanel
-                      fase={isIaRealProviderShell ? presentationFase : fase}
+                      fase={isRelayPresentationShell ? presentationFase : fase}
                       activeWalletKey={activeWalletKey}
                       wallets={wallets}
                       ledger={ledger}
@@ -7082,6 +8448,46 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+                {selectedMode === MODOS.SIMULACION && GPULSE_REAL_PROVIDER_EXECUTION ? (
+                  <div
+                    className={`rounded-xl border px-3 py-2 text-left ${isLightMode ? 'border-violet-200 bg-violet-50/80' : 'border-violet-500/30 bg-violet-950/40'}`}
+                    data-layer="sim-replay"
+                  >
+                    <p className={`text-[9px] font-black uppercase tracking-wide ${isLightMode ? 'text-violet-900' : 'text-violet-200/90'}`}>
+                      Replay manos (mismo store · solo lectura)
+                    </p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        disabled={!extHistory.length || simReplayIndex <= 0}
+                        onClick={() => setSimReplayIndex((i) => Math.max(0, i - 1))}
+                        className={`p-1.5 rounded-lg border ${isLightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-black/30'} disabled:opacity-30`}
+                        aria-label="Mano anterior"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span className={`font-mono text-[11px] tabular-nums ${isLightMode ? 'text-slate-700' : 'text-white/85'}`}>
+                        {extHistory.length ? simReplayIndex + 1 : 0} / {extHistory.length}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={!extHistory.length || simReplayIndex >= extHistory.length - 1}
+                        onClick={() => setSimReplayIndex((i) => Math.min(extHistory.length - 1, i + 1))}
+                        className={`p-1.5 rounded-lg border ${isLightMode ? 'border-slate-200 bg-white' : 'border-white/10 bg-black/30'} disabled:opacity-30`}
+                        aria-label="Mano siguiente"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                    {extHistory[simReplayIndex] ? (
+                      <p className={`mt-2 text-[10px] font-mono truncate ${isLightMode ? 'text-slate-600' : 'text-white/55'}`} title={String(extHistory[simReplayIndex].id)}>
+                        {String(extHistory[simReplayIndex].status ?? '—')} · id {String(extHistory[simReplayIndex].id).slice(0, 12)}…
+                      </p>
+                    ) : (
+                      <p className={`mt-2 text-[10px] ${isLightMode ? 'text-slate-500' : 'text-white/40'}`}>Sin filas en historial aún.</p>
+                    )}
+                  </div>
+                ) : null}
               </div>
               <div className="md:col-span-4 flex gap-3">
                 <div className={`flex-1 ${isLightMode ? 'bg-white border-slate-200' : 'bg-black/5 border-white/5'} border rounded-xl p-3.5 relative overflow-hidden transition-all ${selectedMode === MODOS.VISOR ? 'opacity-20' : ''}`}>
@@ -7818,7 +9224,10 @@ export default function App() {
               <div className="w-16 h-16 rounded-[20px] bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shadow-lg shadow-cyan-500/20"><FileText size={32} className="text-cyan-400" /></div>
               <div>
                 <h3 className="text-2xl armani-title-dynamic leading-none text-white">{activeCycleMode === MODOS.VISOR ? 'Auditoría Probabilística' : 'Informe de Gestión'}</h3>
-                <p className="armani-label-dynamic mt-1 opacity-50 font-mono text-white">ID: {Math.floor(Math.random()*10000)}</p>
+                <p className="armani-label-dynamic mt-1 opacity-50 font-mono text-white">
+                  ID:{' '}
+                  {`${String(sessionStatsForUi.wins).padStart(2, '0')}${String(sessionStatsForUi.losses).padStart(2, '0')}-${String(sessionStatsForUi.total).padStart(3, '0')}`}
+                </p>
               </div>
             </div>
             
@@ -7949,7 +9358,7 @@ export default function App() {
                 activeWalletKey={activeWalletKey}
                 wallets={wallets}
                 ledger={ledger}
-                fase={isIaRealProviderShell ? presentationFase : fase}
+                fase={isRelayPresentationShell ? presentationFase : fase}
                 sessionStats={sessionStatsForUi}
               />
             ) : null}
@@ -7964,7 +9373,7 @@ export default function App() {
             ) : null}
             {hubActiveId === 'ai' ? (
               <HubAiStrategyPanel
-                fase={isIaRealProviderShell ? presentationFase : fase}
+                fase={isRelayPresentationShell ? presentationFase : fase}
                 activeWalletKey={activeWalletKey}
                 wallets={wallets}
                 ledger={ledger}
@@ -7992,12 +9401,14 @@ export default function App() {
             ) : null}
             {hubActiveId === 'ecosystem' ? <HubEcosystemPanel /> : null}
             {hubActiveId === 'history' ? (
-              isIaRealProviderShell ? (
+              isRelayPresentationShell ? (
                 <IaRealSignalFeedPanel
-                  engine={iaRealEngineState}
+                  engine={relayEngineForDisplay}
                   history={extHistory}
                   recentEvents={extRecentEvents}
                   isLightMode={isLightMode}
+                  connectionStatus={extConnectionStatus}
+                  pendingSignalCount={extActiveSignals.filter((s) => s.status === 'pending').length}
                 />
               ) : (
                 <HubHistoryPanel ledger={ledger} />
@@ -8018,6 +9429,15 @@ export default function App() {
         transactions={walletTxHistory}
         queueWaiting={queueStats.waiting}
       />
+
+      {DEBUG_AUDIT_PANEL ? (
+        <ProviderAuditPanel
+          gamePhaseLabel={presentationFase}
+          currentStepLabel={relayEngineForDisplay?.visualStepIndex}
+          iaRealEngineState={iaRealEngineState}
+          adminRawFeed={extAdminRawFeed}
+        />
+      ) : null}
 
       <EngineDebugPanel
         open={isEngineDebugOpen}

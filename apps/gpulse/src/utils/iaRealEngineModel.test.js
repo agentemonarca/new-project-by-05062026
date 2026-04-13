@@ -7,6 +7,7 @@ import {
   iaRealStateAfterSettledResult,
   iaRealStatusToPresentationFase,
   idleHasNoMesaVisible,
+  replayHistoryRowToEngineState,
 } from './iaRealEngineModel.js';
 
 const FASES = PHASES;
@@ -121,7 +122,8 @@ describe('IA Real — Phase 3D validation (deterministic, provider-driven)', () 
         },
       };
       const out = iaRealStateAfterSettledResult(waiting, done);
-      expect(out.status).toBe('SUCCESS');
+      expect(out.status).toBe('RESULT');
+      expect(out.phaseVisual).toBe('RESULT');
       expect(out.outcomeRow).toBe(done);
     });
 
@@ -148,7 +150,8 @@ describe('IA Real — Phase 3D validation (deterministic, provider-driven)', () 
         },
       };
       const out = iaRealStateAfterSettledResult(waiting, done);
-      expect(out.status).toBe('FAILED');
+      expect(out.status).toBe('RESULT');
+      expect(done.winStatus).toBe(false);
     });
   });
 
@@ -160,6 +163,35 @@ describe('IA Real — Phase 3D validation (deterministic, provider-driven)', () 
     });
   });
 
+  describe('6. Replay (simulator, extHistory row only)', () => {
+    it('settled history row maps to RESULT without mutating store contract', () => {
+      const row = {
+        id: 'h1',
+        status: 'won',
+        winStatus: true,
+        recommendation: 'PLAYER',
+        martingale: 1,
+        rawSignal: { vector_forecast: ['P', 'B'], martingale: 1 },
+        rawResult: { ganador: 'PLAYER' },
+      };
+      const s = replayHistoryRowToEngineState(row);
+      expect(s.status).toBe('RESULT');
+      expect(s.outcomeRow).toBe(row);
+    });
+
+    it('pending row maps to WAITING_RESULT', () => {
+      const row = {
+        id: 'p1',
+        status: 'pending',
+        recommendation: 'BANKER',
+        martingale: 2,
+        rawSignal: { vector_forecast: ['B', 'P'], martingale: 2 },
+      };
+      const s = replayHistoryRowToEngineState(row);
+      expect(s.status).toBe('WAITING_RESULT');
+    });
+  });
+
   describe('Fail conditions (contract)', () => {
     it('does not advance to RESULT without a settled payload (model stays waiting until merge)', () => {
       const w = iaRealStateAfterNewSignal(
@@ -167,11 +199,13 @@ describe('IA Real — Phase 3D validation (deterministic, provider-driven)', () 
         { startedAt: 0 },
       );
       expect(w.status).toBe('WAITING_RESULT');
-      expect(['SUCCESS', 'FAILED', 'RESULT_ANIMATION']).not.toContain(w.status);
+      expect(['SUCCESS', 'FAILED', 'RESULT_ANIMATION', 'RESULT_SEQUENCE', 'RESULT']).not.toContain(w.status);
     });
 
     it('presentation phase tracks status, not a stale local fase', () => {
       expect(iaRealStatusToPresentationFase('WAITING_RESULT')).toBe(FASES.SEÑAL);
+      expect(iaRealStatusToPresentationFase('RESULT')).toBe(FASES.RESULTADO);
+      expect(iaRealStatusToPresentationFase('RESULT_SEQUENCE')).toBe(FASES.RESULTADO);
       expect(iaRealStatusToPresentationFase('SUCCESS')).toBe(FASES.RESULTADO);
       expect(iaRealStatusToPresentationFase('IDLE')).toBe(FASES.STANDBY);
     });

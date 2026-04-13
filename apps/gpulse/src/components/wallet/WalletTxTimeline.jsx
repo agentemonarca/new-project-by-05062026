@@ -41,7 +41,7 @@ function normalizeEntries(raw) {
       ? `rid:${tx.requestId}`
       : tx?.txHash
         ? String(tx.txHash)
-        : String(tx?.id ?? `${tx?.at}-${Math.random()}`);
+        : String(tx?.id ?? `nohash:${tx?.at ?? 0}:${tx?.kind ?? 'tx'}`);
     const prev = merged.get(key) || {};
     merged.set(key, { ...prev, ...tx });
   }

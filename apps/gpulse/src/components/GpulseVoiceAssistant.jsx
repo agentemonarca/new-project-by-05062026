@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { unlockAudio } from '../utils/audioUnlock.js';
+import { isGpulseRealProviderExecution } from '../utils/gpulseRngPolicy.js';
 
 const COOLDOWN_MS = {
   hot: 90_000,
@@ -21,6 +22,7 @@ const CLOSING_SPEECH =
 
 /** Permanencia mínima en Upgrade antes del cierre (8–10 s, un valor por visita). */
 function randomUpgradeDwellMs() {
+  if (isGpulseRealProviderExecution()) return 9000;
   return 8000 + Math.floor(Math.random() * 2001);
 }
 

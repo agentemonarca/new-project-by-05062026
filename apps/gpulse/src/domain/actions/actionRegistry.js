@@ -1,3 +1,9 @@
+import {
+  applySignalToUnifiedUI,
+  buildSimulatedSignalRowFromEnginePattern,
+  UNIFIED_SOURCE,
+} from '../../utils/applySignalToUnifiedUI.js';
+
 /**
  * Action registry: scalable mapping from action.type -> handler(action, ctx)
  *
@@ -32,8 +38,21 @@ export const actionRegistry = {
     if (!ctx.shouldTriggerSequence(ctx.isSequenceTriggeredRef.current)) return;
     const pattern = Array.isArray(action?.payload?.pattern) ? action.payload.pattern : null;
     if (!pattern) return;
+    const { mesa, ronda } = ctx.engineTableRef?.current || {};
+    const row = buildSimulatedSignalRowFromEnginePattern(pattern, mesa, ronda);
+    const patch = applySignalToUnifiedUI(row, {
+      setCurrentMesa: ctx.setCurrentMesa,
+      setCurrentRonda: ctx.setCurrentRonda,
+      setPattern: ctx.setPattern,
+      setActiveShot: ctx.setActiveShot,
+      setWinnerSide: ctx.setWinnerSide,
+      setScores: ctx.setScores,
+      unifiedSource: UNIFIED_SOURCE.SIM,
+      unifiedTs: row.ts,
+      lastAppliedSignalRef: ctx.lastAppliedSignalRef,
+    });
+    if (patch.discarded) return;
     ctx.isSequenceTriggeredRef.current = true;
-    ctx.setPattern(pattern);
     ctx.executeSequence(pattern);
   },
 

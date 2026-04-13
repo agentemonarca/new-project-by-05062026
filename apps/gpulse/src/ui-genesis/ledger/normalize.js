@@ -1,3 +1,5 @@
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
+
 /**
  * @typedef {import('./ledgerModel.js').LedgerEvent} LedgerEvent
  * @typedef {import('./ledgerModel.js').LedgerEventCategory} LedgerEventCategory
@@ -61,7 +63,7 @@ function inferTxStatus(raw, txHash) {
 }
 
 export function normalizeLedgerEvent(raw) {
-  const id = String(raw.id ?? raw._id ?? `${raw.ts ?? Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
+  const id = String(raw.id ?? raw._id ?? nextOpaqueId('ledger'));
   const ts = Number(raw.ts ?? raw.timestamp ?? raw.createdAt ?? Date.now());
   const category = normalizeCategory(raw.category ?? raw.type ?? raw.module);
   const txHash = raw.txHash != null ? String(raw.txHash) : raw.hash != null ? String(raw.hash) : null;

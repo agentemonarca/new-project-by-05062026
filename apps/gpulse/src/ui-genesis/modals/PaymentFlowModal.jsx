@@ -6,6 +6,7 @@ import { GradientButton } from '../components/GradientButton.jsx';
 import { GlowBadge } from '../components/GlowBadge.jsx';
 import { computeActivationPaymentPlan, PAYMENT_FLOW_PRODUCTS } from '../payment/paymentFlowProducts.js';
 import { PAYMENT_MODULE_RULES } from '../payment/paymentRuleEngine.js';
+import { fallbackDeterministicTxHex } from '../../utils/gpulseRngPolicy.js';
 
 /** @typedef {import('../payment/paymentFlowProducts.js').PaymentFlowProductId} PaymentFlowProductId */
 
@@ -15,7 +16,10 @@ const DIRECT_BONUS_RATE = 0.11;
 function makeMockTxHash() {
   const bytes = new Uint8Array(32);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
-  else for (let i = 0; i < 32; i++) bytes[i] = Math.floor(Math.random() * 256);
+  else {
+    const hex = fallbackDeterministicTxHex(Date.now());
+    for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16) % 256;
+  }
   return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 

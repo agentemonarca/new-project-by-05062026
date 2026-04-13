@@ -6,6 +6,7 @@ import {
   binaryMatchVolume,
   consumeMatchedVolume,
 } from './binaryEngine.js';
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
 
 const MAX_HISTORY = 400;
 
@@ -96,7 +97,7 @@ export const useBinaryEngineStore = create(
       executeMatch() {
         const s = get();
         const ts = Date.now();
-        const nonce = Math.random().toString(36).slice(2, 10);
+        const nonce = nextOpaqueId('bn').slice(-12);
         const leftBefore = s.leftPoints;
         const rightBefore = s.rightPoints;
         const match = binaryMatchVolume(leftBefore, rightBefore);
@@ -144,7 +145,7 @@ export const useBinaryEngineStore = create(
       applyMonthlyFlashNow() {
         const s = get();
         const ts = Date.now();
-        const nonce = Math.random().toString(36).slice(2, 10);
+        const nonce = nextOpaqueId('bn').slice(-12);
         const out = applyBinaryFlash(s.leftPoints, s.rightPoints);
         const flashEvent = {
           type: 'BINARY_FLASH',
@@ -201,7 +202,7 @@ export const useBinaryEngineStore = create(
         const pts = Math.max(0, Number(usdtEquivalent) || 0);
         if (pts <= 0) return { ok: false, pts: 0 };
         const ts = Date.now();
-        const nonce = Math.random().toString(36).slice(2, 10);
+        const nonce = nextOpaqueId('bn').slice(-12);
         set((prev) => {
           const left = prev.leftPoints;
           const right = prev.rightPoints;

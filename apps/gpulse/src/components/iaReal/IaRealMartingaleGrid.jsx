@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import {
   PROVIDER_MARTINGALE_STEPS,
   extractVectorForecastArrayFromSignalRaw,
@@ -93,9 +94,16 @@ export function IaRealMartingaleGrid({
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr
+              <motion.tr
                 key={r.step}
+                layout
+                initial={false}
                 className={`border-b ${td} ${r.isCurrent ? (isLightMode ? 'bg-cyan-500/10 ring-1 ring-cyan-400/25' : 'bg-cyan-500/15 ring-1 ring-cyan-400/20') : ''}`}
+                animate={{
+                  opacity: r.isCurrent ? 1 : 0.62,
+                  scale: r.isCurrent ? 1 : 0.985,
+                }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.85 }}
               >
                 <td
                   className={`px-2 py-1.5 ${isLightMode ? 'text-slate-400' : 'text-white/45'}`}
@@ -103,9 +111,19 @@ export function IaRealMartingaleGrid({
                   T{r.step}
                 </td>
                 <td className="px-2 py-1.5 font-black">{r.pred}</td>
-                <td className="px-2 py-1.5">{r.res}</td>
+                <td className="px-2 py-1.5 overflow-hidden">
+                  <motion.span
+                    key={`${r.step}-${r.res}`}
+                    initial={{ x: 10, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 520, damping: 30 }}
+                    className="inline-block"
+                  >
+                    {r.res}
+                  </motion.span>
+                </td>
                 <td className={`px-2 py-1.5 ${winCls(r.win)}`}>{r.statusLabel}</td>
-              </tr>
+              </motion.tr>
             ))}
           </tbody>
         </table>

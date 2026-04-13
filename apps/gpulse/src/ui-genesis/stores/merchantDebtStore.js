@@ -4,6 +4,7 @@ import {
   MERCHANT_DEBT_DUE_MS,
   computeDebtPenaltiesAccrued,
 } from '../marketplace/hybridPaymentEngine.js';
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
 
 /**
  * @typedef {'open' | 'settled' | 'defaulted'} DebtStatus
@@ -36,7 +37,7 @@ export const useMerchantDebtStore = create(
         if (principal <= 0) return null;
         const createdAt = p.createdAt ?? Date.now();
         const rec = {
-          id: `debt-${createdAt}-${Math.random().toString(36).slice(2, 9)}`,
+          id: nextOpaqueId('debt'),
           merchantId: p.merchantId,
           merchantName: p.merchantName,
           purchaseId: p.purchaseId,

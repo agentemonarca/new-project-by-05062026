@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { fallbackDeterministicTxHex } from '../../utils/gpulseRngPolicy.js';
 import { persist } from 'zustand/middleware';
 import { fetchWallet, fetchEarnings, fetchNetwork, postClaim } from '../api/genesisApi.js';
 import { safeFetch } from '../api/safeFetch.js';
@@ -167,8 +168,7 @@ export const useGenesisDashboardStore = create(
       simulateDeposit: async ({ usdt }) => {
         set({ depositLoading: true, error: null });
         await new Promise((r) => setTimeout(r, 900));
-        const hex = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-        const txHash = `0x${hex}`;
+        const txHash = `0x${fallbackDeterministicTxHex(Date.now())}`;
         set({ depositLoading: false });
         try {
           await get().loadDashboardData();

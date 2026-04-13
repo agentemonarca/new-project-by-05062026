@@ -204,24 +204,207 @@ export function extractVectorResultadoAndWinFromResultRaw(r) {
 }
 
 /**
+ * `data` a veces llega como string JSON (socket / serialización); sin parse, el merge pierde cartas.
+ * @param {unknown} layer
+ * @returns {Record<string, unknown>}
+ */
+function unwrapEnvelopeDataLayer(layer) {
+  if (layer == null) return /** @type {Record<string, unknown>} */ ({});
+  if (typeof layer === 'string') {
+    try {
+      const j = JSON.parse(layer);
+      if (j != null && typeof j === 'object' && !Array.isArray(j)) {
+        return /** @type {Record<string, unknown>} */ (j);
+      }
+    } catch {
+      return /** @type {Record<string, unknown>} */ ({});
+    }
+    return /** @type {Record<string, unknown>} */ ({});
+  }
+  if (typeof layer === 'object' && !Array.isArray(layer)) {
+    return /** @type {Record<string, unknown>} */ (layer);
+  }
+  return /** @type {Record<string, unknown>} */ ({});
+}
+
+/**
+ * Socket.io puede emitir un único argumento que es `[payload]` en lugar de `payload`.
+ * @param {unknown} payload
+ * @returns {unknown}
+ */
+export function coalesceSocketEventPayload(payload) {
+  if (
+    Array.isArray(payload) &&
+    payload.length === 1 &&
+    payload[0] != null &&
+    typeof payload[0] === 'object' &&
+    !Array.isArray(payload[0])
+  ) {
+    return payload[0];
+  }
+  return payload;
+}
+
+/** @param {unknown} tab */
+function tableroRoughLen(tab) {
+  if (Array.isArray(tab)) return tab.length;
+  if (typeof tab === 'string') {
+    const t = tab.trim();
+    if (t.startsWith('[')) {
+      try {
+        const j = JSON.parse(t);
+        return Array.isArray(j) ? j.length : 0;
+      } catch {
+        return 0;
+      }
+    }
+    if (/[,;|]/.test(t)) return t.split(/[,;|]/).filter(Boolean).length;
+    return t ? 1 : 0;
+  }
+  return 0;
+}
+
+/**
+ * BFF a veces pone `scoreDetail: { ganador }` en el sobre y cartas en capas internas; el spread `{...acc,...u}`
+ * machacaba el detalle rico con el recortado.
+ * @param {Record<string, unknown>} a
+ * @param {Record<string, unknown>} b
+ * @returns {Record<string, unknown>}
+ */
+export function mergeScoreDetailPreferRicher(a, b) {
+  const score = (sd) => {
+    if (!sd || typeof sd !== 'object' || Array.isArray(sd)) return -1;
+    let s = Object.keys(sd).length;
+    const cp = sd.cartas_player;
+    const cb = sd.cartas_banker;
+    if (Array.isArray(cp) && cp.length) s += 200 + cp.length;
+    if (Array.isArray(cb) && cb.length) s += 200 + cb.length;
+    s += tableroRoughLen(sd.tablero) * 50;
+    return s;
+  };
+  return score(b) >= score(a) ? { ...a, ...b } : { ...b, ...a };
+}
+
+/** Relay BFF: `providerPayload` puede ser objeto o string JSON (snapshot proveedor antes del sobre). */
+function parseJsonObjectMaybe(v) {
+  if (v == null) return null;
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    return /** @type {Record<string, unknown>} */ (v);
+  }
+  if (typeof v === 'string') {
+    try {
+      const j = JSON.parse(v);
+      if (j != null && typeof j === 'object' && !Array.isArray(j)) {
+        return /** @type {Record<string, unknown>} */ (j);
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Aplanar envelope NEW_RESULT (`type`/`data` anidados) para extractores (alineado con admin).
+ * Algunos relays encadenan varias capas `data` como string JSON; dos niveles no bastan.
+ * @param {unknown} payload
+ * @param {{ siblingDepth?: number }} [options]
+ * @returns {Record<string, unknown>}
+ */
+export function mergeResultEnvelopeForExtract(payload, options) {
+  const siblingDepth = options?.siblingDepth ?? 0;
+  const pIn = coalesceSocketEventPayload(payload);
+  if (pIn == null || typeof pIn !== 'object' || Array.isArray(pIn)) {
+    return /** @type {Record<string, unknown>} */ ({});
+  }
+  const p = /** @type {Record<string, unknown>} */ (pIn);
+  /** @type {Record<string, unknown>} */
+  let acc = { ...p };
+  /** Algunos relays usan `payload` o `body` en lugar de `data`. */
+  let cursor = acc.data ?? acc.payload ?? acc.body;
+  const maxDepth = 8;
+  for (let depth = 0; depth < maxDepth && cursor != null; depth++) {
+    const prevType = typeof cursor;
+    const u = unwrapEnvelopeDataLayer(cursor);
+    if (Object.keys(u).length === 0) break;
+    const prevSd = acc.scoreDetail;
+    acc = { ...acc, ...u };
+    if (
+      prevSd != null &&
+      u.scoreDetail != null &&
+      typeof prevSd === 'object' &&
+      !Array.isArray(prevSd) &&
+      typeof u.scoreDetail === 'object' &&
+      !Array.isArray(u.scoreDetail)
+    ) {
+      acc.scoreDetail = mergeScoreDetailPreferRicher(
+        /** @type {Record<string, unknown>} */ (prevSd),
+        /** @type {Record<string, unknown>} */ (u.scoreDetail),
+      );
+    }
+    if (prevType === 'string') {
+      acc.data = u;
+    }
+    cursor = u.data ?? u.payload ?? u.body;
+  }
+
+  /** `buildAdminSignalsClientPayload` / relay: cuerpo plano + `providerPayload` con cartas (no sigue `data`→`data`). */
+  if (siblingDepth < 2) {
+    for (const fk of ['providerPayload', 'providerNormalized']) {
+      const blob = parseJsonObjectMaybe(acc[fk]);
+      if (blob == null) continue;
+      const sub = mergeResultEnvelopeForExtract(blob, { siblingDepth: siblingDepth + 1 });
+      const prevSd = acc.scoreDetail;
+      acc = { ...acc, ...sub };
+      if (
+        prevSd != null &&
+        sub.scoreDetail != null &&
+        typeof prevSd === 'object' &&
+        !Array.isArray(prevSd) &&
+        typeof sub.scoreDetail === 'object' &&
+        !Array.isArray(sub.scoreDetail)
+      ) {
+        acc.scoreDetail = mergeScoreDetailPreferRicher(
+          /** @type {Record<string, unknown>} */ (prevSd),
+          /** @type {Record<string, unknown>} */ (sub.scoreDetail),
+        );
+      }
+    }
+  }
+  return acc;
+}
+
+/**
+ * Store / historial: unir el cuerpo **coalescado** del socket con el sobre aplanado.
+ * Si solo guardábamos `normalize().raw` / `mergeResultEnvelopeForExtract`, podían perderse claves que solo vivían en la raíz
+ * o en ramas que el merge no promueve (evidencia NDJSON: solo `type`,`scoreDetail`,`winStatus`).
+ *
  * @param {unknown} payload
  * @returns {Record<string, unknown>}
  */
-export function mergeResultEnvelopeForExtract(payload) {
-  if (payload == null || typeof payload !== 'object' || Array.isArray(payload)) {
-    return /** @type {Record<string, unknown>} */ ({});
+export function mergeCoalescedPayloadWithEnvelopeExtract(payload) {
+  const coalesced = coalesceSocketEventPayload(payload);
+  const base =
+    coalesced != null && typeof coalesced === 'object' && !Array.isArray(coalesced)
+      ? /** @type {Record<string, unknown>} */ (coalesced)
+      : {};
+  const flat = mergeResultEnvelopeForExtract(payload);
+  let out = { ...base, ...flat };
+  const bsd =
+    base.scoreDetail != null && typeof base.scoreDetail === 'object' && !Array.isArray(base.scoreDetail)
+      ? /** @type {Record<string, unknown>} */ (base.scoreDetail)
+      : null;
+  const fsd =
+    flat.scoreDetail != null && typeof flat.scoreDetail === 'object' && !Array.isArray(flat.scoreDetail)
+      ? /** @type {Record<string, unknown>} */ (flat.scoreDetail)
+      : null;
+  if (bsd != null || fsd != null) {
+    out = {
+      ...out,
+      scoreDetail: mergeScoreDetailPreferRicher(bsd ?? {}, fsd ?? {}),
+    };
   }
-  const p = /** @type {Record<string, unknown>} */ (payload);
-  const d =
-    p.data != null && typeof p.data === 'object' && !Array.isArray(p.data)
-      ? /** @type {Record<string, unknown>} */ (p.data)
-      : {};
-  const d2 =
-    d.data != null && typeof d.data === 'object' && !Array.isArray(d.data)
-      ? /** @type {Record<string, unknown>} */ (d.data)
-      : {};
-  return { ...p, ...d, ...d2 };
+  return out;
 }
 
 /**
@@ -250,14 +433,36 @@ export function pickContadorMartingalaFromResultRaw(payload) {
 }
 
 /**
- * Pérdida intermedia: avanzar martingala sin cerrar la fila pendiente (mismo ciclo proveedor).
+ * Contador after settlement: prefer NEW_RESULT body (`contador_martingala` / martingala block), then row.martingale.
+ * @param {{ rawResult?: unknown, martingale?: unknown } | null | undefined} outcomeRow
+ * @param {{ martingale?: unknown, rawSignal?: Record<string, unknown> | null } | null | undefined} activeRowFallback
+ * @returns {number}
+ */
+export function pickContadorFromOutcomeForMartingaleUi(outcomeRow, activeRowFallback) {
+  if (outcomeRow?.rawResult != null && typeof outcomeRow.rawResult === 'object' && !Array.isArray(outcomeRow.rawResult)) {
+    const flat = mergeResultEnvelopeForExtract(outcomeRow.rawResult);
+    const fromRes = pickContadorMartingalaFromResultRaw(flat);
+    if (fromRes != null && Number.isFinite(Number(fromRes)) && Number(fromRes) >= 1) {
+      return Math.min(PROVIDER_MARTINGALE_STEPS, Math.max(1, Math.floor(Number(fromRes))));
+    }
+  }
+  const m = Number(outcomeRow?.martingale);
+  if (Number.isFinite(m) && m >= 1) return Math.min(PROVIDER_MARTINGALE_STEPS, Math.floor(m));
+  const a = Number(activeRowFallback?.martingale);
+  if (Number.isFinite(a) && a >= 1) return Math.min(PROVIDER_MARTINGALE_STEPS, Math.floor(a));
+  return 1;
+}
+
+/**
+ * NEW_RESULT intermedio: la escalera avanza pero el ciclo de señal sigue pendiente (no es el cierre final).
+ * FASE 4 full stream: el store ya no «fusiona sin historial» — cada evento genera fila en `history` con `status: 'intermediate'`.
  * @param {unknown} payload
  * @param {{ martingale: number, rawResult?: Record<string, unknown> | null }} target
- * @param {boolean} winStatus
+ * @param {boolean} normalizedWinStatus
  */
-export function shouldMergeInterimLossIntoPendingRow(payload, target, normalizedWinStatus) {
+export function isInterimMartingaleStep(payload, target, normalizedWinStatus) {
   const flat = mergeResultEnvelopeForExtract(payload);
-  /** Victoria explícita en `vector_win` — no fusionar con fila pendiente. */
+  /** Victoria explícita en `vector_win` — cierre de paso, no tratar como paso intermedio de pérdida. */
   if (winStatusFromVectorWinLast(flat) === true) return false;
 
   const prevMg = Number(target.martingale) || 1;
@@ -274,11 +479,18 @@ export function shouldMergeInterimLossIntoPendingRow(payload, target, normalized
   if (vrNew.length > 0 && vrNew.length === vrOld.length && vrNew.join('\x1e') !== vrOld.join('\x1e')) {
     return true;
   }
-  /**
-   * Sin señal de avance en la escalera: si el relay marca win, no forzar merge
-   * (evita fusionar un acierto final mal correlacionado).
-   */
   if (normalizedWinStatus === true) return false;
+  return false;
+}
+
+/**
+ * @deprecated FASE 4: el merge en una sola fila sin historizar pasos está desactivado — usar {@link isInterimMartingaleStep} en el ingest.
+ * @returns {false} siempre (no merge).
+ */
+export function shouldMergeInterimLossIntoPendingRow(payload, target, normalizedWinStatus) {
+  void payload;
+  void target;
+  void normalizedWinStatus;
   return false;
 }
 

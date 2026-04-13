@@ -7,6 +7,7 @@
  */
 
 import {
+  coalesceSocketEventPayload,
   extractVectorForecastArrayFromSignalRaw,
   mergeResultEnvelopeForExtract,
   pickContadorMartingalaFromSignalRaw,
@@ -30,12 +31,22 @@ function pickFirst(...vals) {
  */
 export function buildCorrelationKey(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
-  const id = r.id ?? r.signalId;
-  if (id != null && String(id).trim() !== '') {
-    return `id:${String(id).trim()}`;
+  /** Alineado con `normalizeNewResultPayload` (`signalId`/`id`) y relays que solo exponen `providerSignalId`. */
+  const idVal = pickFirst(r.signalId, r.id, r.providerSignalId);
+  if (idVal != null && String(idVal).trim() !== '') {
+    return `id:${String(idVal).trim()}`;
   }
-  const mesa = String(r.mesa ?? r.table ?? r.desk ?? '').trim();
-  const round = r.round != null ? String(r.round).trim() : '';
+  const mesa = String(r.mesa ?? r.table ?? r.tableName ?? r.desk ?? '').trim();
+  const roundV = pickFirst(
+    r.ronda,
+    r.round,
+    r.ronda_actual,
+    r.Ronda,
+    r.roundId,
+    r.gameRound,
+    r.hand,
+  );
+  const round = roundV != null ? String(roundV).trim() : '';
   return `${mesa}|${round}`;
 }
 
@@ -232,14 +243,25 @@ export function extractProviderSignalAlgorithmName(raw) {
 }
 
 export function normalizeNewResultPayload(raw) {
-  const r = raw && typeof raw === 'object' ? /** @type {Record<string, unknown>} */ (raw) : {};
+  const r0 = coalesceSocketEventPayload(raw);
+  const r =
+    r0 != null && typeof r0 === 'object' && !Array.isArray(r0)
+      ? /** @type {Record<string, unknown>} */ (r0)
+      : {};
   /** Aplanado como en el store — `vector_win` / ids a menudo viven bajo `data`. */
   const flat = mergeResultEnvelopeForExtract(raw);
   const forKey =
     flat && typeof flat === 'object' && !Array.isArray(flat) && Object.keys(flat).length
       ? /** @type {Record<string, unknown>} */ (flat)
       : r;
-  const idVal = flat.signalId ?? flat.id ?? r.signalId ?? r.id;
+  const idVal = pickFirst(
+    flat.signalId,
+    flat.id,
+    r.signalId,
+    r.id,
+    flat.providerSignalId,
+    r.providerSignalId,
+  );
   const w = flat.winStatus ?? flat.win ?? r.winStatus;
   const relayWin = w === true || w === 'true' || w === 1 || w === '1';
   const fromVectorWin = winStatusFromVectorWinLast(flat);
@@ -250,6 +272,7 @@ export function normalizeNewResultPayload(raw) {
     round: (flat.round ?? r.round) != null ? String(flat.round ?? r.round) : '',
     winStatus,
     correlationKey: buildCorrelationKey(forKey),
-    raw: r,
+    /** Mismo cuerpo que `forKey`: envelope **aplanado** (`data` string → objeto). Guardar solo `r` dejaba cartas fuera del snapshot del historial. */
+    raw: forKey,
   };
 }

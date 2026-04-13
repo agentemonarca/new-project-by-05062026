@@ -18,6 +18,7 @@ export function createIdleIaRealVisualState() {
     visualStepIndex: 0,
     visualProgress: 0,
     startedAt: null,
+    phaseVisual: null,
   };
 }
 
@@ -31,6 +32,8 @@ export function iaRealStatusToPresentationFase(status) {
     case 'SYNC':
       return FASES.SEÑAL;
     case 'RESULT_ANIMATION':
+    case 'RESULT':
+    case 'RESULT_SEQUENCE':
     case 'SUCCESS':
     case 'FAILED':
       return FASES.RESULTADO;
@@ -69,12 +72,25 @@ export function iaRealStateAfterNewSignal(row, opts = {}) {
  * @param {{ recommendation?: string, rawResult?: object, winStatus?: boolean | null }} done
  */
 export function iaRealStateAfterSettledResult(prev, done) {
-  const hit = done.winStatus === true;
   return {
     ...prev,
-    status: hit ? 'SUCCESS' : 'FAILED',
+    status: 'RESULT',
     outcomeRow: done,
+    phaseVisual: 'RESULT',
   };
+}
+
+/**
+ * Simulador (replay): construye estado de motor solo desde una fila de `extHistory` (sin tocar el store).
+ * @param {object | null | undefined} row
+ */
+export function replayHistoryRowToEngineState(row) {
+  if (!row) return createIdleIaRealVisualState();
+  if (String(row.status) === 'pending') {
+    return iaRealStateAfterNewSignal(row, { isSyncBlocked: false });
+  }
+  const base = iaRealStateAfterNewSignal(row, { isSyncBlocked: false });
+  return iaRealStateAfterSettledResult(base, row);
 }
 
 /**

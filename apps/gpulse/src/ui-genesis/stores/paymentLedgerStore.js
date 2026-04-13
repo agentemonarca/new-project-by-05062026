@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { normalizeLedgerEvent } from '../ledger/normalize.js';
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
 
 const MAX = 200;
 
@@ -36,7 +37,7 @@ export const usePaymentLedgerStore = create(
         const mod = d.paymentModule != null ? String(d.paymentModule) : null;
         const pts = d.points != null ? Number(d.points) : d.totalUsdtEquivalent;
         const base = {
-          id: `pay-act-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+          id: nextOpaqueId('pay-act'),
           ts,
           category:
             d.product === 'booster'
@@ -73,7 +74,7 @@ export const usePaymentLedgerStore = create(
         };
         const main = normalizeLedgerEvent(base);
         const bonusRaw = {
-          id: `pay-direct-${ts}-${Math.random().toString(36).slice(2, 9)}`,
+          id: nextOpaqueId('pay-direct'),
           ts: ts + 1,
           category: 'network',
           kind: 'direct_bonus_activation',

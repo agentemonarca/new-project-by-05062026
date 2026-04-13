@@ -70,7 +70,7 @@ function useDelayedFlowText(open, state, messages, extraVisualDelay = 0) {
       setDisplay({ key: state, text: next, flowState: state });
       return;
     }
-    const jitter = 200 + Math.floor(Math.random() * 201);
+    const jitter = 200 + (Date.now() % 201);
     const delayMs = jitter + Math.max(0, Number(extraVisualDelay) || 0);
     const id = window.setTimeout(() => {
       setDisplay({ key: `${state}-${Date.now()}`, text: next, flowState: state });

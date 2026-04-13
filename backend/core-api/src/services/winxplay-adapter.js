@@ -131,6 +131,11 @@ export function tryWinxplayDashboardRelay(payload) {
     }
 
     if (t === 'NEW_RESULT') {
+      try {
+        console.log('🔥 RAW PROVIDER RESULT', JSON.stringify(payload));
+      } catch {
+        console.log('🔥 RAW PROVIDER RESULT', '(non-serializable)');
+      }
       const innerData = d.data != null && typeof d.data === 'object' && !Array.isArray(d.data) ? d.data : {};
       const resultsObj =
         innerData.results != null && typeof innerData.results === 'object' && !Array.isArray(innerData.results)

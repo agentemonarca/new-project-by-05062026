@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { RETENTION_PROCESSING_MS } from '../marketplace/hybridPaymentEngine.js';
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
 
 /**
  * @typedef {{
@@ -30,7 +31,7 @@ export const useHybridRetentionStore = create(
         const aig = Math.max(0, Number(p.aig) || 0);
         const usdt = Math.max(0, Number(p.usdt) || 0);
         if (aig <= 0 && usdt <= 0) return;
-        const id = `cb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const id = nextOpaqueId('cb');
         const releaseAt = Date.now() + RETENTION_PROCESSING_MS;
         set((s) => ({
           totalEarnedAig: s.totalEarnedAig + aig,

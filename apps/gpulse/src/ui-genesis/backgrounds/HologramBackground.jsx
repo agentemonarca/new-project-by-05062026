@@ -14,7 +14,7 @@ function HologramBackgroundInner() {
     const d = el.duration;
     if (!Number.isFinite(d) || d <= 0) return;
     randomSeekDoneRef.current = true;
-    el.currentTime = Math.random() * d * 0.98;
+    el.currentTime = ((performance.now() % 100000) / 100000) * d * 0.98;
   };
 
   const applyPlaybackRate = () => {

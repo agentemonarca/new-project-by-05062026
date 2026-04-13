@@ -1,9 +1,84 @@
+import fs from 'node:fs/promises';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** @param {import('node:http').IncomingMessage} req */
+function readReqBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+/** Append NDJSON to workspace `.cursor/debug-3126a9.log` + mirror (same content) for tooling that glob-searches `.cursor`. */
+function cursorDebugSessionLogSpool() {
+  const logDir = path.resolve(__dirname, '../../.cursor');
+  const logPath = path.join(logDir, 'debug-3126a9.log');
+  const mirrorPath = path.join(logDir, 'gpulse-cursor-ingest.ndjson');
+  return {
+    name: 'cursor-debug-session-log-spool',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.method !== 'POST' || !req.url?.startsWith('/__cursor-debug-ingest/')) {
+          return next();
+        }
+        let body;
+        try {
+          body = await readReqBody(req);
+        } catch {
+          res.statusCode = 400;
+          res.end();
+          return;
+        }
+        const line = body.toString('utf8').trim();
+        if (line) {
+          try {
+            await fs.mkdir(logDir, { recursive: true });
+            const out = `${line}\n`;
+            await fs.appendFile(logPath, out, 'utf8');
+            await fs.appendFile(mirrorPath, out, 'utf8');
+          } catch (e) {
+            console.warn('[cursor-debug-session-log-spool] append failed', e?.message ?? e);
+          }
+        }
+        const remotePath = (req.url || '').replace(/^\/__cursor-debug-ingest/, '') || '/';
+        const fwd = http.request(
+          {
+            hostname: '127.0.0.1',
+            port: 7804,
+            path: remotePath,
+            method: 'POST',
+            headers: {
+              'Content-Type': req.headers['content-type'] || 'application/json',
+              'Content-Length': Buffer.byteLength(body),
+              ...(req.headers['x-debug-session-id'] && {
+                'X-Debug-Session-Id': /** @type {string} */ (req.headers['x-debug-session-id']),
+              }),
+            },
+            timeout: 4000,
+          },
+          (fRes) => {
+            res.statusCode = fRes.statusCode || 204;
+            fRes.pipe(res);
+          },
+        );
+        fwd.on('error', () => {
+          res.statusCode = 204;
+          res.end();
+        });
+        fwd.write(body);
+        fwd.end();
+      });
+    },
+  };
+}
 
 /**
  * Service account / PEM fields must NEVER ship to the browser.
@@ -54,6 +129,7 @@ export default defineConfig(({ mode }) => {
   }
 
   const plugins = [
+    cursorDebugSessionLogSpool(),
     react(),
     {
       name: 'dev-ready-banner-gpulse',

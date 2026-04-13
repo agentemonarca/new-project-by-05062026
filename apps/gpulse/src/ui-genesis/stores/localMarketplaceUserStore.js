@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_MAP_CENTER } from '../local-marketplace/mockMerchants.js';
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
 
 /**
  * @typedef {{
@@ -55,7 +56,7 @@ export const useLocalMarketplaceUserStore = create(
       recordPurchase: (p) => {
         const st = get();
         const entry = {
-          id: `lp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          id: nextOpaqueId('lp'),
           merchantId: p.merchantId,
           merchantName: p.merchantName,
           productId: p.productId,

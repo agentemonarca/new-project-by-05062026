@@ -1,4 +1,5 @@
 import { canExecuteMultiPair } from '../wallet/index.js';
+import { getDefaultEngineRng } from '../../utils/gpulseRngPolicy.js';
 
 export const PHASES = {
   STANDBY: 'STANDBY',
@@ -48,18 +49,18 @@ export function shouldTriggerSequence(isSequenceTriggered) {
 }
 
 /** Random generators (pure given rng) */
-export function generatePattern(length = 6, rng = Math.random) {
+export function generatePattern(length = 6, rng = getDefaultEngineRng()) {
   const n = Math.max(0, Math.floor(Number(length) || 0));
   return Array.from({ length: n }, () => (rng() > 0.5 ? 'banker' : 'player'));
 }
 
-export function pickMesa(tables, rng = Math.random) {
+export function pickMesa(tables, rng = getDefaultEngineRng()) {
   const list = Array.isArray(tables) ? tables : [];
   if (list.length === 0) return null;
   return list[Math.floor(rng() * list.length)];
 }
 
-export function pickRonda(rng = Math.random) {
+export function pickRonda(rng = getDefaultEngineRng()) {
   return Math.floor(rng() * 80) + 1;
 }
 
@@ -74,7 +75,7 @@ export function computeTotalLoss(stake, levels) {
   return Array.from({ length: L }, (_, idx) => Number(stake) * Math.pow(2, idx)).reduce((a, b) => a + b, 0);
 }
 
-export function computeWinAt(levels, rng = Math.random) {
+export function computeWinAt(levels, rng = getDefaultEngineRng()) {
   const L = Math.max(1, Math.floor(Number(levels) || 1));
   return rng() > 0.2 ? Math.floor(rng() * L) + 1 : 0;
 }
@@ -110,7 +111,7 @@ export function canExecuteShot({ activeCycleMode, activeTradingWallet, walletMod
 export function nextPhasePlan(currentPhase, context = {}) {
   const phase = String(currentPhase || PHASES.STANDBY);
   const speedFactor = Number(context.speedFactor ?? 1) || 1;
-  const rng = typeof context.rng === 'function' ? context.rng : Math.random;
+  const rng = typeof context.rng === 'function' ? context.rng : getDefaultEngineRng();
 
   if (phase === PHASES.ANALISIS) {
     const schedule = analysisStepSchedule(speedFactor);

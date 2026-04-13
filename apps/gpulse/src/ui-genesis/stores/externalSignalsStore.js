@@ -8,15 +8,20 @@ import { isGpulseFullFlowEnabled, postFullFlowRow } from '../../utils/gpulseFull
 import {
   extractVectorForecastArrayFromSignalRaw,
   extractVectorResultadoAndWinFromResultRaw,
+  mergeCoalescedPayloadWithEnvelopeExtract,
   mergeResultEnvelopeForExtract,
   pickContadorMartingalaFromResultRaw,
   predictionSideFromVectorAndContador,
   PROVIDER_MARTINGALE_STEPS,
-  shouldMergeInterimLossIntoPendingRow,
+  isInterimMartingaleStep,
   winStatusFromVectorWinLast,
 } from '../../utils/providerMartingaleRead.js';
+import { logCycleEvent, summarizeCycle } from '../../utils/cycleDebugLogger.js';
+import { extractMesaInfoFlexible, mergeSettledResultPayloadPreferringCards } from '../../utils/iaRealEngineUi.js';
+import { assertExternalSignalRowShape, logPipeCheck } from '../../utils/iaRealPipelineDiagnostics.js';
+import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
 
-/** @typedef {'pending' | 'won' | 'lost'} SignalSettlement */
+/** @typedef {'pending' | 'won' | 'lost' | 'intermediate'} SignalSettlement — `intermediate` = NEW_RESULT de paso (stream) sin cierre de ciclo */
 
 /**
  * @typedef {object} ExternalBaccaratSignalRow
@@ -34,6 +39,7 @@ import {
  * @property {Record<string, unknown>} rawSignal
  * @property {string | null} algorithmDisplayName — snapshot al ingest (nombre modelo desde payload relay).
  * @property {Record<string, unknown> | null} rawResult
+ * @property {'socket_NEW_RESULT' | 'signal_stream_frame'} [resultIngestSource] — cierre de mano vía evento socket `NEW_RESULT` o vía `signal_stream_frame` (mismo `ingestNewResult`).
  */
 
 const HISTORY_CAP = 120;
@@ -41,8 +47,10 @@ const RECENT_EVENTS_CAP = 64;
 const ADMIN_RAW_FEED_CAP = 150;
 const SETTLEMENT_LATENCY_CAP = 120;
 
+const CYCLE_DEBUG = String(import.meta.env.VITE_CYCLE_DEBUG ?? '').trim() === '1';
+
 function genId() {
-  return `sig-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return nextOpaqueId('sig');
 }
 
 /**
@@ -153,7 +161,7 @@ export const useExternalSignalsStore = create((set, get) => ({
   },
 
   logAdminRawSocketEvent(type, raw) {
-    const id = `adm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = nextOpaqueId('adm');
     const r =
       raw && typeof raw === 'object' ? /** @type {Record<string, unknown>} */ (raw) : { _primitive: raw };
     const mesa = String(r.mesa ?? r.table ?? r.desk ?? '') || '—';
@@ -195,6 +203,9 @@ export const useExternalSignalsStore = create((set, get) => ({
 
   ingestNewSignal(payload) {
     const n = normalizeNewSignalPayload(payload);
+    if (CYCLE_DEBUG) {
+      logCycleEvent('NEW_SIGNAL', { correlationKey: n.correlationKey, mesa: n.mesa, round: n.round });
+    }
     const algorithmDisplayName = extractProviderSignalAlgorithmName(payload) || null;
     const row = /** @type {ExternalBaccaratSignalRow} */ ({
       id: genId(),
@@ -212,6 +223,8 @@ export const useExternalSignalsStore = create((set, get) => ({
       algorithmDisplayName,
       rawResult: null,
     });
+
+    assertExternalSignalRowShape(row, 'ingestNewSignal');
 
     set((s) => {
       const activeSignals = [...s.activeSignals, row];
@@ -233,10 +246,29 @@ export const useExternalSignalsStore = create((set, get) => ({
       'NEW_SIGNAL',
       `${n.recommendation} · mesa ${n.mesa || '—'} · ronda ${n.round || '—'}`,
     );
+
+    const stAfter = get();
+    const last = stAfter.activeSignals[stAfter.activeSignals.length - 1] ?? row;
+    logPipeCheck({
+      layer: 'store',
+      event: 'NEW_SIGNAL',
+      socket: payload,
+      normalized: n,
+      storeRow: last,
+      activeRow: last,
+    });
   },
 
-  ingestNewResult(payload) {
+  /**
+   * @param {unknown} payload
+   * @param {{ ingestSource?: 'socket_NEW_RESULT' | 'signal_stream_frame' }} [opts]
+   */
+  ingestNewResult(payload, opts = {}) {
+    const ingestSource = opts.ingestSource ?? 'socket_NEW_RESULT';
     const r = normalizeNewResultPayload(payload);
+    if (CYCLE_DEBUG) {
+      console.log('🧪 NORMALIZED RESULT', r);
+    }
     const flat = mergeResultEnvelopeForExtract(payload);
     if (String(import.meta.env.VITE_DEBUG_MG ?? '').trim() === '1') {
       const { vector_resultado, vector_win } = extractVectorResultadoAndWinFromResultRaw(flat);
@@ -256,15 +288,30 @@ export const useExternalSignalsStore = create((set, get) => ({
     });
 
     if (!target) {
+      if (CYCLE_DEBUG) {
+        logCycleEvent('NEW_RESULT', {
+          correlationKey: r.correlationKey,
+          mesa: r.mesa,
+          round: r.round,
+          matched: false,
+        });
+        console.log('📥 STORE NEW_RESULT', {
+          correlationKey: r.correlationKey,
+          matchedRow: null,
+          martingale: undefined,
+          status: undefined,
+          rawResult: payload,
+        });
+      }
       get().pushEvent('NEW_RESULT', `Sin señal pendiente · win=${r.winStatus}`);
       get().recordCorrelationMiss();
       return;
     }
 
-    const mergeInterim = shouldMergeInterimLossIntoPendingRow(payload, target, r.winStatus);
+    const isInterimStep = isInterimMartingaleStep(payload, target, r.winStatus);
 
-    /** Pérdida intermedia: mismo `id` pendiente, contador/vector_resultado avanza — no cerrar aún. */
-    if (mergeInterim) {
+    /** Paso intermedio (martingala): actualizar fila pendiente y además historizar cada NEW_RESULT (FASE 4 full stream). */
+    if (isInterimStep) {
       const prevMg = Number(target.martingale) || 1;
       const extracted = pickContadorMartingalaFromResultRaw(flat);
       const { vector_resultado: vrNew } = extractVectorResultadoAndWinFromResultRaw(flat);
@@ -299,36 +346,127 @@ export const useExternalSignalsStore = create((set, get) => ({
         });
       }
 
+      if (CYCLE_DEBUG) {
+        console.log('📥 STORE NEW_RESULT', {
+          correlationKey: r.correlationKey,
+          matchedRow: target.id,
+          martingale: newMg,
+          status: 'pending',
+          rawResult: payload,
+          mode: 'stream_intermediate',
+        });
+      }
+
+      const mergedSnapInterim = mergeCoalescedPayloadWithEnvelopeExtract(payload);
+      const prevFlatInterim =
+        target.rawResult != null && typeof target.rawResult === 'object' && !Array.isArray(target.rawResult)
+          ? mergeResultEnvelopeForExtract(target.rawResult)
+          : null;
+      let rawResultInterim = mergedSnapInterim;
+      if (prevFlatInterim != null && typeof prevFlatInterim === 'object') {
+        const fMeta = extractMesaInfoFlexible(mergedSnapInterim);
+        const pMeta = extractMesaInfoFlexible(prevFlatInterim);
+        const freshOk =
+          (fMeta.cartas_player?.length ?? 0) > 0 || (fMeta.cartas_banker?.length ?? 0) > 0;
+        const prevOk = (pMeta.cartas_player?.length ?? 0) > 0 || (pMeta.cartas_banker?.length ?? 0) > 0;
+        if (prevOk && !freshOk) {
+          rawResultInterim = mergeSettledResultPayloadPreferringCards(prevFlatInterim, mergedSnapInterim);
+        }
+      }
+
+      const stepHistoryId = genId();
       set((s) => {
         const nextRow = /** @type {ExternalBaccaratSignalRow} */ ({
           ...target,
           martingale: newMg,
           recommendation,
-          rawResult: flat,
+          rawResult: rawResultInterim,
           status: 'pending',
           settledAt: null,
           winStatus: null,
         });
         const activeSignals = s.activeSignals.map((x) => (x.id === target.id ? nextRow : x));
+        const streamStep = /** @type {ExternalBaccaratSignalRow} */ ({
+          ...target,
+          id: stepHistoryId,
+          martingale: newMg,
+          recommendation,
+          rawResult: rawResultInterim,
+          status: 'intermediate',
+          settledAt: Date.now(),
+          winStatus: null,
+          resultIngestSource: ingestSource,
+        });
         return {
           streamTick: s.streamTick + 1,
           activeSignals,
+          history: [streamStep, ...s.history].slice(0, HISTORY_CAP),
           stats: {
             ...s.stats,
             pending: activeSignals.filter((x) => x.status === 'pending').length,
           },
         };
       });
+      const mergedRow = get().activeSignals.find((x) => x.id === target.id);
+      const streamHead = get().history[0];
+      assertExternalSignalRowShape(mergedRow, 'ingestNewResult interim_active');
+      assertExternalSignalRowShape(streamHead, 'ingestNewResult interim_history');
+      logPipeCheck({
+        layer: 'store',
+        event: 'NEW_RESULT_INTERMEDIATE',
+        socket: payload,
+        normalized: r,
+        storeRow: mergedRow,
+        activeRow: mergedRow,
+      });
       get().pushEvent(
         'NEW_RESULT',
-        `LOSS_STEP · MG ${prevMg}→${newMg} · ${recommendation} · mesa ${target.mesa}`,
+        `STREAM_STEP · MG ${prevMg}→${newMg} · ${recommendation} · mesa ${target.mesa} · id:${stepHistoryId}`,
       );
       return;
     }
 
-    const status = r.winStatus ? 'won' : 'lost';
+    /** Cierre final: `status` string para UI (panel, tablas). Alineado con `winStatus` booleano del normalizado. */
+    const status = r.winStatus === true ? 'won' : 'lost';
     const settledAt = Date.now();
     const latencyMs = settledAt - target.receivedAt;
+
+    if (CYCLE_DEBUG) {
+      logCycleEvent('NEW_RESULT', {
+        correlationKey: r.correlationKey,
+        mesa: r.mesa,
+        round: r.round,
+        phase: 'final',
+        settlement: status,
+      });
+      console.log('📥 STORE NEW_RESULT', {
+        correlationKey: r.correlationKey,
+        matchedRow: target.id,
+        martingale: target.martingale,
+        status,
+        rawResult: payload,
+        mode: 'settled',
+      });
+      summarizeCycle(r.correlationKey);
+    }
+
+    /** Cierre final a veces manda payload mínimo (sin cartas); la fila pendiente ya llevaba `rawResult` mergeado en pasos LOSS. */
+    const mergedSnap = mergeCoalescedPayloadWithEnvelopeExtract(payload);
+    const prevMerged =
+      target.rawResult != null && typeof target.rawResult === 'object' && !Array.isArray(target.rawResult)
+        ? mergeResultEnvelopeForExtract(target.rawResult)
+        : null;
+    let rawResultForHistory = mergedSnap;
+    if (prevMerged != null && typeof prevMerged === 'object') {
+      const fMeta = extractMesaInfoFlexible(mergedSnap);
+      const pMeta = extractMesaInfoFlexible(prevMerged);
+      const freshOk =
+        (fMeta.cartas_player?.length ?? 0) > 0 || (fMeta.cartas_banker?.length ?? 0) > 0;
+      const prevOk = (pMeta.cartas_player?.length ?? 0) > 0 || (pMeta.cartas_banker?.length ?? 0) > 0;
+      if (prevOk && !freshOk) {
+        rawResultForHistory = mergeSettledResultPayloadPreferringCards(prevMerged, mergedSnap);
+      }
+    }
 
     set((s) => {
       const activeSignals = s.activeSignals.filter((x) => x.id !== target.id);
@@ -337,7 +475,8 @@ export const useExternalSignalsStore = create((set, get) => ({
         status,
         settledAt,
         winStatus: r.winStatus,
-        rawResult: r.raw,
+        rawResult: rawResultForHistory,
+        resultIngestSource: ingestSource,
       });
       const history = [settled, ...s.history].slice(0, HISTORY_CAP);
       const wins = s.stats.wins + (r.winStatus ? 1 : 0);
@@ -353,13 +492,26 @@ export const useExternalSignalsStore = create((set, get) => ({
         },
       };
     });
+    const settledHead = get().history[0];
+    assertExternalSignalRowShape(settledHead, 'ingestNewResult settled');
+    logPipeCheck({
+      layer: 'store',
+      event: 'NEW_RESULT',
+      socket: payload,
+      normalized: r,
+      storeRow: settledHead,
+      activeRow: settledHead,
+    });
     if (isGpulseFullFlowEnabled()) {
       const s = get();
       console.log('🧠 STORE UPDATE', { signals: s.activeSignals, history: s.history });
       void postFullFlowRow({ pipeline: 'store', after: 'ingestNewResult', signals: s.activeSignals, history: s.history });
     }
 
-    get().pushEvent('NEW_RESULT', `${status.toUpperCase()} · ${target.recommendation} · mesa ${target.mesa}`);
+    get().pushEvent(
+      'NEW_RESULT',
+      `${status.toUpperCase()} · ${target.recommendation} · mesa ${target.mesa} · src:${ingestSource}`,
+    );
     get().recordSettlementLatency(latencyMs);
   },
 

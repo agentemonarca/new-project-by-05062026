@@ -11,6 +11,7 @@ import {
   p2pFetchOrderbookBackend,
   p2pFetchUserOrdersBackend,
 } from '../api/p2pBackendApi.js';
+import { nextOpaqueId } from '@/utils/gpulseRngPolicy.js';
 
 /**
  * @typedef {import('../p2pTypes.js').P2POrderRow} P2POrderRow
@@ -18,7 +19,7 @@ import {
  */
 
 function nextMockId() {
-  return `mock-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return nextOpaqueId('mock');
 }
 
 /** @param {unknown} st */

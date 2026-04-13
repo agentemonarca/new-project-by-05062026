@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { isGpulseRealProviderExecution } from '../../utils/gpulseRngPolicy.js';
 
 /** Premium programs — monthly ROI % and lock days. */
 export const STAKING_PLANS = [
@@ -42,9 +43,10 @@ export const useStakingEngineStore = create((set, get) => ({
   setTableFilter: (tableFilter) => set({ tableFilter }),
 
   tickLiveEarnings: () =>
-    set((s) => ({
-      liveAccumulatedUsdt: s.liveAccumulatedUsdt + 0.02 + Math.random() * 0.06,
-    })),
+    set((s) => {
+      const bump = isGpulseRealProviderExecution() ? 0.05 : 0.02 + Math.random() * 0.06;
+      return { liveAccumulatedUsdt: s.liveAccumulatedUsdt + bump };
+    }),
 
   accrueEngineRewards: () => {
     const now = Date.now();

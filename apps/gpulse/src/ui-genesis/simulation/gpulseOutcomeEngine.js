@@ -3,6 +3,8 @@
  * and guardrails against long loss streaks. Not for production trading — simulation only.
  */
 
+import { getSimOutcomeRng } from '../../utils/gpulseRngPolicy.js';
+
 const WINDOW = 12;
 const MAX_CONSECUTIVE_LOSSES = 3;
 const RANDOM_WIN_P = 0.65;
@@ -66,7 +68,8 @@ function winsInWindow(results) {
  * @returns {GpulseSimSide}
  */
 function randomSide() {
-  return Math.random() < 0.5 ? 'PLAYER' : 'BANKER';
+  const rng = getSimOutcomeRng();
+  return rng() < 0.5 ? 'PLAYER' : 'BANKER';
 }
 
 /**
@@ -83,8 +86,9 @@ export function advanceGpulseOutcome(state) {
 
   /** New regulation target every 12 rounds (plus initial) — avoids a single fixed threshold */
   let regulatorTarget = state.regulatorTarget;
+  const rng = getSimOutcomeRng();
   if (state.roundCount % 12 === 0) {
-    regulatorTarget = TARGET_MIN + Math.random() * (TARGET_MAX - TARGET_MIN);
+    regulatorTarget = TARGET_MIN + rng() * (TARGET_MAX - TARGET_MIN);
   }
 
   const streakLoss = countTrailingLosses(history);
@@ -96,7 +100,7 @@ export function advanceGpulseOutcome(state) {
   } else if (rateBefore != null && regulatorTarget != null && rateBefore < regulatorTarget) {
     isWin = true;
   } else {
-    isWin = Math.random() < RANDOM_WIN_P;
+    isWin = rng() < RANDOM_WIN_P;
   }
 
   /** Rare nudge: at very high rate, still allow natural losses via 65% branch above; no hard cap */
