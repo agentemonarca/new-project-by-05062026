@@ -1,0 +1,14 @@
+---
+description: Martingala 6 tiros Oracle / GPulse — reglas de cierre WIN/LOSS y empates
+globs: apps/gpulse/**/*.{js,jsx,ts,tsx}
+---
+
+# Ciclo martingala (obligatorio)
+
+- **Empate**: no avanza tiro; mismo escalón hasta Player o Banker.
+- **Acierto** en predicción del tiro actual → **WIN**, cerrar ciclo.
+- **Fallo** en tiro 1–5 → **siguiente tiro**, ciclo abierto (misma correlación / señal).
+- **Fallo** solo en **tiro 6** → **LOSS**, cerrar ciclo.
+- No cerrar LOSS prematuro en ruta `vector` sin estar en tiro 6.
+
+Interpretación Winx: `vector` / `vector_forecast` deben poblar el forecast de 6 celdas; sin vector usar ruta `legacy` documentada en `docs/MARTINGALE_CYCLE_RULES.md`.

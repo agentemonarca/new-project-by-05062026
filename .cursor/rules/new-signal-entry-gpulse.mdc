@@ -1,0 +1,12 @@
+---
+description: Entrada solo por NEW_SIGNAL — no ciclos incompletos; multi-canal/multi-usuario
+globs: apps/gpulse/**/*.{js,jsx,ts,tsx},apps/admin-core/**/*.{js,jsx,ts,tsx},backend/core-api/**/*.js
+---
+
+# Apertura de partida
+
+- No iniciar ciclo de juego gobernado **sin** `NEW_SIGNAL` / nueva señal para ese contexto.
+- No hidratar WIN/LOSS/martingala desde mitad de stream; la **primera señal válida tras la entrada** del usuario/sesión es el ancla.
+- Con varios canales o usuarios: enrutar por correlación/mesa/sesión; no mezclar flujos.
+
+Documentación: `docs/NEW_SIGNAL_ENTRY_RULES.md` y `docs/MARTINGALE_CYCLE_RULES.md`.
