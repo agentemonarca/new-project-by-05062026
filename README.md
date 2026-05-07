@@ -93,6 +93,42 @@ Legacy Génesis must be served separately at **`http://localhost:3000`** (or set
 
 - `apps/backoffice/.env.example` — iframe targets and gateway URL.
 - `backend/api-gateway/.env.example` — proxy targets and optional JWT.
+- **GPulse + core-api (local):** copia `backend/core-api/.env.example` → `backend/core-api/.env` y `apps/gpulse/.env.example` → `apps/gpulse/.env`. En dev, Vite (`5174`) proxifica `/api`, `/auth` y `/socket.io` a `127.0.0.1:5050`. Define `SOCKET_CORS_ORIGIN=*` en core-api para Socket.IO desde el navegador en local; `GPULSE_DEMO_MODE=0` y `GPULSE_DEMO_FALLBACK_MS=0` para solo señales reales; `EXTERNAL_SIGNALS_API_KEY` / `EXTERNAL_SIGNALS_WS` en el servidor (nunca en `VITE_*`). Tras arrancar `npm run dev:main`, comprueba: `npm run verify:gpulse-alignment`.
+- **Producción (paridad):** mismo commit/tag en front estático y core-api. `SOCKET_CORS_ORIGIN` y `SIWE_ALLOWED_ORIGINS` con orígenes HTTPS exactos del front (no `*`). `SESSION_COOKIE_SECURE=1` detrás de TLS. Build del front con `VITE_API_URL` apuntando al API público si el static no comparte origen con core-api. Smoke: `/health` del API y carga del bundle + socket admin-signals en el dominio real.
+
+### Checklist paridad env: local vs producción
+
+| Variable / tema | Local (dev) | Producción |
+|-----------------|-------------|------------|
+| `MONGO_URI` (y conexiones nombradas si aplica) | Atlas o local accesible desde tu IP | Misma lógica de red; no mezclar DB de staging con prod |
+| `EXTERNAL_SIGNALS_API_KEY` / `EXTERNAL_SIGNALS_WS` | Clave y URL reales del proveedor | Iguales salvo entorno de proveedor explícito |
+| `GENESIS_ADMIN_API_KEY` y `VITE_GENESIS_ADMIN_API_KEY` | Mismo valor (clave solo servidor + header en Vite) | Mismo; rotar de forma coordinada |
+| `SOCKET_CORS_ORIGIN` | `*` aceptable con Vite | Lista explícita de orígenes `https://…` (nunca `*`) |
+| `GPULSE_DEMO_MODE` / `GPULSE_DEMO_FALLBACK_MS` | `0` / `0` para solo relay real | `0` / `0` |
+| `VITE_API_URL` | Vacío si usas proxy Vite a `5050` | URL pública del API si el static y el API no comparten host |
+| SIWE (`SIWE_DOMAIN`, `SIWE_ALLOWED_ORIGINS`, `SESSION_COOKIE_SECURE`) | `localhost:5174` en ejemplos | Host público y orígenes exactos; cookies secure con HTTPS |
+
+### Smoke despliegue y staging
+
+Tras un deploy, en el **mismo** tag/commit en front y `core-api`:
+
+1. `GET` del health del API (`/health` en core-api).
+2. Carga del shell GPulse (HTTP 200 en la URL del front).
+3. Opcional CLI desde tu máquina contra staging/prod (sin secretos en logs):
+
+   `VERIFY_CORE_URL=https://tu-api.example.com/health VERIFY_GPULSE_URL=https://tu-front.example.com/ npm run verify:gpulse-alignment`
+
+4. Socket admin-signals en navegador con la misma `X-Admin-Api-Key` que en servidor.
+
+### Validación operativa (manual, sesión real)
+
+Con Winxplay (o proveedor) activo:
+
+1. Abre el panel admin de señales y el shell **IA Real** en paralelo (dos pestañas o dos pantallas).
+2. Para **una misma mano**, comprueba que mesa/ronda, `correlationKey` (si aplica) y paso de martingala coinciden entre log admin, panel lateral y teatro central.
+3. Si algo no cuadra: activa solo las trazas necesarias (`WINXPLAY_DEBUG_STREAM`, `ADMIN_SIGNALS_DEBUG_FLOW`, `VITE_CYCLE_DEBUG`) y correlaciona timestamp + payload; revisa la consola en dev por `[IA_REAL alignment]` si `augmentSourceRow` y `activeRow` divergen en fases de resultado.
+
+Unit tests de correlación y martingala se ejecutan en CI (workflow `gpulse-vitest.yml`) sobre los ficheros críticos del front.
 
 ## Build
 

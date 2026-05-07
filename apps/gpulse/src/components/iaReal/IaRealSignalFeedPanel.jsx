@@ -10,6 +10,7 @@ import { IaRealMartingaleGrid } from './IaRealMartingaleGrid.jsx';
  * @param {object} [engine] — `iaRealEngineState` from App (same shape as IaRealExecutionLayer).
  * @param {string} [connectionStatus] — `useExternalSignalsStore` `connectionStatus`.
  * @param {number} [pendingSignalCount] — señales `pending` en el store (cola activa).
+ * @param {object | null} [contadorSourceRow] — fila alineada al store (p. ej. `resolveAugmentSourceRow`); si se pasa, el strip martingala usa esta fila en lugar de `engine.activeRow` para paridad con el teatro.
  */
 
 /**
@@ -131,6 +132,7 @@ export function IaRealSignalFeedPanel({
   engine = null,
   connectionStatus = 'idle',
   pendingSignalCount = 0,
+  contadorSourceRow = null,
 }) {
   const rows = useMemo(() => (Array.isArray(history) ? history.slice(0, 12) : []), [history]);
   const events = useMemo(() => (Array.isArray(recentEvents) ? recentEvents.slice(0, 10) : []), [recentEvents]);
@@ -150,14 +152,15 @@ export function IaRealSignalFeedPanel({
   const martingaleBlock = useMemo(() => {
     if (!engine || typeof engine !== 'object') return null;
     const { status, activeRow, outcomeRow, phaseVisual } = engine;
-    if (activeRow && (status === 'WAITING_RESULT' || status === 'SYNC')) {
+    const rowForContador = contadorSourceRow ?? activeRow;
+    if (rowForContador && (status === 'WAITING_RESULT' || status === 'SYNC')) {
       return (
         <IaRealMartingaleGrid
-          rawSignal={activeRow.rawSignal}
-          rawResult={activeRow.rawResult ?? null}
-          martingaleFromStore={iaRealContadorForStrip(activeRow, null, null, status)}
+          rawSignal={rowForContador.rawSignal}
+          rawResult={rowForContador.rawResult ?? null}
+          martingaleFromStore={iaRealContadorForStrip(rowForContador, null, null, status)}
           visualStepIndex={forecastStepIndexFromContador(
-            iaRealContadorForStrip(activeRow, null, null, status),
+            iaRealContadorForStrip(rowForContador, null, null, status),
           )}
           isLightMode={isLightMode}
         />
@@ -171,10 +174,10 @@ export function IaRealSignalFeedPanel({
         status === 'SUCCESS' ||
         status === 'FAILED')
     ) {
-      const cm = iaRealContadorForStrip(activeRow, outcomeRow, phaseVisual, status);
+      const cm = iaRealContadorForStrip(rowForContador, outcomeRow, phaseVisual, status);
       return (
         <IaRealMartingaleGrid
-          rawSignal={(activeRow ?? outcomeRow)?.rawSignal}
+          rawSignal={(rowForContador ?? outcomeRow)?.rawSignal}
           rawResult={outcomeRow.rawResult}
           martingaleFromStore={cm}
           visualStepIndex={forecastStepIndexFromContador(cm)}
@@ -183,7 +186,7 @@ export function IaRealSignalFeedPanel({
       );
     }
     return null;
-  }, [engine, isLightMode]);
+  }, [engine, isLightMode, contadorSourceRow]);
 
   return (
     <div className="px-4 pb-4 pt-2 flex flex-col gap-4">

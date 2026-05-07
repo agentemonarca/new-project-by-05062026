@@ -18,6 +18,7 @@ import {
 import SignalIntelPanel from './SignalIntelPanel.jsx';
 import { normalizeCycle } from '@/utils/signalNormalizer';
 import { describeSocketEvent, engineStateLabel } from '@/utils/socketEventDescriptor.js';
+import { oracleResultMatchesActiveCycle } from '@/utils/signalRowCorrelation.js';
 
 const getCardValue = (val) => {
   if (['10', 'J', 'Q', 'K'].includes(val)) return 0;
@@ -48,33 +49,6 @@ function mergeResultPayload(rawPayload) {
       ? inner.data
       : {};
   return { ...parsed, ...inner, ...deep };
-}
-
-function resultMatchesActive(ac, pick) {
-  if (!ac || ac.status != null) return false;
-
-  if (ac.correlationKey && pick.correlationKey && ac.correlationKey !== pick.correlationKey) {
-    return false;
-  }
-  if (ac.providerSignalId && pick.providerSignalId && ac.providerSignalId !== pick.providerSignalId) {
-    return false;
-  }
-  if (ac.correlationKey && pick.correlationKey && ac.correlationKey === pick.correlationKey) {
-    return true;
-  }
-  if (ac.providerSignalId && pick.providerSignalId && ac.providerSignalId === pick.providerSignalId) {
-    return true;
-  }
-
-  const mesa = String(pick.mesa || '');
-  const round = String(pick.round ?? pick.roundId ?? '');
-  const acMesa = String(ac.mesa || '');
-  const acRound = String(ac.round ?? ac.signalPayload?.round ?? ac.signalPayload?.roundId ?? '');
-  if (mesa && acMesa === mesa && round && acRound === round) return true;
-  if (mesa && acMesa === mesa && !round) return true;
-
-  // Ciclo único abierto: pick ya alineado a mesa/round del ciclo en ingestResult.
-  return true;
 }
 
 function tryParseJson(payload) {
@@ -213,7 +187,7 @@ export default function GenesisOraclePanel() {
             : rRaw.providerSignalId,
       };
 
-      if (!resultMatchesActive(ac, r)) {
+      if (!oracleResultMatchesActiveCycle(ac, r)) {
         console.warn('[NEW_RESULT] ignorada · correlación', {
           cycleMesa: ac.mesa,
           cycleRound: ac.round,

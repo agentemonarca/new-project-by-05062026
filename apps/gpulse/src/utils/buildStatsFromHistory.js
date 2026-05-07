@@ -1,5 +1,7 @@
 /**
  * Agrega métricas de sesión desde `externalSignalsStore.history` (señales asentadas del proveedor).
+ * El store mantiene `history` con la entrada **más reciente primero** (unshift en ingest).
+ * Solo cuentan filas asentadas `status === 'won' | 'lost'` (intermediate/pending quedan fuera).
  * Paridad con la UI de distribución: índices 1–6 = aciertos en T1–T6, 7 = FAIL, 0 sin uso.
  *
  * @param {unknown} extHistory

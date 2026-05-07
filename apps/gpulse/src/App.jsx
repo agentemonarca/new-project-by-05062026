@@ -122,6 +122,7 @@ import { IaRealSignalFeedPanel } from './components/iaReal/IaRealSignalFeedPanel
 import { ProviderAuditPanel } from './components/iaReal/ProviderAuditPanel.jsx';
 import { logIaRealEngineInput } from './utils/iaRealFullFlowLog.js';
 import { buildStatsFromHistory, detectHistoryAnomalies, historyRowsForGpulse } from './utils/buildStatsFromHistory.js';
+import { resolveAugmentSourceRow } from './utils/signalRowCorrelation.js';
 import { buildIaRealNarrativeLine } from './utils/iaRealNarrativeLine.js';
 import {
   isIaRealPipeCheckEnabled,
@@ -3892,79 +3893,57 @@ export default function App() {
   const providerNewResultShellHandledRef = useRef(/** @type {Set<string>} */ (new Set()));
 
   /** Cuando `engine.activeRow` es null: misma fila en Zustand por id/correlationKey/provider o por `lastProviderSignalIdRef` (NDJSON: slotsFromFallbackEnrichment -2). En **RESULT_SEQUENCE**, priorizar fila del store alineada con `outcomeRow` sobre `activeRow` (pending puede quedar stale tras NEW_RESULT). Debe ir **después** de `lastProviderSignalIdRef`. */
-  const iaRealAugmentSourceRow = useMemo(() => {
-    if (!isRelayPresentationShell) return null;
-    if (selectedMode === MODOS.SIMULACION && extHistory.length) {
-      return extHistory[simReplayIndex] ?? extHistory[0] ?? null;
-    }
-    const st = relayEngineForDisplay.status;
-    const ar = relayEngineForDisplay.activeRow;
-    const or = relayEngineForDisplay.outcomeRow;
+  const iaRealAugmentSourceRow = useMemo(
+    () =>
+      resolveAugmentSourceRow({
+        isRelayShell: isRelayPresentationShell,
+        simReplay: selectedMode === MODOS.SIMULACION && extHistory.length > 0,
+        simReplayIndex,
+        extHistory,
+        extActiveSignals,
+        relayEngine: relayEngineForDisplay,
+        lastProviderSignalId: lastProviderSignalIdRef.current,
+      }),
+    [
+      isRelayPresentationShell,
+      selectedMode,
+      simReplayIndex,
+      relayEngineForDisplay.status,
+      relayEngineForDisplay.activeRow,
+      relayEngineForDisplay.outcomeRow,
+      extHistory,
+      extActiveSignals,
+      extStreamTick,
+    ],
+  );
 
-    const bySid = () => {
-      const sid = lastProviderSignalIdRef.current;
-      if (!sid) return null;
-      return (
-        extHistory.find((h) => h && String(h.id) === String(sid)) ??
-        extActiveSignals.find((a) => a && String(a.id) === String(sid)) ??
-        null
-      );
-    };
-
-    const peelOutcomeRowIds = (row) => {
-      if (!row || typeof row !== 'object') return { oid: '', ock: '', opid: '' };
-      let oid = row.id != null ? String(row.id).trim() : '';
-      let ock = row.correlationKey != null ? String(row.correlationKey).trim() : '';
-      let opid = row.providerSignalId != null ? String(row.providerSignalId).trim() : '';
-      const rr = row.rawResult;
-      if (rr != null && typeof rr === 'object' && !Array.isArray(rr)) {
-        const rro = /** @type {Record<string, unknown>} */ (rr);
-        if (!oid && rro.id != null) oid = String(rro.id).trim();
-        if (!ock && rro.correlationKey != null) ock = String(rro.correlationKey).trim();
-        if (!opid && rro.providerSignalId != null) opid = String(rro.providerSignalId).trim();
-      }
-      return { oid, ock, opid };
-    };
-
-    const findStoreRowByPeeledIds = ({ oid, ock, opid }) => {
-      if (!oid && !ock && !opid) return null;
-      const matches = (row) => {
-        if (!row || typeof row !== 'object') return false;
-        if (oid && String(row.id ?? '').trim() === oid) return true;
-        if (ock && String(row.correlationKey ?? '').trim() === ock) return true;
-        if (opid && String(row.providerSignalId ?? '').trim() === opid) return true;
-        return false;
-      };
-      return extHistory.find(matches) ?? extActiveSignals.find(matches) ?? null;
-    };
-
+  /** DEV: avisa si la fila enriquecida del store y la activeRow del motor divergen en fases de resultado (regresión / stale). */
+  useEffect(() => {
+    if (!import.meta.env.DEV || !isRelayPresentationShell) return;
+    const st = relayEngineForDisplay?.status;
     const resultPhase =
-      st === 'RESULT' || st === 'RESULT_SEQUENCE' || st === 'SUCCESS' || st === 'FAILED';
-
-    if (resultPhase && or && typeof or === 'object') {
-      const peeled = peelOutcomeRowIds(or);
-      const aligned = findStoreRowByPeeledIds(peeled) ?? bySid();
-      if (aligned) {
-        return aligned;
-      }
-    }
-
-    if (ar) return ar;
-
-    if (!or || typeof or !== 'object') return bySid();
-    const peeled = peelOutcomeRowIds(or);
-    if (!peeled.oid && !peeled.ock && !peeled.opid) return bySid();
-    return findStoreRowByPeeledIds(peeled) ?? bySid();
+      st === 'RESULT' ||
+      st === 'RESULT_SEQUENCE' ||
+      st === 'RESULT_ANIMATION' ||
+      st === 'SUCCESS' ||
+      st === 'FAILED';
+    if (!resultPhase) return;
+    const ar = relayEngineForDisplay?.activeRow;
+    const aug = iaRealAugmentSourceRow;
+    if (!aug || !ar) return;
+    const aid = ar.id != null ? String(ar.id) : '';
+    const gid = aug.id != null ? String(aug.id) : '';
+    if (!aid || !gid || aid === gid) return;
+    console.warn('[IA_REAL alignment] augmentSourceRow.id !== engine.activeRow.id', {
+      engineActiveId: aid,
+      augmentId: gid,
+      status: st,
+    });
   }, [
     isRelayPresentationShell,
-    selectedMode,
-    simReplayIndex,
-    relayEngineForDisplay.status,
-    relayEngineForDisplay.activeRow,
-    relayEngineForDisplay.outcomeRow,
-    extHistory,
-    extActiveSignals,
-    extStreamTick,
+    relayEngineForDisplay?.status,
+    relayEngineForDisplay?.activeRow,
+    iaRealAugmentSourceRow,
   ]);
 
   /** VISOR: dedupe unified UI application from relay (separate from IA Real pipeline). */
@@ -8387,6 +8366,7 @@ export default function App() {
                         isLightMode={isLightMode}
                         connectionStatus={extConnectionStatus}
                         pendingSignalCount={extActiveSignals.filter((s) => s.status === 'pending').length}
+                        contadorSourceRow={iaRealAugmentSourceRow}
                       />
                     ) : (
                       <HubHistoryPanel ledger={ledger} />
@@ -9409,6 +9389,7 @@ export default function App() {
                   isLightMode={isLightMode}
                   connectionStatus={extConnectionStatus}
                   pendingSignalCount={extActiveSignals.filter((s) => s.status === 'pending').length}
+                  contadorSourceRow={iaRealAugmentSourceRow}
                 />
               ) : (
                 <HubHistoryPanel ledger={ledger} />

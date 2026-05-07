@@ -31,6 +31,7 @@
     "docker:gpulse": "docker build -f deploy/gpulse-frontend/Dockerfile -t gpulse-web:latest .",
     "deploy:gpulse:compose": "docker compose -f deploy/docker-compose.gpulse.yml up --build -d",
     "pack:gpulse:dist": "node scripts/pack-gpulse-dist-for-server.mjs",
+    "verify:gpulse-alignment": "node scripts/verify-gpulse-alignment.mjs",
     "lint": "pnpm run -r --if-present lint",
     "typecheck": "pnpm run -r --if-present typecheck",
     "deps:react": "pnpm ls react react-dom -r"

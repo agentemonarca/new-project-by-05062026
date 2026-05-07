@@ -1,0 +1,34 @@
+# Correlación + martingala / IA Real UI — tests críticos del front GPulse (plan alineación end-to-end).
+name: GPulse vitest (correlation)
+
+on:
+  push:
+    paths:
+      - 'apps/gpulse/**'
+      - '.github/workflows/gpulse-vitest.yml'
+  pull_request:
+    paths:
+      - 'apps/gpulse/**'
+      - '.github/workflows/gpulse-vitest.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Vitest correlation / martingale / IA Real UI
+        run: |
+          pnpm --filter @ai-genesis/gpulse exec vitest run \
+            src/utils/signalRowCorrelation.test.js \
+            src/utils/providerMartingaleRead.test.js \
+            src/utils/iaRealEngineUi.test.js

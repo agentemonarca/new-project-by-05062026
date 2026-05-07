@@ -20,6 +20,7 @@ import { logCycleEvent, summarizeCycle } from '../../utils/cycleDebugLogger.js';
 import { extractMesaInfoFlexible, mergeSettledResultPayloadPreferringCards } from '../../utils/iaRealEngineUi.js';
 import { assertExternalSignalRowShape, logPipeCheck } from '../../utils/iaRealPipelineDiagnostics.js';
 import { nextOpaqueId } from '../../utils/gpulseRngPolicy.js';
+import { pickPendingForResult } from '../../utils/signalRowCorrelation.js';
 
 /** @typedef {'pending' | 'won' | 'lost' | 'intermediate'} SignalSettlement — `intermediate` = NEW_RESULT de paso (stream) sin cierre de ciclo */
 
@@ -51,31 +52,6 @@ const CYCLE_DEBUG = String(import.meta.env.VITE_CYCLE_DEBUG ?? '').trim() === '1
 
 function genId() {
   return nextOpaqueId('sig');
-}
-
-/**
- * Encuentra señal pendiente: por clave, id proveedor, o última misma mesa+ronda.
- * @param {ExternalBaccaratSignalRow[]} pending
- * @param {{ correlationKey: string, providerSignalId: string | null, mesa: string, round: string }} pick
- */
-function findPendingForResult(pending, pick) {
-  const byKey = pending.find((s) => s.correlationKey === pick.correlationKey);
-  if (byKey) return byKey;
-  if (pick.providerSignalId) {
-    const byProv = pending.find((s) => s.providerSignalId === pick.providerSignalId);
-    if (byProv) return byProv;
-  }
-  const mesa = String(pick.mesa || '');
-  const round = String(pick.round || '');
-  if (mesa || round) {
-    for (let i = pending.length - 1; i >= 0; i--) {
-      const s = pending[i];
-      if ((mesa && s.mesa === mesa && round && s.round === round) || (mesa && s.mesa === mesa && !round)) {
-        return s;
-      }
-    }
-  }
-  return pending.length ? pending[pending.length - 1] : null;
 }
 
 /**
@@ -280,7 +256,7 @@ export const useExternalSignalsStore = create((set, get) => ({
     }
 
     const pending = get().activeSignals.filter((s) => s.status === 'pending');
-    const target = findPendingForResult(pending, {
+    const target = pickPendingForResult(pending, {
       correlationKey: r.correlationKey,
       providerSignalId: r.providerSignalId,
       mesa: r.mesa,
